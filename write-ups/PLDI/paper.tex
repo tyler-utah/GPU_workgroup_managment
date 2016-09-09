@@ -1,0 +1,316 @@
+%
+% LaTeX template for prepartion of submissions to PLDI'16
+%
+% Requires temporary version of sigplanconf style file provided on
+% PLDI'16 web site.
+% 
+\documentclass[nocopyrightspace]{sigplanconf-pldi16}
+% \documentclass[pldi-cameraready]{sigplanconf-pldi16}
+
+%
+% the following standard packages may be helpful, but are not required
+%
+\usepackage{SIunits}            % typset units correctly
+\usepackage{courier}            % standard fixed width font
+\usepackage[scaled]{helvet} % see www.ctan.org/get/macros/latex/required/psnfss/psnfss2e.pdf
+\usepackage{url}                  % format URLs
+\usepackage{listings}          % format code
+\usepackage{enumitem}      % adjust spacing in enums
+\usepackage[colorlinks=true,allcolors=blue,breaklinks,draft=false]{hyperref}   % hyperlinks, including DOIs and URLs in bibliography
+% known bug: http://tex.stackexchange.com/questions/1522/pdfendlink-ended-up-in-different-nesting-level-than-pdfstartlink
+
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{calc}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage[T1]{fontenc}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{xspace}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{varwidth}
+\usepackage{tabularx}  % for 'tabularx' environment and 'X' column type
+\usepackage{ragged2e}  % for '\RaggedRight' macro (allows hyphenation)
+\usepackage{xcolor,colortbl}
+\usepackage{graphicx}
+
+\usepackage{booktabs}
+\usepackage{subfig}
+
+\newcommand{\doi}[1]{doi:~\href{http://dx.doi.org/#1}{\Hurl{#1}}}   % print a hyperlinked DOI
+
+
+%\newcommand{\todo}[1]{}
+%\renewcommand{\todo}[1]{{\color{red} TODO: {#1}}}
+\newcolumntype{C}[1]{>{\centering}m{#1}}
+%\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+
+%\newcommand{\ADComment}[1]{\textcolor{green}{AD: #1}}
+%\newcommand{\TSComment}[1]{\textcolor{blue}{TS: #1}}
+%\newcommand{\COULDCUT}[1]{\textcolor{blue}{#1}}
+
+\newcommand{\myfig}{Fig.~}
+\newcommand{\myfiglong}{Figure~}
+\newcommand{\myfigs}{Figs.~}
+\newcommand{\mytab}{Tab.~}
+\newcommand{\mytablong}{Table~}
+\newcommand{\mysec}{Sec.~}
+\newcommand{\myalg}{Alg.~}
+\newcommand{\nvidia}{Nvidia\xspace}
+\newcommand{\totalcombinations}{70\xspace}
+\newcommand{\positivecombinations}{55\xspace}
+\newcommand{\cbedot}{\emph{cbe-dot}\xspace}
+\newcommand{\cbeht}{\emph{cbe-ht}\xspace}
+\newcommand{\ctoctree}{\emph{ct-octree}\xspace}
+\newcommand{\tpotm}{\emph{tpo-tm}\xspace}
+\newcommand{\sdkred}{\emph{sdk-red}\xspace}
+\newcommand{\sdkrednf}{\emph{sdk-red-nf}\xspace}
+\newcommand{\lsbh}{\emph{ls-bh}\xspace}
+\newcommand{\lsbhnf}{\emph{ls-bh-nf}\xspace}
+\newcommand{\cubscan}{\emph{cub-scan}\xspace}
+\newcommand{\cubscannf}{\emph{cub-scan-nf}\xspace}
+\newcommand{\heuristiccombinations}{eight\xspace}
+\newcommand{\effectivethreshold}{5\%\xspace}
+\definecolor{Gray}{gray}{0.85}
+
+% lstlisting macros
+\lstset{
+  language=C, % choose the language of the code
+  showspaces=false, % show spaces adding particular underscores
+  showstringspaces=false, % underline spaces within strings
+  showtabs=false, % show tabs within strings adding particular underscores
+  tabsize=8, % sets default tabsize to 2 spaces
+  captionpos=b, % sets the caption-position to bottom
+  mathescape=true, % activates special behaviour of the dollar sign
+  basicstyle=\scriptsize\tt,
+  columns=fullfelxible,
+  %commentstyle=\rmfamily\itshape,
+  morekeywords={barrier,kernel,global,__device__,__syncthreads,__global__,bool,then},
+  escapeinside={(*@}{@*)}
+}
+
+
+
+\newcommand{\code}[1]{\lstset{basicstyle=\tt}\lstinline!#1!\lstset{basicstyle=\scriptsize\tt}}
+
+\newcommand{\MP}{\textsf{MP}}
+\newcommand{\LB}{\textsf{LB}}
+\newcommand{\SB}{\textsf{SB}}
+\newcommand{\noisethreshold}{3\xspace}
+\newcommand{\TotalLitmusTests}{196.6\xspace}
+\newcommand{\loadop}{\textsf{ld}\xspace}
+\newcommand{\storeop}{\textsf{st}\xspace}
+
+\newcommand{\Td}[2]{{#1}_{#2}}
+\newcommand{\Tdl}[3]{\langle \Td{#1}{#2}, #3 \rangle}
+\newcommand{\Tdlsigma}[4]{\Tdl{#1}{#2}{#4@#3}}
+
+\newcommand{\randstrsolo}{\emph{rand-str}\xspace}
+\newcommand{\sysstrsolo}{\emph{sys-str}\xspace}
+\newcommand{\nostrsolo}{\emph{no-str}\xspace}
+\newcommand{\cachestrsolo}{\emph{cache-str}\xspace}
+
+\newcommand{\randstr}[1]{\emph{rand-str}#1}
+\newcommand{\sysstr}[1]{\emph{sys-str}#1}
+\newcommand{\nostr}[1]{\emph{no-str}#1}
+\newcommand{\cachestr}[1]{\emph{cache-str}#1}
+
+
+\newcommand{\NumGPUs}{seven\xspace}
+\newcommand{\NumApplications}{ten\xspace}
+\newcommand{\NumApplicationsUnique}{seven\xspace}
+
+\begin{document}
+
+\title{Responsive GPU Workgroup Management in the Presence of
+  Persistent Kernels}
+
+%
+% any author declaration will be ignored  when using 'pldi' option (for double blind review)
+%
+
+\authorinfo{}
+{\makebox{} \\
+}
+{}
+
+%\authorinfo{Tyler Sorensen}
+%{\makebox{Imperial College London, UK} \\
+%}
+%{t.sorensen15@imperial.ac.uk}
+
+%\authorinfo{Alastair F. Donaldson}
+%{\makebox{Imperial College London, UK} \\
+%}
+%{alastair.donaldson@imperial.ac.uk}
+
+
+\maketitle
+
+\begin{abstract}
+
+
+\end{abstract}
+    
+\section{Introduction}\label{sec:intro}
+
+GPUs are highly parallel co-processors that are now found on many
+devices, from the most powerful supercomputers to mobile phones. While
+originally designed to accelerate graphics applications, GPUs are now
+used in a wide range of applications, including molecular simulations
+and weather forecasting. 
+
+New application domains for GPUs are enabled by general purpose
+programming languages for GPUs. The current most popular such
+languages being CUDA and OpenCL. These languages allow developers to
+write C-like programs which may be dispatched and executed on a GPU
+device. GPUs have a hierarchical programming model; groups of threads
+are called \emph{workgroups} and intra-workgroup threads interact
+differently than inter-workgroup threads.
+
+GPUs are massively parallel and employ many threads to execute a
+program. Traditionally, applications accelerated by GPUs are
+data-parallel, requiring little interaction between threads. A small
+set of bulk synchronisation primitives are provided and any
+inter-thread communication must be performed around these primitives.
+
+While this traditional way to program GPUs has proved useful, it also
+has limitations for some applications, in particular applications that
+expose a dynamic amount of parallelism throughout execution. Such
+applications are said to have irregular parallelism (we call such
+applications \emph{IP applications}). Efficient parallel computation
+of such applications requires finer grained synchronisation than what
+GPU languages currently provide as primitives.
+
+In an effort to achieve high performance for IP applications, new GPU
+programming paradigms have been developed that include custom GPU
+synchronisation constructs. Here we focus on two:
+
+\begin{enumerate}
+\item {\bf Inter-workgroup barrier}: Workgroups are able to
+  efficiently synchronise frequently using a custom inter-workgroup
+  barrier that is not provided as GPU primitive.
+
+\item {\bf Work stealing}: Computation is divided into tasks that are
+  stored in workgroup-local queues. If a workgroup runs out of local
+  tasks to compute, it is able to steal a task from a different
+  workgroup.
+\end{enumerate}
+
+Both paradigms fit into what are called \emph{persistent kernels}, the
+defining characteristic being that persistent kernels use a relatively
+small number of long-running threads to perform computation. In
+contrast, traditional GPU programs employ many short running threads
+perform computation. In this work, the persistent kernels we consider
+use either work stealing or inter-workgroup barrier paradigms.
+
+Persistent kernels rely on strong forward progress properties (FPP)
+between workgroups; that is, workgroups must make forward progress to
+the other workgroups executing. In the inter-workgroup barrier, all
+workgroups spin at a barrier instruction waiting for all workgroups to
+arrive. If one (or more) workgroups stop making forward progress, the
+application will deadlock as the live workgroups will wait
+indefinitely for the halted workgroups. Less obviously, in the work
+stealing paradigm, the workgroups terminate only when \emph{all} tasks
+have been completed. If a workgroup takes a task, but stops making
+forward progress before the task is completed, the application will
+deadlock as the live workgroups will spin waiting for the halted
+workgroup to finish its task.
+
+The current GPU programming models generally do not provide strong
+enough inter-workgroup FPP to allow persistent kernels. This is
+because GPUs do not provide workgroup preemption. That is, GPU
+programming models allow GPU programs to be launched with many more
+workgroups than the available hardware resources are able run
+concurrently. The GPU runtime will schedule as many workgroups as the
+available resources can provide, and the remaining workgroups will
+wait until hardware resources become available, e.g.  when one of the
+scheduled workgroups finishes execution. There is no mechanism to swap
+workgroups from 'executing' to 'waiting' and vice versa. Workgroups
+that have been scheduled and have not finished execution are called
+\emph{occupant}.
+
+Previous work experimenting with persistent kernels has required
+\emph{a priori} knowledge of the number of workgroups that the GPU
+hardware is able to execute the program with concurrently. This
+number, called the \emph{maximal launch} or \emph{occupancy bound}, is
+a function of both a GPU chip and a compiled program. Because occupant
+workgroups are never preempted, if the GPU program is launched with a
+number of workgroups which doesn't exceed the occupancy bound, then
+all workgroups will be occupant and the strong inter-workgroup FPP
+required by persistent kernels are provided. Using the occupancy
+bound, previous work has successfully implemented persistent kernels
+and shown them to be performant on current GPUs. Recent work has even
+shown that the occupancy bound can be accurately discovered
+programitically, removing the need for any \emph{a priori} knowledge
+about the GPU.
+
+Despite the promising performance and ease of programming persistent
+kernels with occupant workgroups, GPU language specification
+committees are reluctant to commit to the inter-workgroup FPP
+currently provided by occupant workgroups. That is, even if current
+GPUs provide strong FPP between workgroups, future GPUs may not. Thus
+the performance gains enabled by persistent kernels may not be
+possible under future GPUs.
+
+We believe that two fundamental issues stopping committees from
+committing to strong inter-workgroup FPP are:
+
+\begin{itemize}
+\item {\bf Responsive GPU multi-tasking} A high priority GPU task
+  (e.g. graphics) may need to quickly gain access to the GPU. To do
+  this, some of the resources will have to be taken from the
+  persistent kernel in order to run the high priority task. This will
+  reduce the number of occupant workgroups executing the persistent
+  kernel.
+
+\item {\bf Energy throttling} Some GPUs, especially in mobile devices,
+  may wish to monitor the energy consumed (i.e. heat output) of the
+  GPU chip.  A GPU which is consuming too much energy may be throttled
+  by limiting the amount of resources (and thus the number of occupant
+  workgroups) to conserve battery life.
+\end{itemize}
+
+Both issues are a case of the GPU runtime needing to adjust the
+resources used by the persistent kernel during execution. This causes
+occupant workgroups to potentially be preempted, which may lead to
+deadlock in persistent kernels. A less severe, but still undesirable
+issue is if the runtime determines more GPU resources are available
+during a persistent kernel execution. In this case, the persistent
+kernel will be under-utilising GPU resources.
+
+In this work, we propose a solution that unites persistent kernels
+with the need for GPU runtimes to dynamically (and quickly) adjust the
+resources available to the persistent kernel. We propose a new GPU
+programming paradigm called \emph{dynamic persistent kernels}, or
+DPK. DPKs provide strong inter-workgroup FPP while still allowing the
+GPU runtime to adjust the number of workgroups executing the DPK in a
+timely manner, enabling responsive GPU multi-tasking or energy
+throttling.
+
+The key insight behind DPK, is that many persistent kernels contain
+points in their execution where workgroups can easily be either
+terminated or started. We propose several new instructions to mark
+these entry and exit points. These instructions serve as hooks for the
+GPU runtime to adjust the amount of resources available to the DPK,
+and thus the number of occupant workgroups the DPK can rely on to have
+strong FPPs. 
+
+For example, many applications using the inter-workgroup barrier
+paradigm do not carry workgroup-local information across calls to the
+inter-workgroup barrier. Thus the number of workgroups can be adjusted
+at every call to the inter-workgroup barrier. Many applications using
+the work-stealing paradigm do not carry state between task
+computation; thus workgroups can be created or terminated immediately
+after ever task computation.
+
+While we envision support for DPKs to ultimately be implemented in
+proprietary GPU drivers, we are able to provide a prototype
+implementation in software using the strong inter-workgroup FPP
+available on current GPUs. This allows us to test the feasibility of
+our approach and as well get upper bounds for the performance cost and
+the responsiveness of multi-tasking.
+
+\end{document}
