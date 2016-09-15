@@ -47,7 +47,7 @@
 \newcolumntype{C}[1]{>{\centering}m{#1}}
 %\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
 
-%\newcommand{\ADComment}[1]{\textcolor{green}{AD: #1}}
+\newcommand{\ADComment}[1]{\textcolor{green}{AD: #1}}
 %\newcommand{\TSComment}[1]{\textcolor{blue}{TS: #1}}
 %\newcommand{\COULDCUT}[1]{\textcolor{blue}{#1}}
 
@@ -156,37 +156,36 @@
     
 \section{Introduction}\label{sec:intro}
 
-GPUs are highly parallel co-processors that are now found on many
-devices, from the most powerful supercomputers to mobile phones. While
+Graphics processing units (GPUs) are highly parallel co-processors that are now incorporated into many
+devices, ranging from the world's most powerful supercomputers to battery-powered devices such as tablets and mobile phones. While
 originally designed to accelerate graphics applications, GPUs are now
 used in a wide range of applications, including molecular simulations
-and weather forecasting. 
+and weather forecasting. \ADComment{Expand the list of application areas a bit more; mention their attractiveness due to energy-efficiency.}
 
 New application domains for GPUs are enabled by general purpose
-programming languages for GPUs. The current most popular such
-languages being CUDA and OpenCL. These languages allow developers to
-write C-like programs which may be dispatched and executed on a GPU
-device. GPUs have a hierarchical programming model; groups of threads
-are called \emph{workgroups} and intra-workgroup threads interact
-differently than inter-workgroup threads.
+programming languages with associate compilation tools that target GPU architectures.
+The current most popular GPU programming languages are CUDA and OpenCL. These languages allow developers to
+write C-like programs that can be dispatched and executed on a GPU
+device.
 
-GPUs are massively parallel and employ many threads to execute a
-program. Traditionally, applications accelerated by GPUs are
+GPUs are massively parallel, employing many threads to execute a
+program.  These threads are organised hierarchically: groups of threads
+are called \emph{workgroups}, and threads interact differently depending on whether they reside in the same workgroup or not.  Traditionally, applications accelerated by GPUs are
 data-parallel, requiring little interaction between threads. A small
 set of bulk synchronisation primitives are provided and any
-inter-thread communication must be performed around these primitives.
+inter-thread communication must be performed around these primitives.  \ADComment{Do we want to make the point that this is traditionally limited to the intra-workgroup case?}
 
 While this traditional way to program GPUs has proved useful, it also
 has limitations for some applications, in particular applications that
 expose a dynamic amount of parallelism throughout execution. Such
 applications are said to have irregular parallelism (we call such
 applications \emph{IP applications}). Efficient parallel computation
-of such applications requires finer grained synchronisation than what
-GPU languages currently provide as primitives.
+of IP applications requires finer-grained synchronisation than that
+which is provided by GPU language primitives.
 
 In an effort to achieve high performance for IP applications, new GPU
 programming paradigms have been developed that include custom GPU
-synchronisation constructs. Here we focus on two:
+synchronisation constructs. Here we focus on two \ADComment{The way this is worded it is unclear whether you are describing two programming paradigms, or two synchronisation constructs}:
 
 \begin{enumerate}
 \item {\bf Inter-workgroup barrier}: Workgroups are able to
@@ -203,16 +202,16 @@ Both paradigms fit into what are called \emph{persistent kernels}, the
 defining characteristic being that persistent kernels use a relatively
 small number of long-running threads to perform computation. In
 contrast, traditional GPU programs employ many short running threads
-perform computation. In this work, the persistent kernels we consider
+to perform computation. In this work, the persistent kernels we consider
 use either work stealing or inter-workgroup barrier paradigms.
 
-Persistent kernels rely on strong forward progress properties (FPP)
-between workgroups; that is, workgroups must make forward progress to
-the other workgroups executing. In the inter-workgroup barrier, all
+Persistent kernels rely on strong forward progress properties (FPPs)
+between workgroups; that is, workgroups must make forward progress with respect to
+the other workgroups that are executing. In the case of the inter-workgroup barrier, all
 workgroups spin at a barrier instruction waiting for all workgroups to
 arrive. If one (or more) workgroups stop making forward progress, the
 application will deadlock as the live workgroups will wait
-indefinitely for the halted workgroups. Less obviously, in the work
+indefinitely for the halted workgroups \ADComment{Can we re-word the preceding to make it clearer that the workgroups have been stalled by a scheduler: they have not actually terminated their execution by reaching the end of the kernel}. Less obviously, in the work
 stealing paradigm, the workgroups terminate only when \emph{all} tasks
 have been completed. If a workgroup takes a task, but stops making
 forward progress before the task is completed, the application will
@@ -220,7 +219,7 @@ deadlock as the live workgroups will spin waiting for the halted
 workgroup to finish its task.
 
 The current GPU programming models generally do not provide strong
-enough inter-workgroup FPP to allow persistent kernels. This is
+enough inter-workgroup FPP to allow persistent kernels. \ADComment{This might be a good place to cite the specs.}  This is
 because GPUs do not provide workgroup preemption. That is, GPU
 programming models allow GPU programs to be launched with many more
 workgroups than the available hardware resources are able run
@@ -230,7 +229,7 @@ wait until hardware resources become available, e.g.  when one of the
 scheduled workgroups finishes execution. There is no mechanism to swap
 workgroups from 'executing' to 'waiting' and vice versa. Workgroups
 that have been scheduled and have not finished execution are called
-\emph{occupant}.
+\emph{occupant}.  \ADComment{Note: it's ironic that lack of preemption is what leads to the problem of workgroups being scheduled in waves, and yet also what means we might not be able to guarantee the properties of the occupancy-bound execution model in the future.}
 
 Previous work experimenting with persistent kernels has required
 \emph{a priori} knowledge of the number of workgroups that the GPU
@@ -253,7 +252,7 @@ committees are reluctant to commit to the inter-workgroup FPP
 currently provided by occupant workgroups. That is, even if current
 GPUs provide strong FPP between workgroups, future GPUs may not. Thus
 the performance gains enabled by persistent kernels may not be
-possible under future GPUs.
+safely achievable for future GPUs.
 
 We believe that two fundamental issues stopping committees from
 committing to strong inter-workgroup FPP are:
@@ -268,7 +267,7 @@ committing to strong inter-workgroup FPP are:
 
 \item {\bf Energy throttling} Some GPUs, especially in mobile devices,
   may wish to monitor the energy consumed (i.e. heat output) of the
-  GPU chip.  A GPU which is consuming too much energy may be throttled
+  GPU chip.  A GPU that is consuming too much energy may be throttled
   by limiting the amount of resources (and thus the number of occupant
   workgroups) to conserve battery life.
 \end{itemize}
@@ -276,10 +275,13 @@ committing to strong inter-workgroup FPP are:
 Both issues are a case of the GPU runtime needing to adjust the
 resources used by the persistent kernel during execution. This causes
 occupant workgroups to potentially be preempted, which may lead to
-deadlock in persistent kernels. A less severe, but still undesirable
+deadlock in persistent kernels. \ADComment{It might be good to illustrate the previous points with an example; e.g.\ we could envisage a kernel that is being executed concurrently by 16 workgroups.  Some (4 say) have reached an inter workgroup barrier and are awaiting the others.  But then a graphics tasks causes the 12 workgroups that have not yet reached the barrier to be preempted, and in anticipation of further graphics processing requirements the scheduler decides not to reduce the workgroup allocation for the kernel to 4 indefinitely.  The 4 workgroups waiting at the barrier cannot now make progress.  Energy throttling example is analogous, except that the count is reduced from 16 to 12 due to low battery.}
+A less severe, but still undesirable
 issue is if the runtime determines more GPU resources are available
 during a persistent kernel execution. In this case, the persistent
-kernel will be under-utilising GPU resources.
+kernel will be under-utilising GPU resources. \ADComment{I'm not sure I get this one.  Do you mean here that at the point of kernel launch there may be e.g. only 4 workgroup slots available, say due to low battery, but then later on (e.g., due to a phone being charged) there may be scope for more workgroups to run in parallel?}
+
+\ADComment{We should mention that GPU watchdogs are the rather drastic solution to this problem, to keep the overall system responsive, but that they do not help from the point of view of IP applications themselves.}
 
 In this work, we propose a solution that unites persistent kernels
 with the need for GPU runtimes to dynamically (and quickly) adjust the
@@ -296,7 +298,7 @@ terminated or started. We propose several new instructions to mark
 these entry and exit points. These instructions serve as hooks for the
 GPU runtime to adjust the amount of resources available to the DPK,
 and thus the number of occupant workgroups the DPK can rely on to have
-strong FPPs. 
+strong FPPs. \ADComment{We should make it clear early on that some care on the part of the programmer is required to make this work, and that if the programmer does not insert sufficient yield points, the GPU watchdog may still have to kill a kernel.}
 
 For example, many applications using the inter-workgroup barrier
 paradigm do not carry workgroup-local information across calls to the
