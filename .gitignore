@@ -1,0 +1,10 @@
+kernel_merge-build
+UVM_test/test1-build
+
+write-ups/PLDI/paper.aux
+write-ups/PLDI/paper.log
+write-ups/PLDI/paper.out
+write-ups/PLDI/paper.pdf
+
+*~
+*.bak
