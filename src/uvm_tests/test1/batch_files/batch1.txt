@@ -1,0 +1,3 @@
+ADD 4 5
+MULT 7 8
+ADD 1 1
