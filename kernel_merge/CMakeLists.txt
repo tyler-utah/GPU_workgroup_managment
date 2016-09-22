@@ -26,7 +26,9 @@ set(LLVM_LDFLAGS "")
 file(GLOB LLVM_LIBS "${LLVM_LIBDIR}/*.lib")
 
 add_executable(kernel_merge
-  src/kernel_merge.cpp
+  src/KernelMerge.cpp
+  src/ProcessKernelVisitor.cpp
+  include/ProcessKernelVisitor.h
 )
 
 set_target_properties(kernel_merge
