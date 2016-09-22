@@ -2,6 +2,8 @@
 
 #include <sstream>
 
+#include <ARCMigrate\Transforms.h>
+
 bool ProcessKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
 {
 
@@ -74,10 +76,10 @@ void ProcessKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
     if ("global_barrier" == CE->getCalleeDecl()->getAsFunction()->getNameAsString()) {
       std::stringstream strstr;
       strstr << "\ncase " << counter << ":\n";
-      RW.InsertTextBefore(CE->getSourceRange().getBegin(), strstr.str());
+      SourceLocation SemiLoc = clang::arcmt::trans::findSemiAfterLocation(CE->getLocEnd(), ASTC);
+      RW.InsertTextAfterToken(SemiLoc, strstr.str());
       counter++;
     }
-
   }
 
   RW.InsertTextBefore(CS->getRBracLoc(), "}");

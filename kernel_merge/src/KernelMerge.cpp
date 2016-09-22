@@ -37,7 +37,7 @@ int main(int argc, const char **argv) {
     Rewriter TheRewriter(ASTUnit->getSourceManager(),
       ASTUnit->getLangOpts());
 
-    ProcessKernelVisitor KMV(TheTU, TheRewriter);
+    ProcessKernelVisitor KMV(TheTU, TheRewriter, ASTUnit->getASTContext());
 
     if(!KMV.processedKernel()) {
       errs() << "Did not find a suitable kernel function in source file, stopping.\n";

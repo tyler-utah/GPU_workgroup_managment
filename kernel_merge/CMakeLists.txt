@@ -21,7 +21,7 @@ if (NOT EXISTS "${LLVM_LIBDIR}")
   message(FATAL_ERROR "Invalid LLVM build directory: ${LLVM_BUILD}")
 endif()
 
-set(LLVM_CXXFLAGS "\"/I${LLVM_SRC}/include\" \"/I${LLVM_BUILD}/include\" \"/I${LLVM_SRC}/tools/clang/include\" \"/I${LLVM_BUILD}/tools/clang/include\" -D_SCL_SECURE_NO_WARNINGS -wd4141 -wd4146 -wd4244 -wd4291 -wd4624 -wd4800")
+set(LLVM_CXXFLAGS "\"/I${LLVM_SRC}/include\" \"/I${LLVM_BUILD}/include\" \"/I${LLVM_SRC}/tools/clang/include\" \"/I${LLVM_BUILD}/tools/clang/include\" \"/I${LLVM_SRC}/tools/clang/lib\" -D_SCL_SECURE_NO_WARNINGS -wd4141 -wd4146 -wd4244 -wd4291 -wd4624 -wd4800")
 set(LLVM_LDFLAGS "")
 file(GLOB LLVM_LIBS "${LLVM_LIBDIR}/*.lib")
 

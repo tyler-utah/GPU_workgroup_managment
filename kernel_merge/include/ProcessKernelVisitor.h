@@ -10,7 +10,7 @@ using namespace llvm;
 class ProcessKernelVisitor
   : public RecursiveASTVisitor<ProcessKernelVisitor> {
 public:
-  ProcessKernelVisitor(TranslationUnitDecl *TU, Rewriter &RW) : RW(RW), KernelFunction(0) {
+  ProcessKernelVisitor(TranslationUnitDecl *TU, Rewriter &RW, ASTContext &ASTC) : RW(RW), ASTC(ASTC), KernelFunction(0) {
     TraverseTranslationUnitDecl(TU);
   }
 
@@ -24,6 +24,7 @@ public:
 
 private:
   Rewriter &RW;
+  ASTContext &ASTC;
   FunctionDecl *KernelFunction;
   std::string OriginalParameterText;
 
