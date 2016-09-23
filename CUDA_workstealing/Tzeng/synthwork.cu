@@ -329,7 +329,7 @@ float Launch_Synth_Scheduler(float * d_inputData, float * d_outputData, float * 
 	if(scheduler == RUN_TASKSTEAL)
 	{
 		printf("running task steal...\n");
-		assert(0);
+		//assert(0);
 
 		taskSteal<<<grd,blk>>>(d_inputData, d_outputData, d_debugData, d_intDebugData, d_locks, d_headQueuePtr, d_tailQueuePtr, d_randData, numElements, d_outputQueueLoc,
 							d_numPatches, numElements, results);
