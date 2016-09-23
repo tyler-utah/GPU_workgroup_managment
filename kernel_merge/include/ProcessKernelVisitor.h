@@ -27,6 +27,7 @@ private:
   ASTContext &ASTC;
   FunctionDecl *KernelFunction;
   std::string OriginalParameterText;
+  std::vector<DeclStmt*> DeclsToRestore;
 
   void ProcessWhileStmt(WhileStmt *S);
 };

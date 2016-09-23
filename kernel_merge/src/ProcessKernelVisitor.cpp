@@ -28,31 +28,91 @@ bool ProcessKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
   // Remove the "kernel" attribute
   RW.RemoveText(D->getAttr<OpenCLKernelAttr>()->getRange());
 
+  // Add "__target" parameter to kernel
+  {
+    std::stringstream strstr;
+    if (D->getNumParams() > 0) {
+      strstr << ", ";
+    }
+    strstr << D->getNameAsString() + "_restoration_ctx_t * restoration_ctx";
+    RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(),
+      strstr.str());
+  }
+
+  // Now process the body, if it has the right form
   CompoundStmt *CS = dyn_cast<CompoundStmt>(D->getBody());
   if (!CS) {
     errs() << "Kernel function has unexpected body, stopping.\n";
     exit(1);
   }
 
-  // Add "__target" parameter to kernel
-  std::stringstream strstr;
-  if (D->getNumParams() > 0) {
-    strstr << ", ";
-  }
-  strstr << "__target";
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(),
-    strstr.str());
-
-  // Now process the body, if it has the right form
   if(CS->size() == 0) {
     return true;
   }
 
-  WhileStmt *WS = dyn_cast<WhileStmt>(*(CS->body_begin()));
-  if (!WS) {
-    return true;
+  // Expected form of body is:
+  // <Decl to be restored>
+  // <Decl to be restored>
+  // ...
+  // <Decl to be restored>
+  // while(c) {
+  //    ...
+  // }
+  //
+  // We reject anything else
+
+  WhileStmt *WhileLoop = 0;
+
+  for (auto S : CS->body()) {
+    if (dyn_cast<DeclStmt>(S)) {
+      if (WhileLoop) {
+        errs() << "Declaration found after while loop, stopping.\n";
+        exit(1);
+      }
+      DeclsToRestore.push_back(dyn_cast<DeclStmt>(S));
+      continue;
+    }
+    if (dyn_cast<WhileStmt>(S)) {
+      if (WhileLoop) {
+        errs() << "Multiple loops found, stopping.\n";
+        exit(1);
+      }
+      WhileLoop = dyn_cast<WhileStmt>(S);
+      continue;
+    }
+    errs() << "Non declaration or loop statement found, stopping.\n";
+    exit(1);
   }
-  ProcessWhileStmt(WS);
+
+  for (auto DS : DeclsToRestore) {
+    for (auto D = DS->decl_rbegin(); D != DS->decl_rend(); D++) {
+      auto VD = dyn_cast<VarDecl>(*D);
+      if (!VD) {
+        errs() << "Found non-variable declaration, stopping.\n";
+        exit(1);
+      }
+      if (!VD->hasInit()) {
+        errs() << "Persistent declaration " << VD->getNameAsString() << " has no initialiser, stopping.\n";
+        exit(1);
+      }
+    }
+  }
+
+  {
+    std::stringstream strstr;
+    strstr << "if(restoration_ctx->target != 0) {\n";
+    for (auto DS : DeclsToRestore) {
+      for (auto D : DS->decls()) {
+        VarDecl *VD = dyn_cast<VarDecl>(D);
+        strstr << VD->getNameAsString() << " = restoration_ctx->" << VD->getNameAsString() << ";\n";
+      }
+    }
+    strstr << "}\n";
+
+    RW.InsertTextBefore(WhileLoop->getLocStart(), strstr.str());
+  }
+
+  ProcessWhileStmt(WhileLoop);
   return true;
 }
 
@@ -60,12 +120,13 @@ void ProcessKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
 
   CompoundStmt *CS = dyn_cast<CompoundStmt>(S->getBody());
   if (!CS) {
-    return;
+    errs() << "Expected while loop with compound body, stopping.\n";
+    exit(1);
   }
 
   auto condition = RW.getRewrittenText(S->getCond()->getSourceRange());
   RW.ReplaceText(S->getCond()->getSourceRange(), "true");
-  RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(__target) {\ncase 0:\nif(!(" + condition + ")) { break; }\n");
+  RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { break; }\n");
   unsigned counter = 1;
 
   for (auto s : CS->body()) {
@@ -76,6 +137,8 @@ void ProcessKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
     if ("global_barrier" == CE->getCalleeDecl()->getAsFunction()->getNameAsString()) {
       std::stringstream strstr;
       strstr << "\ncase " << counter << ":\n";
+      strstr << "restoration_ctx->target = 0;\n";
+
       SourceLocation SemiLoc = clang::arcmt::trans::findSemiAfterLocation(CE->getLocEnd(), ASTC);
       RW.InsertTextAfterToken(SemiLoc, strstr.str());
       counter++;
