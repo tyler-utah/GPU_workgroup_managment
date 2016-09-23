@@ -97,19 +97,27 @@ bool ProcessKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
       }
     }
   }
-
+  
   {
-    std::stringstream strstr;
-    strstr << "if(restoration_ctx->target != 0) {\n";
+    std::stringstream restorationstruct;
+    restorationstruct << "typedef struct {\n";
+
+    std::stringstream restorationcode;
+    restorationcode << "if(restoration_ctx->target != 0) {\n";
     for (auto DS : DeclsToRestore) {
       for (auto D : DS->decls()) {
         VarDecl *VD = dyn_cast<VarDecl>(D);
-        strstr << VD->getNameAsString() << " = restoration_ctx->" << VD->getNameAsString() << ";\n";
+        restorationcode << VD->getNameAsString() << " = restoration_ctx->" << VD->getNameAsString() << ";\n";
+        restorationstruct << "  " << VD->getType().getAsString() << " " << VD->getNameAsString() << ";\n";
       }
     }
-    strstr << "}\n";
+    restorationcode << "}\n";
 
-    RW.InsertTextBefore(WhileLoop->getLocStart(), strstr.str());
+    restorationstruct << "} " << D->getNameAsString() << "_restoration_ctx_t;\n\n";
+
+    RW.InsertTextBefore(WhileLoop->getLocStart(), restorationcode.str());
+
+    RW.InsertTextBefore(D->getLocStart(), restorationstruct.str());
   }
 
   ProcessWhileStmt(WhileLoop);
