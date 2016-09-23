@@ -86,12 +86,10 @@ int main(int argc, char *argv[]) {
 
 	std::vector<std::vector<cl::Device> > devices;
 	getDeviceList(devices);
-
 	if (FLAGS_platform_id < 0 || FLAGS_platform_id >= devices.size()) {
 		printf("invalid platform id. Please use the --list option to view platforms and device ids\n");
 		exit(0);
 	}
-
 	if (FLAGS_device_id < 0 || FLAGS_device_id >= devices[FLAGS_platform_id].size()) {
 		printf("invalid device id. Please use the --list option to view platforms and device ids\n");
 	}
@@ -129,7 +127,6 @@ int main(int argc, char *argv[]) {
 	err |= clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), 3, result);
 
 	check_ocl(err);
-
 	cout << "got file " << FLAGS_input << endl;
 	ifstream infile(FLAGS_input);
 
@@ -138,7 +135,7 @@ int main(int argc, char *argv[]) {
 		cl::NDRange(1),
 		cl::NDRange(1));
 	check_ocl(err);
-	err = cl::flush();
+	err = exec.exec_queue.flush();
 	check_ocl(err);
 
 	string tag;
@@ -164,7 +161,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	std::atomic_store_explicit((std::atomic<int> *) flag, GPU_QUIT, std::memory_order_release);
-	err = cl::finish();
+	err = exec.exec_queue.finish();
 	check_ocl(err);
 
 	for (int i = 0; i < results.size(); i++) {
