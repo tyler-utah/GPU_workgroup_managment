@@ -101,6 +101,7 @@ bool ProcessKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
   {
     std::stringstream restorationstruct;
     restorationstruct << "typedef struct {\n";
+    restorationstruct << "  uchar target;\n";
 
     std::stringstream restorationcode;
     restorationcode << "if(restoration_ctx->target != 0) {\n";

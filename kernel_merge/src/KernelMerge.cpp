@@ -25,7 +25,9 @@ int main(int argc, const char **argv) {
     return 1;
   }
 
-  std::string MergedKernelParams = "";
+  llvm::outs() << "#include \"cl_scheduler.h\"\n";
+
+  std::string MegaKernelParams = "";
   std::vector<FunctionDecl*> KernelFunctions;
 
   for(unsigned i = 0; i < AUs.size(); ++i) {
@@ -44,10 +46,9 @@ int main(int argc, const char **argv) {
       exit(1);
     }
 
-    if (i > 0) {
-      MergedKernelParams += ", ";
-    }
-    MergedKernelParams += KMV.getOriginalKernelParameterText();
+    MegaKernelParams += KMV.getOriginalKernelParameterText();
+
+    MegaKernelParams += ", kernel_exec_ctx_t " + KMV.getKernelFunctionDecl()->getNameAsString() + "_ctx, ";
 
     KernelFunctions.push_back(KMV.getKernelFunctionDecl());
 
@@ -55,16 +56,31 @@ int main(int argc, const char **argv) {
       TheRewriter.getRewriteBufferFor(ASTUnit->getSourceManager().getMainFileID());
     if (!RewriteBuf) {
       errs() << "Nothing was re-written\n";
-    } else {
-      llvm::outs() << std::string(RewriteBuf->begin(), RewriteBuf->end());
+      exit(1);
     }
+    llvm::outs() << std::string(RewriteBuf->begin(), RewriteBuf->end());
   }
 
-  llvm::outs() << "kernel void mega_kernel("
-               << MergedKernelParams << ") {\n";
+  MegaKernelParams += "discovery_ctx_t discovery_ctx, scheduling_ctx_t scheduling_ctx";
 
+  llvm::outs() << "kernel void mega_kernel("
+               << MegaKernelParams << ") {\n";
+
+  llvm::outs() << "  discovery_protocol(&discovery_ctx);\n";
+  llvm::outs() << "  if (participating_group_id(&discovery_ctx) == 0) {\n";
+  llvm::outs() << "    run_as_scheduler(&discovery_ctx, &scheduling_ctx, &foo_ctx, &bar_ctx);\n";
+  llvm::outs() << "  } else {\n";
+  llvm::outs() << "    while (true) {\n";
+  llvm::outs() << "      task_t current_task = get_task_from_scheduler(&scheduling_ctx, participating_group_id(&discovery_ctx));\n";
+  llvm::outs() << "      switch (current_task.TYPE) {\n";
+  llvm::outs() << "      case QUIT:\n";
+  llvm::outs() << "        return;\n";
+
+  unsigned count = 0;
   for (auto KernelFunction : KernelFunctions) {
-    llvm::outs() << "  " << KernelFunction->getNameAsString() << "(";
+    count += 1;
+    llvm::outs() << "      case KERNEL_" << count << ":\n";
+    llvm::outs() << "        " << KernelFunction->getNameAsString() << "(";
     bool AtLeastOneParameter = false;
     for (unsigned i = 0; i < KernelFunction->getNumParams(); ++i) {
       if (AtLeastOneParameter) {
@@ -78,8 +94,12 @@ int main(int argc, const char **argv) {
     }
     llvm::outs() << "0";
     llvm::outs() << ");\n";
+    llvm::outs() << "        break;\n";
   }
 
+  llvm::outs() << "      }\n";
+  llvm::outs() << "    }\n";
+  llvm::outs() << "  }\n";
   llvm::outs() << "}\n";
 
   return 0;
