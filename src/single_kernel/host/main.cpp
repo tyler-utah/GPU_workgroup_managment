@@ -1,7 +1,13 @@
+
+// Should be in a directory somewhere probably. Or defined in CMake.
+#define INT_TYPE cl_int;
+#define ATOMIC_INT_TYPE cl_int;
+
 #include <atomic>
 #include <iostream>
 #include <fstream>
 #include <string>
+#include<iostream>
 
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
@@ -9,8 +15,8 @@
 
 DEFINE_string(input, "", "Input path");
 DEFINE_string(output, "", "Output path");
-DEFINE_int32(platform_id, -1, "OpenCL platform ID to use");
-DEFINE_int32(device_id, -1, "OpenCL device ID to use");
+DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
+DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_bool(list, false, "List OpenCL platforms and devices");
 
 using namespace std;
@@ -63,12 +69,8 @@ int get_kernels(CL_Execution &exec) {
 	return ret;
 }
 
-#define GPU_WAIT 0
-#define GPU_ADD 1
-#define GPU_MULT 2
-#define GPU_QUIT 3
-
 int main(int argc, char *argv[]) {
+
 	flags::ParseCommandLineFlags(&argc, &argv, true);
 
 	if (FLAGS_input.empty() || FLAGS_output.empty()) {
@@ -103,70 +105,12 @@ int main(int argc, char *argv[]) {
 	cl::CommandQueue queue(exec.exec_context);
 	exec.exec_queue = queue;
 
-	err = exec.compile_kernel(kernel_file, "");
-
+	// Should be built into the cmake file. Haven't thought of how to do this yet.
+	err = exec.compile_kernel(kernel_file, "C:/Users/Tyler/Documents/GitHub/GPU_workgroup_managment/UVM_test/test1/include/rt_device/");
 	check_ocl(err);
 
 	get_kernels(exec);
-	
-	//Tyler: mixing C++ and C opencl is usually pretty frowned on. However, I cannot
-	//figure out the C++ api for fine-grained SVM! And there are very few examples.
-	cl_int * flag = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS, sizeof(cl_int), 4);
-	cl_int * data1 = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
-	cl_int * data2 = (cl_int*)clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
-	cl_int * result = (cl_int*)clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
 
-	*flag = GPU_WAIT;
-	*data1 = 0;
-	*data2 = 0;
-	*result = 0;
-
-	err = clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), 0, flag);
-	err |= clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), 1, data1);
-	err |= clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), 2, data2);
-	err |= clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), 3, result);
-
-	check_ocl(err);
-	cout << "got file " << FLAGS_input << endl;
-	ifstream infile(FLAGS_input);
-
-	err = exec.exec_queue.enqueueNDRangeKernel(exec.exec_kernels["mega_kernel"],
-		cl::NullRange,
-		cl::NDRange(1),
-		cl::NDRange(1));
-	check_ocl(err);
-	err = exec.exec_queue.flush();
-	check_ocl(err);
-
-	string tag;
-	int a, b;
-	vector<int> results;
-	while (infile >> tag >> a >> b) {
-		if (tag.compare("ADD") == 0) {
-			*data1 = a;
-			*data2 = b;
-			std::atomic_store_explicit((std::atomic<int> *) flag, GPU_ADD, std::memory_order_release);
-			while (std::atomic_load_explicit((std::atomic<int> *) flag, std::memory_order_acquire) != GPU_WAIT);
-			results.push_back(*result);
-			//cout << a + b << endl;
-		}
-		if (tag.compare("MULT") == 0) {
-			*data1 = a;
-			*data2 = b;
-			std::atomic_store_explicit((std::atomic<int> *) flag, GPU_MULT, std::memory_order_release);
-			while (std::atomic_load_explicit((std::atomic<int> *) flag, std::memory_order_acquire) != GPU_WAIT);
-			results.push_back(*result);
-			//cout << a * b << endl;
-		}
-	}
-
-	std::atomic_store_explicit((std::atomic<int> *) flag, GPU_QUIT, std::memory_order_release);
-	err = exec.exec_queue.finish();
-	check_ocl(err);
-
-	for (int i = 0; i < results.size(); i++) {
-		cout << results[i] << endl;
-	}
-
+	cout << "hello world" << endl;
 	return 0;
 }

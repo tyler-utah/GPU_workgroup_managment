@@ -1,6 +1,6 @@
 #pragma once
 
-#include <CL/cl.hpp>
+#include <CL/cl2.hpp>
 #include <map>
 #include <string>
 #include "ggc_ocl.h"
@@ -124,7 +124,12 @@ class CL_Execution {
     //options << " -cl-fast-relaxed-math";
     
     //Include the rt_device sources
-    //options << "-I" << kernel_include << " ";
+    options << "-I" << kernel_include << " ";
+
+	//Define the int and atomic int type
+	options << "-D" << "INT_TYPE=int" << " ";
+
+	options << "-D" << "ATOMIC_INT_TYPE=atomic_int" << " ";
     
     //Needed so we know to include Nvidia atomics
     options << check_atomics();
