@@ -3,7 +3,8 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Tooling/Tooling.h"
 
-#include "ProcessKernelVisitor.h"
+#include "ProcessNonPersistentKernelVisitor.h"
+#include "ProcessPersistentKernelVisitor.h"
 
 using namespace llvm;
 using namespace clang;
@@ -25,46 +26,22 @@ int main(int argc, const char **argv) {
     return 1;
   }
 
-  llvm::outs() << "#include \"cl_scheduler.h\"\n";
 
-  std::string MegaKernelParams = "";
-  std::vector<FunctionDecl*> KernelFunctions;
-
-  for(unsigned i = 0; i < AUs.size(); ++i) {
-    ASTUnit *ASTUnit = AUs[i].get();
-
-    TranslationUnitDecl *TheTU =
-      ASTUnit->getASTContext().getTranslationUnitDecl();
-
-    Rewriter TheRewriter(ASTUnit->getSourceManager(),
-      ASTUnit->getLangOpts());
-
-    ProcessKernelVisitor KMV(TheTU, TheRewriter, ASTUnit->getASTContext());
-
-    if(!KMV.processedKernel()) {
-      errs() << "Did not find a suitable kernel function in source file, stopping.\n";
-      exit(1);
-    }
-
-    MegaKernelParams += KMV.getOriginalKernelParameterText();
-
-    MegaKernelParams += ", kernel_exec_ctx_t " + KMV.getKernelFunctionDecl()->getNameAsString() + "_ctx, ";
-
-    KernelFunctions.push_back(KMV.getKernelFunctionDecl());
-
-    const RewriteBuffer *RewriteBuf =
-      TheRewriter.getRewriteBufferFor(ASTUnit->getSourceManager().getMainFileID());
-    if (!RewriteBuf) {
-      errs() << "Nothing was re-written\n";
-      exit(1);
-    }
-    llvm::outs() << std::string(RewriteBuf->begin(), RewriteBuf->end());
+  if (AUs.size() != 2) {
+    errs() << "Usage: " << argv[0] << " <non_persistent>.cl <persistent>.cl\n";
+    exit(1);
   }
 
-  MegaKernelParams += "discovery_ctx_t discovery_ctx, scheduling_ctx_t scheduling_ctx";
+  ProcessNonPersistentKernelVisitor NonPersistentVisitor(AUs[0].get());
+  ProcessPersistentKernelVisitor PersistentVisitor(AUs[1].get());
+
+  llvm::outs() << "#include \"cl_scheduler.h\"\n";
+  NonPersistentVisitor.EmitRewrittenText();
+  PersistentVisitor.EmitRewrittenText();
 
   llvm::outs() << "kernel void mega_kernel("
-               << MegaKernelParams << ") {\n";
+               << NonPersistentVisitor.GetKI().OriginalParameterText << ", "
+               << PersistentVisitor.GetKI().OriginalParameterText << ") {\n";
 
   llvm::outs() << "  discovery_protocol(&discovery_ctx);\n";
   llvm::outs() << "  if (participating_group_id(&discovery_ctx) == 0) {\n";
@@ -76,26 +53,23 @@ int main(int argc, const char **argv) {
   llvm::outs() << "      case QUIT:\n";
   llvm::outs() << "        return;\n";
 
-  unsigned count = 0;
-  for (auto KernelFunction : KernelFunctions) {
-    count += 1;
-    llvm::outs() << "      case KERNEL_" << count << ":\n";
-    llvm::outs() << "        " << KernelFunction->getNameAsString() << "(";
-    bool AtLeastOneParameter = false;
-    for (unsigned i = 0; i < KernelFunction->getNumParams(); ++i) {
-      if (AtLeastOneParameter) {
-        llvm::outs() << ", ";
-      }
-      AtLeastOneParameter = true;
-      llvm::outs() << KernelFunction->getParamDecl(i)->getNameAsString();
-    }
-    if (AtLeastOneParameter) {
-      llvm::outs() << ", ";
-    }
-    llvm::outs() << "0";
-    llvm::outs() << ");\n";
-    llvm::outs() << "        break;\n";
+  llvm::outs() << "      case NON_PERSISTENT_KERNEL:\n";
+  FunctionDecl * nonPersistent = NonPersistentVisitor.GetKI().KernelFunction;
+  llvm::outs() << "        " << nonPersistent->getNameAsString() << "(";
+  for (unsigned i = 0; i < nonPersistent->getNumParams(); ++i) {
+    llvm::outs() << nonPersistent->getParamDecl(i)->getNameAsString() << ", ";
   }
+  llvm::outs() << "0);\n";
+  llvm::outs() << "        break;\n";
+
+  llvm::outs() << "      case PERSISTENT_KERNEL:\n";
+  FunctionDecl * persistent = PersistentVisitor.GetKI().KernelFunction;
+  llvm::outs() << "        " << persistent->getNameAsString() << "(";
+  for (unsigned i = 0; i < persistent->getNumParams(); ++i) {
+    llvm::outs() << persistent->getParamDecl(i)->getNameAsString() << ", ";
+  }
+  llvm::outs() << "0);\n";
+  llvm::outs() << "        break;\n";
 
   llvm::outs() << "      }\n";
   llvm::outs() << "    }\n";

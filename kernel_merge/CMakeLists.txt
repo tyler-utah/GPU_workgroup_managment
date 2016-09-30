@@ -27,8 +27,11 @@ file(GLOB LLVM_LIBS "${LLVM_LIBDIR}/*.lib")
 
 add_executable(kernel_merge
   src/KernelMerge.cpp
-  src/ProcessKernelVisitor.cpp
-  include/ProcessKernelVisitor.h
+  src/ProcessPersistentKernelVisitor.cpp
+  src/ProcessNonPersistentKernelVisitor.cpp
+  include/ProcessPersistentKernelVisitor.h
+  include/ProcessNonPersistentKernelVisitor.h
+  include/KernelInfo.h
 )
 
 set_target_properties(kernel_merge
