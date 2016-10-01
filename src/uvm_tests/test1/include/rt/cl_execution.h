@@ -127,9 +127,11 @@ class CL_Execution {
     options << "-I" << kernel_include << " ";
 
 	//Define the int and atomic int type
-	options << "-D" << "INT_TYPE=int" << " ";
+	options << "-D" << "CL_INT_TYPE=int" << " ";
 
-	options << "-D" << "ATOMIC_INT_TYPE=atomic_int" << " ";
+	options << "-D" << "ATOMIC_CL_INT_TYPE=atomic_int" << " ";
+
+	options << "-D" << "MY_CL_GLOBAL=__global" << " ";
     
     //Needed so we know to include Nvidia atomics
     options << check_atomics();
