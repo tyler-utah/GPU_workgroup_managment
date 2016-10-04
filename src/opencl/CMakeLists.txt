@@ -6,3 +6,14 @@ add_library(opencl_opencl INTERFACE)
 target_link_libraries(opencl_opencl INTERFACE
   cl
 )
+
+# ===== opencl_interface
+add_library(opencl_interface
+  environment.cc
+  environment.h
+  interface.cc
+  interface.h
+)
+target_link_libraries(opencl_interface
+  opencl_opencl
+)
