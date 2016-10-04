@@ -17,6 +17,7 @@
 #include "cl_communicator.h"
 #include "cl_scheduler.h"
 #include "kernel_ctx.h"
+#include "iw_barrier.h"
 
 DEFINE_string(input, "", "Input path");
 DEFINE_string(output, "", "Output path");
@@ -112,83 +113,122 @@ int main(int argc, char *argv[]) {
 
 	// Should be built into the cmake file. Haven't thought of how to do this yet.
 	err = exec.compile_kernel(kernel_file, "C:/Users/Tyler/Documents/GitHub/GPU_workgroup_managment/src/uvm_tests/test1/include/rt_device/");
+
 	check_ocl(err);
 
 	get_kernels(exec);
 
+	// set up the discovery protocol
 	Discovery_ctx d_ctx;
 	mk_init_discovery_ctx(&d_ctx);
 	cl::Buffer d_ctx_mem (exec.exec_context, CL_MEM_READ_WRITE, sizeof(Discovery_ctx));
 	err = exec.exec_queue.enqueueWriteBuffer(d_ctx_mem, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx);
 	check_ocl(err);
 
-	//Reduce kernel args. 
-	int arr_size = 1048576;
-	cl_int * h_kernel_buffer = (cl_int *) malloc(sizeof(cl_int) * arr_size);
+	// Reduce kernel args. 
+	int graphics_arr_length = 1048576;
+	cl_int * h_graphics_buffer = (cl_int *) malloc(sizeof(cl_int) * graphics_arr_length);
 	int arr_min = INT_MAX;
-	for (int i = 0; i < arr_size; i++) {
+	for (int i = 0; i < graphics_arr_length; i++) {
 		int loop_int = rand() + 1;
 		if (loop_int < arr_min) {
 			arr_min = loop_int;
 		}
-		h_kernel_buffer[i] = loop_int;
-		
+		h_graphics_buffer[i] = loop_int;
 	}
-	cl::Buffer d_kernel_buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * arr_size);
 
-	err = exec.exec_queue.enqueueWriteBuffer(d_kernel_buffer, CL_TRUE, 0, sizeof(cl_int) * arr_size, h_kernel_buffer);
+	cl::Buffer d_graphics_buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * graphics_arr_length);
+	err = exec.exec_queue.enqueueWriteBuffer(d_graphics_buffer, CL_TRUE, 0, sizeof(cl_int) * graphics_arr_length, h_graphics_buffer);
+	
+	cl_int * graphics_result = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
+	*graphics_result = INT_MAX;
 
+	// persistent kernel args
+	IW_barrier h_bar;
+	for (int i = 0; i < MAX_P_GROUPS; i++) {
+		h_bar.barrier_flags[i] = 0;
+	}
+	h_bar.phase = 0;
 
-	cl::Buffer d_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
-	cl_int * kernel_result = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
-	*kernel_result = INT_MAX;
+	cl::Buffer d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
+	err = exec.exec_queue.enqueueWriteBuffer(d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
+	check_ocl(err);
+
+	// kernel contexts for the graphics kernel and persistent kernel
+	cl::Buffer d_graphics_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
+	cl::Buffer d_persistent_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
+
+	// scheduler context
 	CL_Scheduler_ctx s_ctx;
 	mk_init_scheduler_ctx(&exec, &s_ctx);
 
+	// Setting the args
 	int arg_index = 0;
 
+	// Set the args for graphics kernel
+	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, graphics_arr_length);
+	arg_index++;
+	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_buffer);
+	arg_index++;
+	err |= clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), arg_index, graphics_result);
+	arg_index++;
+	check_ocl(err);
+
+	// Set args for persistent kernel
+	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
+	arg_index++;
+	check_ocl(err);
+
+	// Set arg for discovery protocol
 	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_ctx_mem);
 	arg_index++;
-	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, d_kernel_ctx);
-	arg_index++;
-	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, d_kernel_buffer);
-	arg_index++;
-	err |= clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), arg_index, kernel_result);
-	arg_index++;
-	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, arr_size);
-	arg_index++;
-
 	check_ocl(err);
+
+	// Set arg for kernel contexts
+	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
+	arg_index++;
+	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
+	arg_index++;
+	check_ocl(err);
+	
+	err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
+	//check_ocl(err);
+
+	// Set up the communicator
 	int local_size = 256;
 	int wg_size = MAX_P_GROUPS;
 	CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
-	
-	err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
-	check_ocl(err);
 
+	// Launch the mega kernel
 	err = cl_comm.launch_mega_kernel();
 	check_ocl(err);
+
+	// Get the number of found groups
 	int participating_groups = cl_comm.number_of_discovered_groups();
 
-	time_ret first_time = cl_comm.send_task_synchronous(participating_groups);
-	int first_found = *kernel_result;
-	*kernel_result = INT_MAX;
+	cl_comm.send_persistent_task(participating_groups / 4);
+
+	time_ret first_time = cl_comm.send_task_synchronous(participating_groups / 2);
+	int first_found = *graphics_result;
+	*graphics_result = INT_MAX;
 	time_ret second_time = cl_comm.send_task_synchronous(participating_groups / 2);
-	int second_found = *kernel_result;
-	*kernel_result = INT_MAX;
-	time_ret third_time = cl_comm.send_task_synchronous(participating_groups / 4);
-	int third_found = *kernel_result;
+	int second_found = *graphics_result;
+	*graphics_result = INT_MAX;
+	time_ret third_time = cl_comm.send_task_synchronous(participating_groups);
+	int third_found = *graphics_result;
 
 	cl_comm.send_quit_signal();
 	err = exec.exec_queue.finish();
 	check_ocl(err);
 
 	cout << "number of participating groups: " << participating_groups << endl;
+
 	cout << "min expected: " << arr_min << " min found: " << first_found << " " <<  second_found << " " << third_found  << endl;
 	cout << "time for " << participating_groups << " workgroups: " << first_time.second << " " << first_time.first << " ms" << endl;
 	cout << "time for " << participating_groups / 2 << " workgroups: " << second_time.second << " " << second_time.first << " ms" << endl;
 	cout << "time for " << participating_groups / 4 << " workgroups: " << third_time.second << " " << third_time.first << " ms" << endl;
-
+	
+	cout << "hello world" << endl;
 
 	free_scheduler_ctx(&exec, &s_ctx);
 	return 0;

@@ -7,6 +7,8 @@
 // needed for timers
 #include <Windows.h>
 
+typedef std::pair<unsigned long long, unsigned long long> time_ret;
+
 class CL_Communicator {
 	
 	private:
@@ -54,24 +56,30 @@ class CL_Communicator {
 		}
 
 		// Should possibly check groups here again to make sure we don't ask for too many (compare to participating groups)
-		unsigned long long send_task_synchronous(int groups) {
+		time_ret send_task_synchronous(int groups) {
 
 			// For timing. Should be better engineered.
-			unsigned long long begin, end, last;
+			unsigned long long response_begin, response_end, execution_begin, execution_end;
 
 			*(scheduler.task_size) = groups;
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_TASK, std::memory_order_release);
 
-			//start response timer here
+			response_begin = gettime_Windows();
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_acquire) != DEVICE_GOT_GROUPS);
-			//end response timer here.
+			response_end = gettime_Windows();
 
-			begin = gettime_Windows(); //start application timer here
+			execution_begin = gettime_Windows(); //start application timer here
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_acquire) != DEVICE_WAITING);
-			end = gettime_Windows(); //end application timer after waiting here.
-			last = end - begin;
-			return last;
+			execution_end = gettime_Windows(); //end application timer after waiting here.
+			time_ret ret = std::make_pair(execution_end - execution_begin, response_end - response_begin);
+			return ret;
+		}
+
+		void send_persistent_task(int groups) {
+			*(scheduler.task_size) = groups;
+			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_PERSISTENT_TASK, std::memory_order_release);
+			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_acquire) != DEVICE_WAITING);
 		}
 		
 	

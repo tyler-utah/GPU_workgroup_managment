@@ -4,3 +4,4 @@
 #define TASK_WAIT -1
 #define TASK_QUIT 0
 #define TASK_MULT 1
+#define TASK_PERSIST 2
