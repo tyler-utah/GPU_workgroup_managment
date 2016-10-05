@@ -17,7 +17,7 @@ bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
      name == "get_global_size") {
      assert(CE->getNumArgs() == 1);
      // TODO: Abort unless the argument has the literal value 0
-     RW.ReplaceText(CE->getArg(0)->getSourceRange(), "kernel_ctx");
+     RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__k_ctx");
      RW.InsertTextBefore(CE->getSourceRange().getBegin(), "k_");
   }
   if(name == "global_barrier") {
@@ -54,12 +54,12 @@ void ProcessNonPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
         D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
   }
 
-  // Add "kernel_ctx" parameter to kernel
+  // Add "__k_ctx" parameter to kernel
   std::string newParam = "";
   if (D->getNumParams() > 0) {
     newParam = ", ";
   }
-  newParam += "KernelCtx * kernel_ctx";
+  newParam += "__global Kernel_ctx * __k_ctx";
   RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), newParam);
 
   // Remove the "kernel" attribute

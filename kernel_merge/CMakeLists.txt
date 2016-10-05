@@ -38,4 +38,4 @@ set_target_properties(kernel_merge
     PROPERTIES COMPILE_FLAGS "${LLVM_CXXFLAGS}"
 )
 
-target_link_libraries(kernel_merge PUBLIC ${LLVM_LIBS} ${LLVM_SYS_LIBS})
+target_link_libraries(kernel_merge PUBLIC ${LLVM_LIBS} ${LLVM_SYS_LIBS} version.lib)

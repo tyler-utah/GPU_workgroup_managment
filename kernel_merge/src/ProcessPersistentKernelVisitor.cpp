@@ -25,7 +25,7 @@ void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
 
   auto condition = RW.getRewrittenText(S->getCond()->getSourceRange());
   RW.ReplaceText(S->getCond()->getSourceRange(), "true");
-  RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { break; }\n");
+  RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(__restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { break; }\n");
   unsigned counter = 1;
 
   for (auto s : CS->body()) {
@@ -33,10 +33,10 @@ void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
     if (!CE) {
       continue;
     }
-    if ("global_barrier" == CE->getCalleeDecl()->getAsFunction()->getNameAsString()) {
+    if ("resizing_global_barrier" == CE->getCalleeDecl()->getAsFunction()->getNameAsString()) {
       std::stringstream strstr;
       strstr << "\ncase " << counter << ":\n";
-      strstr << "restoration_ctx->target = 0;\n";
+      strstr << "__restoration_ctx->target = 0;\n";
 
       SourceLocation SemiLoc = clang::arcmt::trans::findSemiAfterLocation(CE->getLocEnd(), AU->getASTContext());
       RW.InsertTextAfterToken(SemiLoc, strstr.str());
@@ -55,12 +55,12 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     name == "get_global_size") {
     assert(CE->getNumArgs() == 1);
     // TODO: Abort unless the argument has the literal value 0
-    RW.ReplaceText(CE->getArg(0)->getSourceRange(), "kernel_ctx");
+    RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__k_ctx");
     RW.InsertTextBefore(CE->getSourceRange().getBegin(), "k_");
   }
-  if (name == "global_barrier") {
+  if (name == "resizing_global_barrier") {
     assert(CE->getNumArgs() == 1);
-    RW.ReplaceText(CE->getSourceRange(), "global_barrier(kernel_ctx)");
+    RW.ReplaceText(CE->getSourceRange(), "global_barrier(__bar, __k_ctx)");
   }
   return true;
 }
@@ -90,20 +90,15 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
     if (D->getNumParams() > 0) {
       newParam = ", ";
     }
-    newParam += "RestorationCtx * restoration_ctx";
+    newParam += "Restoration_ctx * __restoration_ctx";
     RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(),
       newParam);
   }
 
-  // Add "kernel_ctx" parameter to kernel
-  {
-    std::string newParam = "";
-    if (D->getNumParams() > 0) {
-      newParam = ", ";
-    }
-    newParam += "KernelCtx * kernel_ctx";
-    RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), newParam);
-  }
+  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global IW_barrier * __bar");
+
+  // Add "__k_ctx" parameter to kernel
+  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global Kernel_ctx * __k_ctx");
 
   // Now process the body, if it has the right form
   CompoundStmt *CS = dyn_cast<CompoundStmt>(D->getBody());
@@ -165,16 +160,16 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   restorationCtx += "  uchar target;\n";
 
   std::string restorationCode;
-  restorationCode += "if(restoration_ctx->target != 0) {\n";
+  restorationCode += "if(__restoration_ctx->target != 0) {\n";
   for (auto DS : DeclsToRestore) {
     for (auto D : DS->decls()) {
       VarDecl *VD = dyn_cast<VarDecl>(D);
-      restorationCode += VD->getNameAsString() + " = restoration_ctx->" + VD->getNameAsString() + ";\n";
+      restorationCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
       restorationCtx += "  " + VD->getType().getAsString() + " " + VD->getNameAsString() + ";\n";
     }
   }
   restorationCode += "}\n";
-  restorationCtx += "} RestorationCtx;\n\n";
+  restorationCtx += "} Restoration_ctx;\n\n";
 
   RW.InsertTextBefore(WhileLoop->getLocStart(), restorationCode);
 

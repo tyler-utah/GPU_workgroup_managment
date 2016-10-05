@@ -57,7 +57,7 @@ __kernel void graph_color( __global int   *row,                        //0
     // Original application --- color --- end
 
     // Inter-workgroup barrier
-    global_barrier();
+    resizing_global_barrier();
 
     // Original application --- color2 --- start
 
@@ -83,6 +83,6 @@ __kernel void graph_color( __global int   *row,                        //0
     // Original application --- color2 --- end
 
     // Inter-workgroup barrier
-    global_barrier();
+    resizing_global_barrier();
   }
 }
