@@ -17,6 +17,6 @@ add_library(cl INTERFACE)
 #   opencl.h
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
-#find_package(OpenCL REQUIRED)
+find_package(OpenCL REQUIRED)
 target_link_libraries(cl INTERFACE ${OPENCL_LIBRARIES})
 target_include_directories(cl INTERFACE ${GPU_workgroup_management_SOURCE_DIR}/third_party)
