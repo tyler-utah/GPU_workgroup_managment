@@ -29,15 +29,17 @@
 // part of the interface.
 // The Environment class makes working with Kernel objects simpler, in
 // particular, adding arguments, setting properties and enqueueing.
+// Unless specified, all functions will die if a called OpenCL function does not
+// return CL_SUCCESS.
 //
 // Example 1: Running a single kernel on a platform and device:
 //
 //   Context context = CreateContextFromPlatformDevices(
 //       GetPlatformOrDie("NAMD"), {GetDeviceOrDie("GPU")});
 //   Execution(context.CreateProgramFromFile("~/adder.cl", "-cl-opt-disable"))
-//       .SetGlobalSize(8, 8)
-//       .SetLocalSize(2, 2)
-//       .SetArgs(my_buffer, 2, "/add")
+//       .SetGlobalSize({8, 8})
+//       .SetLocalSize({2, 2})
+//       .SetArgs(Execution::BufferArg(my_buffer, 1024), 2, "/add")
 //       .Enqueue(context.GetOrCreateCommandQueue());
 //
 // Example 2: SVM usage in custom queue:
@@ -48,9 +50,9 @@
 //       "mega_kernel", context.CreateProgramFromFile("~/adder.cl", options));
 //   std::atomic<int> *flag = context.SVMNew<std::atomic<int>>(0);
 //   Execution(context.GetProgram("mega_kernel"))
-//       .SetGlobalSize(1)
-//       .SetLocalSize(1)
-//       .SetArgs(SVMArg(flag), data)
+//       .SetGlobalSize({1})
+//       .SetLocalSize({1})
+//       .SetArgs(Execution::SVMArg(flag), data)
 //       .Enqueue(context.GetOrCreateCommandQueue("mega_queue");
 
 #ifndef OPENCL_ENVIRONMENT_H_
@@ -61,6 +63,7 @@
 #include <string>
 #include <vector>
 
+#include "opencl/interface.h"
 #include "opencl/opencl.h"
 
 namespace opencl {
@@ -73,37 +76,66 @@ class Execution {
 
   // Set the arguments for kernels represented by this execution
   template <typename... Args>
-  cl_int SetArgs(Args... args) {
-    return SetArgsIdx(0, args);
+  Execution& SetArgs(Args... args) {
+    SetArgsIdx(0, args...);
+    return *this;
   }
 
-  // TODO set kernel size and enqueue.
+  // For setting kernel arguments.
+  // Wrap an argument in the buffer struct marking it as a buffer argument.
+  struct BufferArg {
+    BufferArg(size_t size, void *ptr) : size(size), ptr(ptr) {}
+    size_t size;
+    void *ptr;
+  };
+  // Wrap an argument in the SVM struct marking it as a SVM argument.
+  struct SVMArg {
+    SVMArg(void *ptr) : ptr(ptr) {}
+    void *ptr;
+  };
+
+  // Set size of kernel.
+  // As these are set upon enqueueing, getting the kernel out of an Execution
+  // object and manually enqueueing will not know about these calls.
+  Execution& SetGlobalSize(const cl::NDRange& global_size);
+  Execution& SetLocalSize(const cl::NDRange& local_size);
+
+  // Enqueue kernel in specified queue.
+  cl::Event Enqueue(cl::CommandQueue command_queue);
 
  private:
   // Base case for end of the argument pack.
-  SetArgsIdx(cl_uint idx) { return CL_SUCCESS; }
+  void SetArgsIdx(cl_uint idx) {}
   // Set argument for non-memory parameter.
   template <typename Arg, typename... Args>
-  SetArgsIdx(cl_uint idx, Arg arg, Args... args) {
-    if ((cl_int err = kernel_.setArg(idx, arg)) != CL_SUCCESS) {
-      return err;
-    }
-    return SetArgsIdx(idx + 1, args);
+  void SetArgsIdx(cl_uint idx, Arg arg, Args... args) {
+    cl_int err = kernel_.setArg(idx, arg);
+    CHECK_OPENCL(err, "Assign OpenCL arg");
+    SetArgsIdx(idx + 1, args...);
   }
-  // Set argument for memory object. For now, must be cast to array.
-  // TODO: Have simple mem object struct and create specialisation for that.
-  template <typename Arg, size_t size, Args... args>
-  SetArgsIdx(cl_uint, Arg arg[size], Args... args) {
-    if ((cl_int err = kernel_.setArg(idx, size, arg)) != CL_SUCCESS) {
-      return err;
-    }
-    return SetArgsIdx(idx + 1, args);
+  // Set argument for buffer parameter.
+  template <typename... Args>
+  void SetArgsIdx(cl_uint idx, BufferArg arg, Args... args) {
+    cl_int err = kernel_.setArg(idx, arg.size, arg.ptr);
+    CHECK_OPENCL(err, "Assign OpenCL buffer arg");
+    SetArgsIdx(idx + 1, args...);
+  }
+  // Set argument for SVM parameter.
+  template <typename... Args>
+  void SetArgsIdx(cl_uint idx, SVMArg arg, Args... args) {
+    cl_int err = clSetKernelArgSVMPointer(kernel_(), idx, arg.ptr);
+    CHECK_OPENCL(err, "Assign OpenCL SVM arg");
+    SetArgsIdx(idx + 1, args...);
   }
 
   // The program for which the kernel is built from.
   cl::Program program_;
   // The kernel for this execution.
   cl::Kernel kernel_;
+
+  // Parameters for this kernel, to be set upon enqueueing.
+  cl::NDRange global_size_;
+  cl::NDRange local_size_;
 };
 
 // Context
@@ -124,8 +156,8 @@ class Context {
   Context(const Context& other) = delete;
   Context operator=(const Context& other) = delete;
   // Contexts can still be moved however.
-  context(context&& other) = default;
-  Context operator=(Context&& other) = default;
+  Context(Context&& other) = default;
+  Context& operator=(Context&& other) = default;
 
   // Construct a context using the specified platform and all available devices
   // for the platform.
@@ -140,9 +172,10 @@ class Context {
   // calling with the empty string "".
   cl::CommandQueue GetOrCreateCommandQueue();
   // Gets the CommandQueue that id maps to, or nullptr if it does not exist.
-  cl::CommandQueue *GetCommandQueue(const std::string& id) const;
-  // Register a custom created CommandQueue. It is down to the user to ensure
-  // CommandQueue was created with the appropriate context.
+  cl::CommandQueue *GetCommandQueue(const std::string& id);
+  // Register a custom created CommandQueue, overwriting any existing queue.
+  // It is down to the user to ensure CommandQueue was created with the
+  // appropriate context.
   void RegisterCommandQueue(const std::string& id,
                             const cl::CommandQueue command_queue);
 
@@ -159,9 +192,9 @@ class Context {
       const std::string& source, const std::string& options,
       const std::vector<cl::Device>& devices);
   // Gets the program that id maps to, or nullptr if it does not exist.
-  cl::Program *GetProgram(const std::string& id) const;
-  // Register an already created Program. It is down to the user to ensure
-  // Program was created with the appropriate context.
+  cl::Program *GetProgram(const std::string& id);
+  // Register an already created Program, overwriting any existing program.
+  // The user must ensure Program was created with the appropriate context.
   void RegisterProgram(const std::string& id, const cl::Program program);
 
   // SVM Allocation.
@@ -170,13 +203,13 @@ class Context {
   T *SVMNew(Args&&... args) {
     static cl_svm_mem_flags default_flags =
         CL_MEM_READ_WRITE | CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS;
-    void *mem = clSVMAlloc(context_, default_flags, sizeof(T), 0);
-    return new(mem) T(args);
+    void *mem = clSVMAlloc(context_(), default_flags, sizeof(T), 0);
+    return new(mem) T(args...);
   }
   template <typename T>
   void SVMDelete(T *t) {
     t->~T();
-    clSVMFree(context_, t);
+    clSVMFree(context_(), t);
   }
 
   // Get the underlying OpenCL reference classes used by this context.
@@ -191,29 +224,12 @@ class Context {
   cl::Context context_;
   // Platform and devices for which this context is interacting with.
   cl::Platform platform_;
-  std::set<cl::Device> devices_;
+  std::vector<cl::Device> devices_;
   // Active command queues, mapped by a string identifier. No identifier is the
   // context wide queue, for which all command queues are active.
   std::map<std::string, cl::CommandQueue> command_queues_;
   // Active programs, mapped by a string identifier.
   std::map<std::string, cl::Program> programs_;
-
-  // The raw info contains the OpenCL handlers to an underlying instantiation,
-  // for which the details are not available. We define some information objects
-  // to store some useful info.
-
-  // TODO these are prob not necessary.
-  // Command queue info.
-  struct CommandQueueInfo {
-    std::set<cl::Device> devices_;
-  };
-  std::map<cl::CommandQueue, CommandQueueInfo> command_queue_info_;
-
-  // Program info.
-  struct ProgramInfo {
-    std::set<cl::Device> devices_;
-  };
-  std::map<cl::Program, ProgramInfo> program_info_;
 };
 
 }  // namespace opencl
