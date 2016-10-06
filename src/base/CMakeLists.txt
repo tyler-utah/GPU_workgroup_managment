@@ -24,11 +24,3 @@ add_library(base_platform
 target_compile_definitions(base_platform PRIVATE
   PROJECT_ROOT=${GPU_workgroup_management_SOURCE_DIR}/
 )
-
-
-
-add_executable(file_test
-test_file_main.cc)
-target_link_libraries(file_test
-  base_file
-)
