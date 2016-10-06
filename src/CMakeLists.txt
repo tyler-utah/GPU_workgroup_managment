@@ -10,6 +10,10 @@ include_directories(
   ${GPU_workgroup_management_BINARY_DIR}
 )
 
+link_directories(
+  ${GPU_workgroup_management_BINARY_DIR}
+)
+
 add_subdirectory(base)
 add_subdirectory(opencl)
 add_subdirectory(third_party)
