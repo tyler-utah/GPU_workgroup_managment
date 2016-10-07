@@ -24,3 +24,12 @@ add_library(base_platform
 target_compile_definitions(base_platform PRIVATE
   PROJECT_ROOT=${GPU_workgroup_management_SOURCE_DIR}/
 )
+
+# ===== base_profile
+add_library(base_profile
+  profile.cc
+  profile.h
+)
+target_link_libraries(base_profile
+  base_commandlineflags
+)
