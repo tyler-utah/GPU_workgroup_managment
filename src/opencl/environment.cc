@@ -68,7 +68,7 @@ void Context::RegisterCommandQueue(const std::string& id,
 
 cl::Program Context::CreateProgramFromFile(
     const std::string& path, const std::string& options) {
-  CreateProgramFromFileForDevices(path, options, devices_);
+  return CreateProgramFromFileForDevices(path, options, devices_);
 }
 
 cl::Program Context::CreateProgramFromFileForDevices(
@@ -77,7 +77,7 @@ cl::Program Context::CreateProgramFromFileForDevices(
   std::ifstream f(path);
   std::ostringstream oss;
   oss << f.rdbuf();
-  CreateProgramFromStringForDevices(oss.str(), options, devices);
+  return CreateProgramFromStringForDevices(oss.str(), options, devices);
 }
 
 cl::Program Context::CreateProgramFromString(
