@@ -7,7 +7,12 @@
 #include <iostream>
 #include <string>
 
+#include "base/commandlineflags.h"
 #include "opencl/opencl.h"
+
+// List all of the platforms and devices available on this machine, and then
+// immediately exit.
+DECLARE_bool(opencl_list);
 
 namespace opencl {
 
