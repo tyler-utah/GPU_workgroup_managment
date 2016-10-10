@@ -10,9 +10,12 @@
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
 
+#define OPENCL_LIST DECLARE_bool(opencl_list); \
+        volatile bool unused = FLAGS_opencl_list;
+
 // List all of the platforms and devices available on this machine, and then
 // immediately exit.
-DECLARE_bool(opencl_list);
+//DECLARE_bool(opencl_list);
 
 namespace opencl {
 

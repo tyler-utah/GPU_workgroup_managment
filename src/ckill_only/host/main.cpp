@@ -20,8 +20,6 @@
 #include "kernel_ctx.h"
 #include "iw_barrier.h"
 
-DEFINE_string(input, "", "Input path");
-DEFINE_string(output, "", "Output path");
 DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
 DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_bool(list, false, "List OpenCL platforms and devices");
@@ -79,11 +77,6 @@ int get_kernels(CL_Execution &exec) {
 int main(int argc, char *argv[]) {
 
 	flags::ParseCommandLineFlags(&argc, &argv, true);
-
-	if (FLAGS_input.empty() || FLAGS_output.empty()) {
-		printf("Input and output files not specified.");
-		exit(0);
-	}
 
 	CL_Execution exec;
 	int err = 0;
@@ -207,15 +200,15 @@ int main(int argc, char *argv[]) {
 	// Get the number of found groups
 	int participating_groups = cl_comm.number_of_discovered_groups();
 
-	cl_comm.send_persistent_task(participating_groups / 4);
+	cl_comm.send_persistent_task(participating_groups);
 
-	time_ret first_time = cl_comm.send_task_synchronous(participating_groups / 2, "first");
+	time_ret first_time = cl_comm.send_task_synchronous(1, "first");
 	int first_found = *graphics_result;
 	*graphics_result = INT_MAX;
-	time_ret second_time = cl_comm.send_task_synchronous(participating_groups / 2, "second");
+	time_ret second_time = cl_comm.send_task_synchronous(1, "second");
 	int second_found = *graphics_result;
 	*graphics_result = INT_MAX;
-	time_ret third_time = cl_comm.send_task_synchronous(participating_groups, "third");
+	time_ret third_time = cl_comm.send_task_synchronous(1, "third");
 	int third_found = *graphics_result;
 
 	cl_comm.send_quit_signal();
@@ -228,9 +221,14 @@ int main(int argc, char *argv[]) {
 	cout << "time for " << participating_groups << " workgroups: " << first_time.second << " " << first_time.first << " ms" << endl;
 	cout << "time for " << participating_groups / 2 << " workgroups: " << second_time.second << " " << second_time.first << " ms" << endl;
 	cout << "time for " << participating_groups / 4 << " workgroups: " << third_time.second << " " << third_time.first << " ms" << endl;
+
+	cout << "time for persistent kernel " << cl_comm.get_persistent_time() << endl;
+
 	
-	cout << "hello world" << endl;
+	cout << "hello world " << *(s_ctx.participating_groups) << endl;
 
 	free_scheduler_ctx(&exec, &s_ctx);
+
+	//profile::PrintProfileTraceAtResolution(&std::cout, profile::Milliseconds);
 	return 0;
 }
