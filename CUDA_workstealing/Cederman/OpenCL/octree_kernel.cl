@@ -34,6 +34,11 @@ void DLBABP_enqueue(__global DLBABP *dlbabp, __local Task *val, __global volatil
 
 /*---------------------------------------------------------------------------*/
 
+/* Hugues: head is separated in ctr and index, ctr is useful to avoid
+ * ABA problem. Since CAS operation deals with 32 bits int, a head is
+ * declared as an int, and ctr/index is accessed with mask and logical
+ * AND operations. */
+
 int getIndex(int head) {
   return head & 0xffff;
 }
