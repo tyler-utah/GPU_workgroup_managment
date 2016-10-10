@@ -115,11 +115,13 @@ int DLBABP_pop(__global DLBABP *dlbabp, __local Task *val) {
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *randdata)
+int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts)
 {
   if (DLBABP_pop(dlbabp, val) == 1) {
     return 1;
   }
+
+  *localStealAttempts += 1;
 
   if (DLBABP_steal(dlbabp, val, myrand(randdata)%get_num_groups(0)) == 1) {
     return 1;
@@ -130,12 +132,12 @@ int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *ra
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue(__global DLBABP *dlbabp, __local Task *val, __global int *randdata) {
+int DLBABP_dequeue(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts) {
   __local volatile int rval;
   int dval = 0;
 
   if(get_local_id(0) == 0) {
-    rval = DLBABP_dequeue2(dlbabp, val, randdata);
+    rval = DLBABP_dequeue2(dlbabp, val, randdata, localStealAttempts);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
   dval = rval;
@@ -184,7 +186,8 @@ __kernel void makeOctree(
   __global unsigned int* treeSize,
   __global unsigned int* particlesDone,
   unsigned int maxchilds,
-  int isStatic)
+  int isStatic,
+  __global unsigned int *stealAttempts)
 {
   /* Hugues todo: in OpenCL, isStatic is always false since we only
    * implement dynamic version (i.e., work-stealing) */
@@ -204,17 +207,26 @@ __kernel void makeOctree(
   unsigned int local_id = get_local_id(0);
   unsigned int local_size = get_local_size(0);
 
+  unsigned int localStealAttempts;
+  if (local_id == 0) {
+    localStealAttempts = 0;
+  }
+
   while (true) {
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // Try to acquire new task
-    if (DLBABP_dequeue(dlbabp, &t, randdata) == 0) {
+    if (DLBABP_dequeue(dlbabp, &t, randdata, &localStealAttempts) == 0) {
       if (isStatic)
         return;
       check = *particlesDone;
       barrier(CLK_LOCAL_MEM_FENCE);
-      if (check == particleCount)
+      if (check == particleCount) {
+        if (local_id == 0) {
+          atomic_add(stealAttempts, localStealAttempts);
+        }
         return;
+      }
       continue;
     }
 
@@ -319,6 +331,7 @@ __kernel void initDLBABP(
 __kernel void initOctree(
   __global DLBABP *dlbabp,
   __global volatile int *maxl,
+  __global unsigned int *stealAttempts,
   __global unsigned int *treeSize,
   __global unsigned int* particlesDone,
   int numParticles)
@@ -327,6 +340,7 @@ __kernel void initOctree(
   *particlesDone = 0;
   /* In Cuda, maxl is a kernel global initialized to 0 */
   *maxl = 0;
+  *stealAttempts = 0;
 
   __local Task t;
 

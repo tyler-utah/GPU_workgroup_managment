@@ -34,6 +34,7 @@ float Octree::printStats()
 
   printf("Tree size: %d\n", htreeSize);
   printf("Particles in tree: %d (%d) [%d]\n", sum, numParticles, hparticlesDone);
+  printf("Steal attempts: %d\n", hstealAttempts);
 
   float numf = numParticles;
   float sumf = sum;
@@ -86,6 +87,7 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   newParticles = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(cl_float4)*numParticles);
   particlesDone = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
   treeSize = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
+  stealAttempts = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
 
   generateParticles(queue);
 
@@ -128,9 +130,10 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   checkErr(err, "kernel constructor for initOctree");
   kernel.setArg(0, lbws.deviceptr());
   kernel.setArg(1, lbws.getMaxl());
-  kernel.setArg(2, treeSize);
-  kernel.setArg(3, particlesDone);
-  kernel.setArg(4, numParticles);
+  kernel.setArg(2, stealAttempts);
+  kernel.setArg(3, treeSize);
+  kernel.setArg(4, particlesDone);
+  kernel.setArg(5, numParticles);
 
   queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(1), cl::NDRange(1), NULL, &event);
   event.wait();
@@ -148,6 +151,7 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   kernel.setArg(8, particlesDone);
   kernel.setArg(9, maxChildren);
   kernel.setArg(10, (int)0);
+  kernel.setArg(11, stealAttempts);
 
   cl::NDRange local_size(threads);
   cl::NDRange global_size(blocks * threads);
@@ -179,6 +183,7 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   queue.enqueueReadBuffer(treeSize, CL_TRUE, 0, sizeof(unsigned int), &htreeSize, NULL, NULL);
   htree = new unsigned int[MAXTREESIZE];
   queue.enqueueReadBuffer(tree, CL_TRUE, 0, sizeof(unsigned int) * MAXTREESIZE, htree, NULL, NULL);
+  queue.enqueueReadBuffer(stealAttempts, CL_TRUE, 0, sizeof(unsigned int), &hstealAttempts, NULL, NULL);
 
   // Hugues: do we need to free things in OpenCL ? cl::Buffers are
   // collected by the garbage collector of c++ runtime ?

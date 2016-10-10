@@ -22,6 +22,7 @@ class Octree
 	cl::Buffer tree;
 	cl::Buffer treeSize;
 	cl::Buffer particlesDone;
+        cl::Buffer stealAttempts;
 
 	LBABP lbws;
         /* Hugues: we do not implement the static method in OpenCL */
@@ -35,6 +36,7 @@ class Octree
         unsigned int* htree;
         unsigned int htreeSize;
         unsigned int hparticlesDone;
+        unsigned int hstealAttempts;
 
 public:
 
