@@ -20,4 +20,6 @@ add_subdirectory(third_party)
 add_subdirectory(uvm_tests)
 add_subdirectory(single_kernel)
 add_subdirectory(first_persistent)
+add_subdirectory(ckill_only)
+
 

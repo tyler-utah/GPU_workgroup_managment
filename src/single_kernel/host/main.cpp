@@ -10,6 +10,7 @@
 #define ATOMIC_CL_INT_TYPE cl_int
 #define MY_CL_GLOBAL 
 
+#include "profile.h"
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
 #include "cl_execution.h"
@@ -170,13 +171,13 @@ int main(int argc, char *argv[]) {
 	check_ocl(err);
 	int participating_groups = cl_comm.number_of_discovered_groups();
 
-	time_ret first_time = cl_comm.send_task_synchronous(participating_groups);
+	time_ret first_time = cl_comm.send_task_synchronous(participating_groups, "first");
 	int first_found = *kernel_result;
 	*kernel_result = INT_MAX;
-	time_ret second_time = cl_comm.send_task_synchronous(participating_groups / 2);
+	time_ret second_time = cl_comm.send_task_synchronous(participating_groups / 2, "second");
 	int second_found = *kernel_result;
 	*kernel_result = INT_MAX;
-	time_ret third_time = cl_comm.send_task_synchronous(participating_groups / 4);
+	time_ret third_time = cl_comm.send_task_synchronous(participating_groups / 4, "third");
 	int third_found = *kernel_result;
 
 	cl_comm.send_quit_signal();

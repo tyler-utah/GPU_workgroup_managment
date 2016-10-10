@@ -18,6 +18,11 @@
 #define DEVICE_TO_EXECUTE 5
 #define DEVICE_TO_PERSISTENT_TASK 6
 
+// TASK_UNDEF sounds scary but it just means the persistent task is either not started
+// or executing. To split them up means more synchronisation with the host (expensive)
+#define PERSIST_TASK_UNDEF 0
+#define PERSIST_TASK_DONE 1
+
 // scheduler ctx
 typedef struct {
 	
@@ -35,5 +40,11 @@ typedef struct {
   
   // How many workgroups are currently
   MY_CL_GLOBAL ATOMIC_CL_INT_TYPE * available_workgroups;
+  
+  MY_CL_GLOBAL ATOMIC_CL_INT_TYPE * pool_lock;
+  
+  MY_CL_GLOBAL ATOMIC_CL_INT_TYPE * groups_to_kill;
+  
+  MY_CL_GLOBAL ATOMIC_CL_INT_TYPE * persistent_flag;
   
 } CL_Scheduler_ctx;

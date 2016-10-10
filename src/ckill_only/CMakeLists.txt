@@ -4,10 +4,10 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../uvm_tests/test1/include/ocl/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../uvm_tests/test1/include/rt/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../base/)
 
-add_executable(single_kernel
+add_executable(ckill_only
   host/main.cpp
 )
-target_link_libraries(single_kernel
+target_link_libraries(ckill_only
   base_commandlineflags
   opencl_opencl
   base_profile
