@@ -150,7 +150,7 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   kernel.setArg(10, false);
 
   cl::NDRange local_size(threads);
-  cl::NDRange global_size(blocks);
+  cl::NDRange global_size(blocks * threads);
 
   queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_size, local_size, NULL, &event);
   event.wait();
