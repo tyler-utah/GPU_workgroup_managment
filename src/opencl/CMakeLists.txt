@@ -15,5 +15,15 @@ add_library(opencl_interface
   interface.h
 )
 target_link_libraries(opencl_interface
+  base_commandlineflags
   opencl_opencl
 )
+
+
+
+
+
+
+
+add_executable(list_test list_test.cc)
+target_link_libraries(list_test base_commandlineflags opencl_interface)

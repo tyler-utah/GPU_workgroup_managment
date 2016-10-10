@@ -1,8 +1,8 @@
 // Profiler for getting high resolution times for marked regions of code. This
 // is a simple implementation, which does no corrections on overhead or any
 // other fixes to the times read, so there will be some error. All times are in
-// nanoseconds. Uses std::chrono::high_precision_clock, and repots duraiton (not
-// cpu_time).
+// nanoseconds. Uses std::chrono::high_precision_clock, and reports duration
+// (not cpu_time).
 //
 // Provides two means of mmeasuring time:
 //   - profile::Region: Gives the start and end times for a scoped region.
@@ -16,6 +16,9 @@
 //     profile::Point("MyFunc_midpoint", profile::VERBOSITY_HIGH);
 //     ...
 //   }
+//
+// The names given to each region must be a string literal, that will exist for
+// the duration of the program, not mutable data that has been marked const.
 
 #ifndef BASE_PROFILE_H_
 #define BASE_PROFILE_H_
@@ -35,7 +38,7 @@ enum Verbosity {
 };
 
 // Resolution at which to print the output.
-//Must update the translations in the cc if these are changed.
+// Must update the translations in the cc if these are changed.
 enum Resolution {
   Nanoseconds = 0,
   Microseconds = 1,
