@@ -249,8 +249,7 @@ __kernel void makeOctree(
     barrier(CLK_LOCAL_MEM_FENCE);
 
     for(int i = t.beg + local_id; i < t.end; i += local_size) {
-      /* Hugues todo: use atomic_inc() here ? */
-      atomic_add(&count[whichbox(frompart[i],t.middle)], 1);
+      atomic_inc(&count[whichbox(frompart[i],t.middle)]);
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
