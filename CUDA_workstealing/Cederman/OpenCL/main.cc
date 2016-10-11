@@ -61,6 +61,7 @@ int main(int argc, char* argv[]) {
          threads, blocks, argv[3], particleCount, maxChildren,
          o.getMaxMem(), o.getTime());
   float err = o.printStats();
+  printf("Err: %f\n", err);
 
   return 0;
 }
