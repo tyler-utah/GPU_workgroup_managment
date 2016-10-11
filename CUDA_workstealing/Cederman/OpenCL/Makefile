@@ -1,13 +1,16 @@
-OPENCL_ROOT=$(HOME)/OPENCL
 
-CC = x86_64-w64-mingw32-g++
-#CFLAGS = -std=c++11
+CC = g++
+CFLAGS = -Wall -Werror
+
+#OPENCL=$(HOME)/OPENCL
+OPENCL = /vol/cuda/7.5.18
 # For cmake compatibility, root the includes at src/
-#INCL = -I/home/admin/GPU_workgroup_managment/src -I$(OPENCL_ROOT)/include
-INCL = -I$(OPENCL_ROOT)/include
-LIB = -L$(OPENCL_ROOT)/lib
+#INCL = -I/home/admin/GPU_workgroup_managment/src -I$(OPENCL)/include
+INCL = -I$(OPENCL)/include
+#LIB = -L$(OPENCL)/lib
+LIB = -L$(OPENCL)/lib64
 
-all: octreepart
+all: octreepart run
 
 %.o: %.cc
 	$(CC) $(CFLAGS) $(INCL) -c $< -o $@
@@ -15,7 +18,10 @@ all: octreepart
 octreepart: main.cc helper.o lbabp.o octree.o rand.o
 	$(CC) $(CFLAGS) $(INCL) $^ -o $@ $(LIB) -lOpenCL
 
-PHONY: clean
+PHONY: clean run
 
 clean:
-	rm *.o octreepart
+	rm -f *.o octreepart
+
+run:
+	env LD_PRELOAD=$(OPENCL)/lib64/libOpenCL.so ./octreepart 128 20 abp 1024 50
