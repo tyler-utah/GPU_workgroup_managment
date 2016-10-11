@@ -267,8 +267,7 @@ __kernel void makeOctree(
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    /* Hugues: todo: i+= 1 ---> i++ */
-    for(int i = 0; i < 8; i += 1) {
+    for(int i = 0; i < 8; i++) {
       __local Task newTask;
 
       // Create new work or move to correct side
