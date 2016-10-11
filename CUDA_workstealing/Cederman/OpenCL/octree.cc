@@ -212,10 +212,10 @@ void Octree::generateParticles(cl::CommandQueue queue)
       float y = ((float)genrand_real1()*800.0f-400.0f);
       float z = ((float)genrand_real1()*800.0f-400.0f);
 
-      for (int x=0;x<clustersize;x++) {
-        lparticles[i*clustersize+x].x = x + ((float)genrand_real1()*100.0f-50.0f);
-        lparticles[i*clustersize+x].y = y + ((float)genrand_real1()*100.0f-50.0f);
-        lparticles[i*clustersize+x].z = z + ((float)genrand_real1()*100.0f-50.0f);
+      for (int j = 0; j < clustersize; j++) {
+        lparticles[i * clustersize + j].x = x + ((float)genrand_real1()*100.0f-50.0f);
+        lparticles[i * clustersize + j].y = y + ((float)genrand_real1()*100.0f-50.0f);
+        lparticles[i * clustersize + j].z = z + ((float)genrand_real1()*100.0f-50.0f);
       }
 
     }
