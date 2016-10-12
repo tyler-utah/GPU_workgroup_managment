@@ -1,10 +1,10 @@
  // To be included in the "main" body of the device. 
  // Requires two macros to be defined:
- // GRAPHICS_KERNEL and PERSISTEN_KERNEL
+ // NON_PERSISTENT_KERNEL and PERSISTENT_KERNEL
   
   
   __local int scratchpad[2];
-  DISCOVERY_PROTOCOL(d_ctx);
+  DISCOVERY_PROTOCOL(d_ctx, scratchpad);
   
   // Scheduler init (makes a variable named s_ctx)
   INIT_SCHEDULER;
@@ -16,10 +16,10 @@
     if (get_local_id(0) == 0) {
 	
       // Do any initialisation here before the main loop.
-	  scheduler_init(s_ctx, d_ctx, graphics_kernel_ctx, persistent_kernel_ctx);
+	  scheduler_init(s_ctx, d_ctx, non_persistent_kernel_ctx, persistent_kernel_ctx);
 	
 	  // Loops forever waiting for signals from the host. Host can issue a quit signal though.
-	  scheduler_loop(s_ctx, d_ctx, graphics_kernel_ctx, persistent_kernel_ctx);
+	  scheduler_loop(s_ctx, d_ctx, non_persistent_kernel_ctx, persistent_kernel_ctx);
 	  
 	}
 	BARRIER;
@@ -50,15 +50,15 @@
 	// The traditional task.
 	else if (task == TASK_MULT) {
 	  
-	  // Launch the graphics kernel
-	  GRAPHICS_KERNEL;
+	  // Launch the non-persistent kernel
+	  NON_PERSISTENT_KERNEL;
 	  
 	  // One representative group states that we're not currently executing
 	  BARRIER;
 	  
 	  // One representative states that we've completed the kernel
 	  if (get_local_id(0) == 0) {
-	    atomic_fetch_sub(&(graphics_kernel_ctx->executing_groups), 1);
+	    atomic_fetch_sub(&(non_persistent_kernel_ctx->executing_groups), 1);
 	  }
 	}
     

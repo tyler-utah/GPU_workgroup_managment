@@ -28,14 +28,14 @@ bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
 }
 
 
-void ProcessNonPersistentKernelVisitor::EmitRewrittenText() {
+void ProcessNonPersistentKernelVisitor::EmitRewrittenText(std::ostream & out) {
   const RewriteBuffer *RewriteBuf =
     RW.getRewriteBufferFor(AU->getSourceManager().getMainFileID());
   if (!RewriteBuf) {
     errs() << "Nothing was re-written\n";
     exit(1);
   }
-  llvm::outs() << std::string(RewriteBuf->begin(), RewriteBuf->end());
+  out << std::string(RewriteBuf->begin(), RewriteBuf->end());
 }
 
 void ProcessNonPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {

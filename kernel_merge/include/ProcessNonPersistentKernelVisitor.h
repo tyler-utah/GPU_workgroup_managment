@@ -24,7 +24,7 @@ public:
 
   bool VisitCallExpr(CallExpr *CE);
 
-  void EmitRewrittenText();
+  void EmitRewrittenText(std::ostream & out);
 
   KernelInfo GetKI() {
     return this->KI;

@@ -38,16 +38,15 @@ int discovery_protocol_rep(__global Discovery_ctx *d_ctx) {
   return PARTICIPATING_FLAG;
 }
 
-int discovery_protocol(__global Discovery_ctx *d_ctx) {
-  __local int ret_flag;
+int discovery_protocol(__global Discovery_ctx *d_ctx, __local int * ret_flag) {
   int id = get_local_id(0);
   if (id == 0) {
-    ret_flag = discovery_protocol_rep(d_ctx);
+    *ret_flag = discovery_protocol_rep(d_ctx);
   }
   BARRIER;
-  return ret_flag;
+  return *ret_flag;
 }
 
-#define DISCOVERY_PROTOCOL(d_ctx)                             \
-	if (discovery_protocol(d_ctx) == NON_PARTICIPATING_FLAG)  \
+#define DISCOVERY_PROTOCOL(d_ctx, scratchpad)                                 \
+	if (discovery_protocol(d_ctx, scratchpad) == NON_PARTICIPATING_FLAG)  \
 	    return;                                               

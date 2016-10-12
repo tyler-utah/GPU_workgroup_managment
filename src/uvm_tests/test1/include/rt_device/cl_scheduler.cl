@@ -9,7 +9,8 @@ int try_lock(atomic_int *m) {
 }
 
 void scheduler_lock(atomic_int *m) {
-  while (atomic_exchange_explicit(m, 1, memory_order_relaxed, memory_scope_device) != 0);
+  while (atomic_exchange_explicit(m, 1, memory_order_relaxed, memory_scope_device) != 0)
+  ;
   atomic_work_item_fence(FULL_FENCE, memory_order_acquire, memory_scope_device);
 }
 
@@ -70,7 +71,8 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 	  
       for(int i = 0; i < MAX_P_GROUPS; i++) {
 		  
-	    while (atomic_load_explicit(&(s_ctx.task_array[i]), memory_order_relaxed, memory_scope_device) !=  TASK_WAIT);
+        while (atomic_load_explicit(&(s_ctx.task_array[i]), memory_order_relaxed, memory_scope_device) !=  TASK_WAIT)
+        ;
         atomic_store_explicit(&(s_ctx.task_array[i]), TASK_QUIT, memory_order_release, memory_scope_device);	
 		atomic_fetch_sub(s_ctx.available_workgroups, 1);
 	  }
@@ -92,17 +94,20 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 	  atomic_store_explicit(s_ctx.groups_to_kill, to_kill, memory_order_relaxed, memory_scope_device);
 	  
 	  // Wait until we have all the groups we need. This will be the response time.
-	  while (atomic_load_explicit(s_ctx.available_workgroups, memory_order_relaxed, memory_scope_device) < local_task_size);
+	  while (atomic_load_explicit(s_ctx.available_workgroups, memory_order_relaxed, memory_scope_device) < local_task_size)
+          ;
 
 	  atomic_store_explicit(s_ctx.scheduler_flag, DEVICE_GOT_GROUPS, memory_order_relaxed, memory_scope_all_svm_devices);
 	  
-      while (atomic_load_explicit(s_ctx.scheduler_flag, memory_order_relaxed, memory_scope_all_svm_devices) != DEVICE_TO_EXECUTE);
+      while (atomic_load_explicit(s_ctx.scheduler_flag, memory_order_relaxed, memory_scope_all_svm_devices) != DEVICE_TO_EXECUTE)
+      ;
 	  
 	  scheduler_assign_tasks_graphics(s_ctx, graphics_kernel_ctx);
 	  
 	  scheduler_unlock(s_ctx.pool_lock);
 	  
-	  while (atomic_load_explicit(&(graphics_kernel_ctx->executing_groups), memory_order_relaxed, memory_scope_device) != 0);		  
+	  while (atomic_load_explicit(&(graphics_kernel_ctx->executing_groups), memory_order_relaxed, memory_scope_device) != 0)
+          ;		  
 	  
 	  atomic_store_explicit(s_ctx.scheduler_flag, DEVICE_WAITING, memory_order_release, memory_scope_all_svm_devices);
 	}
@@ -126,11 +131,13 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
   	  scheduler_lock(s_ctx.pool_lock);
   
 	  // Wait until we have all the groups we need. This will be the response time.
-	  while (atomic_load_explicit(s_ctx.available_workgroups, memory_order_relaxed, memory_scope_device) < local_task_size);
+	  while (atomic_load_explicit(s_ctx.available_workgroups, memory_order_relaxed, memory_scope_device) < local_task_size)
+          ;
 	  
 	  atomic_store_explicit(s_ctx.scheduler_flag, DEVICE_GOT_GROUPS, memory_order_relaxed, memory_scope_all_svm_devices);
 	  
-      while (atomic_load_explicit(s_ctx.scheduler_flag, memory_order_relaxed, memory_scope_all_svm_devices) != DEVICE_TO_EXECUTE);
+      while (atomic_load_explicit(s_ctx.scheduler_flag, memory_order_relaxed, memory_scope_all_svm_devices) != DEVICE_TO_EXECUTE)
+      ;
 
 	  scheduler_assign_tasks_persistent(s_ctx, persistent_kernel_ctx);
 	  

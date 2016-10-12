@@ -25,26 +25,9 @@ void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
 
   auto condition = RW.getRewrittenText(S->getCond()->getSourceRange());
   RW.ReplaceText(S->getCond()->getSourceRange(), "true");
-  RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(__restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { break; }\n");
-  unsigned counter = 1;
-
-  for (auto s : CS->body()) {
-    CallExpr *CE = dyn_cast<CallExpr>(s);
-    if (!CE) {
-      continue;
-    }
-    if ("resizing_global_barrier" == CE->getCalleeDecl()->getAsFunction()->getNameAsString()) {
-      std::stringstream strstr;
-      strstr << "\ncase " << counter << ":\n";
-      strstr << "__restoration_ctx->target = 0;\n";
-
-      SourceLocation SemiLoc = clang::arcmt::trans::findSemiAfterLocation(CE->getLocEnd(), AU->getASTContext());
-      RW.InsertTextAfterToken(SemiLoc, strstr.str());
-      counter++;
-    }
-  }
-
+  RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(__restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { return; }\n");
   RW.InsertTextBefore(CS->getRBracLoc(), "}");
+
 }
 
 bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
@@ -59,8 +42,19 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     RW.InsertTextBefore(CE->getSourceRange().getBegin(), "k_");
   }
   if (name == "resizing_global_barrier") {
+    ForkPointCounter++;
     assert(CE->getNumArgs() == 1);
-    RW.ReplaceText(CE->getSourceRange(), "global_barrier(__bar, __k_ctx)");
+    std::stringstream sstr;
+    sstr << "{ Restoration_ctx to_fork; to_fork.target = " << ForkPointCounter << "; ";
+    for (auto DS : DeclsToRestore) {
+      for (auto D : DS->decls()) {
+        VarDecl *VD = dyn_cast<VarDecl>(D);
+        sstr << "to_fork." << VD->getNameAsString() << " = " << VD->getNameAsString() << "; ";
+      }
+    }
+    sstr << "global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad, &to_fork); } ";
+    sstr << "case " << ForkPointCounter << ": __restoration_ctx->target = 0";
+    RW.ReplaceText(CE->getSourceRange(), sstr.str());
   }
   return true;
 }
@@ -70,35 +64,27 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
     errs() << "Multiple kernel functions in source file not supported, stopping.\n";
     exit(1);
   }
+
   KI.KernelFunction = D;
 
   if (D->getNumParams() == 0) {
-    KI.OriginalParameterText = "";
+    errs() << "The kernel must have at least one parameter, for technical reasons; please add a dummy parameter if necessary.  Stopping.\n";
+    exit(1);
   }
-  else {
-    KI.OriginalParameterText = RW.getRewrittenText(
-      SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
-        D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
-  }
+  KI.OriginalParameterText = RW.getRewrittenText(
+    SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
+      D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
 
   // Remove the "kernel" attribute
   RW.RemoveText(D->getAttr<OpenCLKernelAttr>()->getRange());
 
-  // Add "restoration_ctx" parameter to kernel
-  {
-    std::string newParam = "";
-    if (D->getNumParams() > 0) {
-      newParam = ", ";
-    }
-    newParam += "Restoration_ctx * __restoration_ctx";
-    RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(),
-      newParam);
-  }
-
   RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global IW_barrier * __bar");
+  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global Kernel_ctx * __k_ctx");
+  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", CL_Scheduler_ctx __s_ctx");
+  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __local int * __scratchpad");
+  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", Restoration_ctx * __restoration_ctx");
 
   // Add "__k_ctx" parameter to kernel
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global Kernel_ctx * __k_ctx");
 
   // Now process the body, if it has the right form
   CompoundStmt *CS = dyn_cast<CompoundStmt>(D->getBody());
@@ -125,6 +111,7 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   WhileStmt *WhileLoop = 0;
 
   for (auto S : CS->body()) {
+
     if (dyn_cast<DeclStmt>(S)) {
       if (WhileLoop) {
         errs() << "Declaration found after while loop, stopping.\n";
@@ -155,9 +142,8 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
     }
   }
 
-  std::string restorationCtx;
-  restorationCtx = "typedef struct {\n";
-  restorationCtx += "  uchar target;\n";
+  this->RestorationCtx = "typedef struct {\n";
+  this->RestorationCtx += "  uchar target;\n";
 
   std::string restorationCode;
   restorationCode += "if(__restoration_ctx->target != 0) {\n";
@@ -165,26 +151,24 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
     for (auto D : DS->decls()) {
       VarDecl *VD = dyn_cast<VarDecl>(D);
       restorationCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
-      restorationCtx += "  " + VD->getType().getAsString() + " " + VD->getNameAsString() + ";\n";
+      this->RestorationCtx += "  " + VD->getType().getAsString() + " " + VD->getNameAsString() + ";\n";
     }
   }
   restorationCode += "}\n";
-  restorationCtx += "} Restoration_ctx;\n\n";
+  this->RestorationCtx += "} Restoration_ctx;\n\n";
 
   RW.InsertTextBefore(WhileLoop->getLocStart(), restorationCode);
-
-  RW.InsertTextBefore(D->getLocStart(), restorationCtx);
 
   ProcessWhileStmt(WhileLoop);
 
 }
 
-void ProcessPersistentKernelVisitor::EmitRewrittenText() {
+void ProcessPersistentKernelVisitor::EmitRewrittenText(std::ostream & out) {
   const RewriteBuffer *RewriteBuf =
     RW.getRewriteBufferFor(AU->getSourceManager().getMainFileID());
   if (!RewriteBuf) {
     errs() << "Nothing was re-written\n";
     exit(1);
   }
-  llvm::outs() << std::string(RewriteBuf->begin(), RewriteBuf->end());
+  out << std::string(RewriteBuf->begin(), RewriteBuf->end());
 }
