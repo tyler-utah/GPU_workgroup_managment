@@ -21,5 +21,6 @@ add_subdirectory(uvm_tests)
 add_subdirectory(single_kernel)
 add_subdirectory(first_persistent)
 add_subdirectory(ckill_only)
+add_subdirectory(test_suite)
 
 
