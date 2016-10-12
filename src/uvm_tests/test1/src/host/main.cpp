@@ -115,7 +115,6 @@ int main(int argc, char *argv[]) {
 	cl_int * data1 = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
 	cl_int * data2 = (cl_int*)clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
 	cl_int * result = (cl_int*)clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
-	clSVMFree(exec.exec_context(), result);
 	*flag = GPU_WAIT;
 	*data1 = 0;
 	*data2 = 0;
