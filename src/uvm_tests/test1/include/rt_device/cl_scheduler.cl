@@ -4,9 +4,13 @@
 #include "kernel_ctx.cl"
 #include "ocl_utility.cl"
 
+int try_lock(atomic_int *m) {
+	return !(atomic_exchange_explicit(m, 1, memory_order_relaxed, memory_scope_device));
+}
+
 void scheduler_lock(atomic_int *m) {
   while (atomic_exchange_explicit(m, 1, memory_order_relaxed, memory_scope_device) != 0);
-  atomic_work_item_fence(FULL_FENCE, memory_order_acquire, memory_scope_work_group);
+  atomic_work_item_fence(FULL_FENCE, memory_order_acquire, memory_scope_device);
 }
 
 void scheduler_unlock(atomic_int *m) {
@@ -22,7 +26,7 @@ int scheduler_needs_workgroups(CL_Scheduler_ctx s_ctx) {
 // Don't move this! It needs the lock functions defined above.
 #include "scheduler_1.cl"
 
-int get_task(CL_Scheduler_ctx s_ctx, int group_id, __local int * scratchpad) {
+int get_task(CL_Scheduler_ctx s_ctx, int group_id, __local int * scratchpad, Restoration_ctx *r_ctx) {
   if (get_local_id(0) == 0) {
     // Could be optimised to place a fence after the spin
 	int tmp;
@@ -34,6 +38,7 @@ int get_task(CL_Scheduler_ctx s_ctx, int group_id, __local int * scratchpad) {
 	}
     atomic_work_item_fence(FULL_FENCE, memory_order_acquire, memory_scope_work_group);
 	*scratchpad = tmp;
+	*r_ctx = s_ctx.r_ctx_arr[group_id];
   }
   BARRIER;
   return *scratchpad;
@@ -141,9 +146,10 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 					   __global atomic_int *task_array,           \
 					   __global int *task_size,                   \
 					   __global atomic_int *available_workgroups, \
-					   __global atomic_int *pool_lock,               \
-					   __global atomic_int *groups_to_kill,              \
-					   __global atomic_int *persistent_flag
+					   __global atomic_int *pool_lock,            \
+					   __global atomic_int *groups_to_kill,       \
+					   __global atomic_int *persistent_flag,      \
+					   __global Restoration_ctx *r_ctx_arr
 					   
 					   
 #define INIT_SCHEDULER \
@@ -155,5 +161,8 @@ CL_Scheduler_ctx s_ctx;                              \
   s_ctx.available_workgroups = available_workgroups; \
   s_ctx.pool_lock = pool_lock;                       \
   s_ctx.groups_to_kill = groups_to_kill;             \
-  s_ctx.persistent_flag = persistent_flag;
+  s_ctx.persistent_flag = persistent_flag;           \
+  s_ctx.r_ctx_arr = r_ctx_arr
+  
+
   

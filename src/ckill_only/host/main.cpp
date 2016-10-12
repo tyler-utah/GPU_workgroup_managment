@@ -9,6 +9,7 @@
 #define CL_INT_TYPE cl_int
 #define ATOMIC_CL_INT_TYPE cl_int
 #define MY_CL_GLOBAL 
+#define CL_UCHAR_TYPE cl_uchar
 
 #include "profile.h"
 #include "base/commandlineflags.h"
@@ -71,6 +72,7 @@ void list_devices() {
 int get_kernels(CL_Execution &exec) {
 	int ret = CL_SUCCESS;
 	exec.exec_kernels["mega_kernel"] = cl::Kernel(exec.exec_program, "mega_kernel", &ret);
+	cl_float4 x;
 	return ret;
 }
 
@@ -106,7 +108,7 @@ int main(int argc, char *argv[]) {
 	exec.exec_queue = queue;
 
 	// Should be built into the cmake file. Haven't thought of how to do this yet.
-	err = exec.compile_kernel(kernel_file, "C:/Users/Tyler/Documents/GitHub/GPU_workgroup_managment/src/uvm_tests/test1/include/rt_device/");
+	err = exec.compile_kernel(kernel_file, "C:/Users/Tyler/Documents/GitHub/GPU_workgroup_managment/src/uvm_tests/test1/include/rt_device/", "C:/Users/Tyler/Documents/GitHub/GPU_workgroup_managment/src/first_resize/common/");
 
 	check_ocl(err);
 

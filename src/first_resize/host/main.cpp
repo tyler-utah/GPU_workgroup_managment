@@ -8,21 +8,20 @@
 // Should be in a directory somewhere probably. Or defined in CMake.
 #define CL_INT_TYPE cl_int
 #define ATOMIC_CL_INT_TYPE cl_int
-#define MY_CL_GLOBAL 
 #define CL_UCHAR_TYPE cl_uchar
+#define MY_CL_GLOBAL
 
-#include "profile.h"
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
 #include "cl_execution.h"
 #include "discovery.h"
 #include "cl_communicator.h"
+#include "../common/restoration_ctx.h"
 #include "cl_scheduler.h"
 #include "kernel_ctx.h"
 #include "iw_barrier.h"
 
-DEFINE_string(input, "", "Input path");
-DEFINE_string(output, "", "Output path");
+
 DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
 DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_bool(list, false, "List OpenCL platforms and devices");
@@ -71,7 +70,7 @@ void list_devices() {
 	}
 }
 
-int get_kernels(CL_Execution &exec) {
+int get_app_kernels(CL_Execution &exec) {
 	int ret = CL_SUCCESS;
 	exec.exec_kernels["mega_kernel"] = cl::Kernel(exec.exec_program, "mega_kernel", &ret);
 	return ret;
@@ -80,11 +79,6 @@ int get_kernels(CL_Execution &exec) {
 int main(int argc, char *argv[]) {
 
 	flags::ParseCommandLineFlags(&argc, &argv, true);
-
-	if (FLAGS_input.empty() || FLAGS_output.empty()) {
-		printf("Input and output files not specified.");
-		exit(0);
-	}
 
 	CL_Execution exec;
 	int err = 0;
@@ -114,11 +108,11 @@ int main(int argc, char *argv[]) {
 	exec.exec_queue = queue;
 
 	// Should be built into the cmake file. Haven't thought of how to do this yet.
-	err = exec.compile_kernel(kernel_file, "C:/Users/Tyler/Documents/GitHub/GPU_workgroup_managment/src/uvm_tests/test1/include/rt_device/");
+	err = exec.compile_kernel(kernel_file, "C:/Users/Tyler/Documents/GitHub/GPU_workgroup_managment/src/uvm_tests/test1/include/rt_device/", "C:/Users/Tyler/Documents/GitHub/GPU_workgroup_managment/src/first_resize/common/");
 
 	check_ocl(err);
 
-	get_kernels(exec);
+	get_app_kernels(exec);
 
 	// set up the discovery protocol
 	Discovery_ctx d_ctx;
@@ -208,16 +202,20 @@ int main(int argc, char *argv[]) {
 	// Get the number of found groups
 	int participating_groups = cl_comm.number_of_discovered_groups();
 
-	cl_comm.send_persistent_task(participating_groups / 4);
+	cl_comm.send_persistent_task(8);
 
-	time_ret first_time = cl_comm.send_task_synchronous(participating_groups / 2, "first");
+	Sleep(10);
+	time_ret first_time = cl_comm.send_task_synchronous(4, "first");
 	int first_found = *graphics_result;
 	*graphics_result = INT_MAX;
-	time_ret second_time = cl_comm.send_task_synchronous(participating_groups / 2, "second");
+	Sleep(10);
+	time_ret second_time = cl_comm.send_task_synchronous(4, "second");
 	int second_found = *graphics_result;
 	*graphics_result = INT_MAX;
-	time_ret third_time = cl_comm.send_task_synchronous(participating_groups, "third");
+	Sleep(10);
+	time_ret third_time = cl_comm.send_task_synchronous(4, "third");
 	int third_found = *graphics_result;
+	
 
 	cl_comm.send_quit_signal();
 	err = exec.exec_queue.finish();
@@ -225,13 +223,17 @@ int main(int argc, char *argv[]) {
 
 	cout << "number of participating groups: " << participating_groups << endl;
 
-	cout << "min expected: " << arr_min << " min found: " << first_found << " " <<  second_found << " " << third_found  << endl;
-	cout << "time for " << participating_groups << " workgroups: " << first_time.second << " " << first_time.first << " ms" << endl;
-	cout << "time for " << participating_groups / 2 << " workgroups: " << second_time.second << " " << second_time.first << " ms" << endl;
-	cout << "time for " << participating_groups / 4 << " workgroups: " << third_time.second << " " << third_time.first << " ms" << endl;
+	cout << "min expected: " << arr_min << " min found: " << first_found << " " << second_found << " " << third_found << endl;
+	cout << "time for " << participating_groups << " workgroups: " << cl_comm.nano_to_milli(first_time.second) << " " << cl_comm.nano_to_milli(first_time.first) << " ms" << endl;
+	cout << "time for " << participating_groups / 2 << " workgroups: " << cl_comm.nano_to_milli(second_time.second) << " " << cl_comm.nano_to_milli(second_time.first) << " ms" << endl;
+	cout << "time for " << participating_groups / 4 << " workgroups: " << cl_comm.nano_to_milli(third_time.second) << " " << cl_comm.nano_to_milli(third_time.first) << " ms" << endl;
 	
-	cout << "hello world" << endl;
+	cout << "time for persistent kernel " << cl_comm.nano_to_milli(cl_comm.get_persistent_time()) << endl;
+
+	
+	cout << "hello world " << *(s_ctx.participating_groups) << endl;
 
 	free_scheduler_ctx(&exec, &s_ctx);
+
 	return 0;
 }

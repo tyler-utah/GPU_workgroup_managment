@@ -1,5 +1,7 @@
 #pragma once
 
+#include "restoration_ctx.h"
+
 // For kernel code, define INT_TYPE as int, for host code cl_int
 #ifndef CL_INT_TYPE
 #error "CL_INT_TYPE not defined"
@@ -46,5 +48,7 @@ typedef struct {
   MY_CL_GLOBAL ATOMIC_CL_INT_TYPE * groups_to_kill;
   
   MY_CL_GLOBAL ATOMIC_CL_INT_TYPE * persistent_flag;
+
+  MY_CL_GLOBAL Restoration_ctx * r_ctx_arr;
   
 } CL_Scheduler_ctx;

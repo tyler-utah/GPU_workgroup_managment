@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 2.8)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../uvm_tests/test1/include/ocl/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../uvm_tests/test1/include/rt/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../base/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/common/)
 
 add_executable(ckill_only
   host/main.cpp

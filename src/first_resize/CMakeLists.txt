@@ -5,10 +5,12 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../uvm_tests/test1/include/rt/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../base/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/common/)
 
-add_executable(single_kernel
+
+add_executable(first_resize
   host/main.cpp
+  common/restoration_ctx.h
 )
-target_link_libraries(single_kernel
+target_link_libraries(first_resize
   base_commandlineflags
   opencl_opencl
   base_profile

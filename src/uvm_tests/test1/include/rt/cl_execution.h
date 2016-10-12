@@ -113,7 +113,7 @@ class CL_Execution {
   
   
   //roughly from IWOCL tutorial (needs attribution)
-  int compile_kernel(const char* kernel_file, const char * kernel_include) {
+  int compile_kernel(const char* kernel_file, const char * kernel_include, char * extra_include = "") {
     int ret = CL_SUCCESS;
     exec_program = cl::Program(exec_context, loadProgram(kernel_file));
     
@@ -126,13 +126,19 @@ class CL_Execution {
     //Include the rt_device sources
     options << "-I" << kernel_include << " ";
 
+	if (strcmp(extra_include, "") != 0) {
+		options << "-I" << extra_include << " ";
+	}
+
 	//Define the int and atomic int type
 	options << "-D" << "CL_INT_TYPE=int" << " ";
+
+	options << "-D" << "CL_UCHAR_TYPE=uchar" << " ";
 
 	options << "-D" << "ATOMIC_CL_INT_TYPE=atomic_int" << " ";
 
 	options << "-D" << "MY_CL_GLOBAL=__global" << " ";
-    
+  
     //Needed so we know to include Nvidia atomics
     options << check_atomics();
     

@@ -116,7 +116,7 @@ __kernel void mega_kernel(
   
   // All other workgroups
   
-
+  Restoration_ctx r_ctx_local;
   while(true) {
 	  
 	// Workgroups are initially available
@@ -126,7 +126,7 @@ __kernel void mega_kernel(
     }
 	
 	// This is synchronous, returns QUIT, MULT, or PERSIST tasks
-    int task = get_task(s_ctx, group_id, &scratchpad);
+    int task = get_task(s_ctx, group_id, &scratchpad, &r_ctx_local);
 	
 	// Quit is easy
     if (task == TASK_QUIT) {

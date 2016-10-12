@@ -9,6 +9,7 @@
 #define CL_INT_TYPE cl_int
 #define ATOMIC_CL_INT_TYPE cl_int
 #define MY_CL_GLOBAL 
+#define CL_UCHAR_TYPE cl_uchar
 
 #include "profile.h"
 #include "base/commandlineflags.h"

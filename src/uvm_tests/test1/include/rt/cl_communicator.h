@@ -5,11 +5,12 @@
 #include <CL/cl2.hpp>
 #include <assert.h>
 #include <thread>
+#include <chrono>
 
-// needed for timers
+// For Yield processor
 #include <Windows.h>
 
-typedef unsigned long long time_stamp;
+typedef uint64_t time_stamp;
 typedef std::pair<time_stamp, time_stamp> time_ret;
 
 class CL_Communicator {
@@ -41,6 +42,8 @@ class CL_Communicator {
 			global_size,
 			local_size);
 
+			check_ocl(err);
+
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING);
 			std::atomic_thread_fence(std::memory_order_acquire);
 			participating_groups = *(scheduler.participating_groups);
@@ -56,11 +59,11 @@ class CL_Communicator {
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_QUIT, std::memory_order_release);
 		}
 
-		unsigned long long gettime_Windows() {
-			SYSTEMTIME time;
-			GetSystemTime(&time);
-			unsigned long long ret = (time.wDay * 60 * 60 * 1000 * 24) + (time.wHour * 60 * 60 * 1000) + (time.wMinute * 60 * 1000) + (time.wSecond * 1000) + time.wMilliseconds;
-			return ret;
+		uint64_t gettime_Windows() {
+			//return 0;
+			return std::chrono::duration_cast<std::chrono::nanoseconds>(
+				std::chrono::high_resolution_clock::now().time_since_epoch())
+				.count();
 		}
 
 		// Should possibly check groups here again to make sure we don't ask for too many (compare to participating groups)
@@ -74,29 +77,25 @@ class CL_Communicator {
 			std::string buf(label);
 			buf.append("_response");
 
-			{
-				profile::Region region("hi", profile::VERBOSITY_MEDIUM);
-				response_begin = gettime_Windows();
-				while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_GOT_GROUPS) {
-					YieldProcessor();
-				}
-				std::atomic_thread_fence(std::memory_order_acquire);
-				response_end = gettime_Windows();
+			response_begin = gettime_Windows();
+			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_GOT_GROUPS) {
+				YieldProcessor();
 			}
+			std::atomic_thread_fence(std::memory_order_acquire);
+			response_end = gettime_Windows();
+
 			std::string buf2(label);
 			buf.append("_execution");
 
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
 			
-			{
-				profile::Region region("hi", profile::VERBOSITY_MEDIUM);
-				execution_begin = gettime_Windows(); //start application timer here
-				while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
-					YieldProcessor();
-				}
-				std::atomic_thread_fence(std::memory_order_acquire);
-				execution_end = gettime_Windows(); //end application timer after waiting here.
+			execution_begin = gettime_Windows(); //start application timer here
+			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
+				YieldProcessor();
 			}
+			std::atomic_thread_fence(std::memory_order_acquire);
+			execution_end = gettime_Windows(); //end application timer after waiting here.
+
 			time_ret ret = std::make_pair(execution_end - execution_begin, response_end - response_begin);
 			return ret;
 		}
@@ -138,5 +137,9 @@ class CL_Communicator {
 		time_stamp get_persistent_time() {
 			assert(executing_persistent == false);
 			return persistent_end - persistent_begin;
+		}
+
+		double nano_to_milli(time_stamp t) {
+			return double(t) / 1000000.0;
 		}
 };
