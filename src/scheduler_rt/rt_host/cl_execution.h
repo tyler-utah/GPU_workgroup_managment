@@ -113,12 +113,14 @@ class CL_Execution {
   
   
   //roughly from IWOCL tutorial (needs attribution)
-  int compile_kernel(const char* kernel_file, const char * kernel_include, char * extra_include = "") {
+  int compile_kernel(const char* kernel_file, const char * kernel_include, const char * extra_include = "") {
     int ret = CL_SUCCESS;
     exec_program = cl::Program(exec_context, loadProgram(kernel_file));
     
     std::stringstream options;
     options.setf(std::ios::fixed, std::ios::floatfield);
+
+	
     
     //set compiler options here, example below 
     //options << " -cl-fast-relaxed-math";
@@ -129,6 +131,8 @@ class CL_Execution {
 	if (strcmp(extra_include, "") != 0) {
 		options << "-I" << extra_include << " ";
 	}
+
+	std::cout << options.str() << std::endl;
 
 	//Define the int and atomic int type
 	options << "-D" << "CL_INT_TYPE=int" << " ";
