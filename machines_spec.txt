@@ -1,0 +1,45 @@
+===============================================================================
+Check date: 13.10.2016
+
+Not all machine drivers may be up to date ?
+
+-------------------------------------------------------------------------------
+Machine: carrot
+OS: Windows 8.1 Pro
+
+num_platforms: 1
+
+platform: AMD Accelerated Parallel Processing
+version: OpenCL 2.0 AMD-APP (2117.13)
+num_devices: 2
+
+device: Spectre
+svm fine grain buffer: 1
+svm atomics: 0
+INVALID device: does not provide SVM atomics capability
+
+device: Tonga
+svm fine grain buffer: 1
+svm atomics: 0
+INVALID device: does not provide SVM atomics capability
+
+FAILURE: No device found to meet the requirements
+
+-------------------------------------------------------------------------------
+Machine: turmeric
+OS: Windows 10 Pro
+
+num_platforms: 1
+
+platform: AMD Accelerated Parallel Processing
+version: OpenCL 2.0 AMD-APP (1912.5)
+num_devices: 1
+
+device: Fiji
+svm fine grain buffer: 1
+svm atomics: 0
+INVALID device: does not provide SVM atomics capability
+
+FAILURE: No device found to meet the requirements
+
+-------------------------------------------------------------------------------
