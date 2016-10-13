@@ -156,6 +156,38 @@
     
 \section{Introduction}\label{sec:intro}
 
+\ADComment{Points to make: It is important to be able to execute
+  long-running, cooperative applications on GPUs (give examples).
+  However, resource sharing and resource flexibility is also important
+  (give examples, including sharing resources with graphics, sharing
+  resources between compute taks, and being flexible about resources
+  under energy constraints), and these are not supported by today's
+  GPU platforms: long-running applications cause display freezes, etc.
+  Resource-based preemption, whereby workgroup execution is postponed
+  to free up resources for other purposes (or to reduce resources to
+  save energy) can potentially enable resource sharing.  There is
+  evidence in the research literature that efficient resource sharing
+  for GPUs is possible (cite academic works), and signs from industry
+  that this is coming in future architectures.  [Explain more clearly
+    what we mean by resource-based preemption.]  Unfortunately,
+  arbitrary resource-based preemption is fundamentally incompatible
+  with cooperative applications---only trivial examples of cooperation
+  are safe [reduction, load balancing via atomic increment]; the HSA
+  model of guaranteeing preemption in reverse order of IDs allows some
+  cooperative applications to be implemented.  Still, in the general
+  case even a mutex cannot be used safely.}
+
+\ADComment{Say that we believe the problem can only be solved through
+  programming language innovations with appropriate runtime support.
+  We have observed inter-workgroup barriers and work stealing to be
+  the main use cases for cooperation, and so in this paper propose two
+  new language primitives, ckill and cfork, designed to meet the needs
+  of these primitives.  [Describe them a bit.]}
+
+\ADComment{Move on to our main contributions}
+
+\ADComment{This is what we had before.}
+
 Graphics processing units (GPUs) are highly parallel co-processors that are now incorporated into many
 devices, ranging from the world's most powerful supercomputers to battery-powered devices such as tablets and mobile phones. While
 originally designed to accelerate graphics applications, GPUs are now
@@ -314,5 +346,116 @@ implementation in software using the strong inter-workgroup FPP
 available on current GPUs. This allows us to test the feasibility of
 our approach and as well get upper bounds for the performance cost and
 the responsiveness of multi-tasking.
+
+\section{Motivating example: work stealing}
+
+\ADComment{Use the work stealing example to both introduce OpenCL and
+  also make our key point: that arbitrary preemption will not work.}
+
+
+\section{The ckill and cfork primitives}
+
+\ADComment{Remind the reader that these are inspired by work stealing
+  and barrier synchonization.  In \mysec\ref{ } we describe the
+  semantics of kernels that use these primitives.  In \mysec\ref{ } we
+  show how work stealing can be implemented.  In \mysec\ref{ } we show
+  how a barrier can be implemented.}
+
+\subsection{Semantics of the new primitives}
+
+\ADComment{General semantics: let $N$ be the maximum number of
+  workgroups the GPU of interest can support [gloss over or deal with
+    issue that this is kernel-dependent].  A kernel is launched with
+  $M$ workgroups, for some $0 < M \leq N$.  Initially these are all
+  scheduled, and are guaranteed to make independent forward progress.}
+
+\ADComment{The purpose of ckill is for a workgroup to volunteer to
+  quit execution of the kernel if the resources that it is using
+  (e.g.\ the associated compute unit) are required for other tasks.  A
+  ckill statement must be reached under workgroup-uniform control
+  flow.  When a workgroup reaches ckill, the workgroup either
+  terminates execution (because the environment requires the
+  workgroup's resources), or continues execution as if the ckill
+  statement were a no=op).  From a semantics perspective this is a
+  non-deterministic choice: an application that invokes ckill should
+  be prepared for either outcome.  In practice, the effect of ckill
+  depends on environmental conditions.}
+
+\ADComment{The purpose of cfork is for a workgroup to indicate that it
+  would be useful to have additional workgroups join the computation,
+  and to specify that the program point associated with the cfork
+  statement would be a suitable place for a new workgroup to start
+  executing.  A cfork statement must also be reached under
+  workgroup-uniform control flow.  If $C$ workgroups are executing
+  when a workgroup reaches a cfork statement, with $0 < C \leq M$,
+  then between 0 and $M-C$ new workgroups commence execution from the
+  following statement.  From a semantics perspective, the number of
+  workgroups that join the computation is nondeterministic, within the
+  permitted range.  In practice, how many workgroups join depends on
+  environmental conditions.}
+
+\ADComment{TODO: describe persistent variables.}
+
+\ADComment{TODO: explain that ckill and cfork atomically update the
+  kernel context (ids).}
+
+\ADComment{TODO: somewhere we need to explain the constraints this
+  places on programming: how ids work, what one can assume about them,
+  etc.}
+
+\ADComment{Now describe the more refined semantics where IDs are
+  relinquished in decreasing order; explain that from a formal
+  perspective thie refines the original semantics.}
+
+\ADComment{In the above, explain at some point how a scheduler can
+  exploit cfork and ckill to utilise the GPU resources.}
+
+\subsection{Preemption-aware work stealing}
+
+\ADComment{Show how work stealing can now be made safe.}
+
+\subsection{A preemption-aware global barrier}
+
+\ADComment{Show how the global barrier can be written in a manner that
+  maintains contiguous ids using the refined semantics.}
+
+
+\section{Application-specific optimisations}
+
+\ADComment{Explain that for global barriers, we explain how some new
+  primitives can lead to a better implementation.  Explain that for
+  work stealing there are various ways the existing ckill and cfork
+  primitives can be used.}
+
+\subsection{An optimised barrier implementation}
+
+\ADComment{Remark that the barrier of \mysec\ref{sec:naivebarrier} may
+  be inefficient, discuss the use of query primitives to make this
+  more efficient.}
+
+\subsection{Variations on work stealing}
+
+\ADComment{Three cases here: always ckill/cfork, ckill/cfork only when
+  queue is empty, and have a ``mediator'' workgroup to manage things.}
+
+
+\section{A mega kernel-based prototype}
+
+\ADComment{Explain carefully that doing this properly would require
+  driver support, etc., and then explain what we've actually done.}
+
+
+\section{Experimental evaluation}
+
+\ADComment{TODO: write up notes from whiteboard chat.}
+
+
+\section{Related work}
+
+\section{Conclusions and future work}
+
+\ADComment{Next-generation GPUs and drivers for evaluation,
+  implementation in a real driver, migration of work between multiple
+  GPUs.}
 
 \end{document}
