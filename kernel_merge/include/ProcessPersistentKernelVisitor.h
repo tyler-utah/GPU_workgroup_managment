@@ -17,6 +17,8 @@ public:
     this->AU = AU;
     this->RW = Rewriter(AU->getSourceManager(),
       AU->getLangOpts());
+    this->RestorationCtx = "";
+    this->ForkPointCounter = 0;
     TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
   }
 
@@ -24,10 +26,14 @@ public:
 
   bool VisitCallExpr(CallExpr *CE);
 
-  void EmitRewrittenText();
+  void EmitRewrittenText(std::ostream & out);
 
   KernelInfo GetKI() {
     return this->KI;
+  }
+
+  std::string GetRestorationCtx() {
+    return RestorationCtx;
   }
 
 private:
@@ -40,6 +46,9 @@ private:
   KernelInfo KI;
 
   std::vector<DeclStmt*> DeclsToRestore;
+  std::string RestorationCtx;
+
+  unsigned ForkPointCounter;
 
 };
 
