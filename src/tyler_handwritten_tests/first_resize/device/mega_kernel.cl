@@ -111,7 +111,7 @@ __kernel void mega_kernel(
 						  __global Discovery_ctx *d_ctx,
 						  
 						  // Kernel context for graphics kernel
-                          __global Kernel_ctx *graphics_kernel_ctx,
+                          __global Kernel_ctx *non_persistent_kernel_ctx,
 						  
 						  // Kernel context for persistent kernel
 						  __global Kernel_ctx *persistent_kernel_ctx,
@@ -120,8 +120,8 @@ __kernel void mega_kernel(
                           SCHEDULER_ARGS
 						  ){
 
-// These need to be made by the kernel merge tool. Its the original graphics kernel with the graphics_kernel_ctx as a final arg.						  
-#define GRAPHICS_KERNEL MY_reduce(graphics_length, graphics_buffer, graphics_result, graphics_kernel_ctx)
+// These need to be made by the kernel merge tool. Its the original graphics kernel with the non_persistent_kernel_ctx as a final arg.						  
+#define NON_PERSISTENT_KERNEL MY_reduce(graphics_length, graphics_buffer, graphics_result, non_persistent_kernel_ctx)
 
 // This is the original persistent kernel with the bar, persistent_kernel_ctx, s_ctx, scratchpad, and (by pointer) local restoration context.
 #define PERSISTENT_KERNEL simple_barrier(bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local);
