@@ -4,6 +4,16 @@ Check date: 13.10.2016
 Not all machine drivers may be up to date ?
 
 -------------------------------------------------------------------------------
+machine: hemlock
+
+KO since NVIDIA does not support OpenCL 2.0
+
+-------------------------------------------------------------------------------
+machine: fennel
+
+KO since NVIDIA does not support OpenCL 2.0
+
+-------------------------------------------------------------------------------
 Machine: carrot
 OS: Windows 8.1 Pro
 
