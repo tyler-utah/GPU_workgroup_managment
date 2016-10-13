@@ -79,8 +79,12 @@ void check_platform(cl::Platform platform, bool *valid_device) {
   // check devices
   std::vector<cl::Device> devices;
   err = platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
-  check_err(err, "cl::Platform.getDevices()");
-  num_devices = devices.size();
+  if (err == CL_DEVICE_NOT_FOUND) {
+    num_devices = 0;
+  } else {
+    check_err(err, "cl::Platform.getDevices()");
+    num_devices = devices.size();
+  }
   std::cout << "num_devices: " << num_devices << "\n";
 
   for (i = 0; i < num_devices; i++) {
