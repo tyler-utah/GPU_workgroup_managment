@@ -221,12 +221,8 @@ __kernel void makeOctree(
   __global unsigned int* treeSize,
   __global unsigned int* particlesDone,
   unsigned int maxchilds,
-  int isStatic,
   __global unsigned int *stealAttempts)
 {
-  /* Hugues todo: in OpenCL, isStatic is always false since we only
-   * implement dynamic version (i.e., work-stealing) */
-
   /* Hugues: in Cuda version, frompart and topart are __local (i.e.,
    * __shared__), but here the OpenCL compiler complains if I declare
    * them as __local since we assign particles and newparticles to it */
@@ -247,13 +243,12 @@ __kernel void makeOctree(
     localStealAttempts = 0;
   }
 
+  /* main loop */
   while (true) {
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // Try to acquire new task
     if (DLBABP_dequeue(dlbabp, &t, randdata, &localStealAttempts) == 0) {
-      if (isStatic)
-        return;
       check = *particlesDone;
       barrier(CLK_LOCAL_MEM_FENCE);
       if (check == particleCount) {
