@@ -150,7 +150,7 @@ int DLBABP_pop(__global DLBABP *dlbabp, __local Task *val) {
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts)
+int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools)
 {
   if (DLBABP_pop(dlbabp, val) == 1) {
     return 1;
@@ -158,7 +158,7 @@ int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *ra
 
   *localStealAttempts += 1;
 
-  if (DLBABP_steal(dlbabp, val, myrand(randdata)%get_num_groups(0)) == 1) {
+  if (DLBABP_steal(dlbabp, val, myrand(randdata) % num_pools) == 1) {
     return 1;
   } else {
     return 0;
@@ -167,12 +167,12 @@ int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *ra
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts) {
+int DLBABP_dequeue(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools) {
   __local volatile int rval;
   int dval = 0;
 
   if(get_local_id(0) == 0) {
-    rval = DLBABP_dequeue2(dlbabp, val, randdata, localStealAttempts);
+    rval = DLBABP_dequeue2(dlbabp, val, randdata, localStealAttempts, num_pools);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
   dval = rval;
@@ -221,7 +221,8 @@ __kernel void makeOctree(
   __global unsigned int* treeSize,
   __global unsigned int* particlesDone,
   unsigned int maxchilds,
-  __global unsigned int *stealAttempts)
+  __global unsigned int *stealAttempts,
+  const int num_pools)
 {
   /* Hugues: in Cuda version, frompart and topart are __local (i.e.,
    * __shared__), but here the OpenCL compiler complains if I declare
@@ -248,7 +249,7 @@ __kernel void makeOctree(
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // Try to acquire new task
-    if (DLBABP_dequeue(dlbabp, &t, randdata, &localStealAttempts) == 0) {
+    if (DLBABP_dequeue(dlbabp, &t, randdata, &localStealAttempts, num_pools) == 0) {
       check = *particlesDone;
       barrier(CLK_LOCAL_MEM_FENCE);
       if (check == particleCount) {

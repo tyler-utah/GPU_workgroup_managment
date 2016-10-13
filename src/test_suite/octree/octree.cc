@@ -155,6 +155,7 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   kernel.setArg(8, particlesDone);
   kernel.setArg(9, maxChildren);
   kernel.setArg(10, stealAttempts);
+  kernel.setArg(11, blocks);
 
   cl::NDRange local_size(threads);
   cl::NDRange global_size(blocks * threads);
