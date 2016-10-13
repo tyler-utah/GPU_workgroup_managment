@@ -26,7 +26,7 @@
 DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
 DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_bool(list, false, "List OpenCL platforms and devices");
-DEFINE_string(scheduler_rt_path, "uvm_tests/test1/include/rt_device", "Path to scheduler runtime includes");
+DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Path to scheduler runtime includes");
 DEFINE_string(restoration_ctx_path, "tyler_handwritten_tests/first_resize/common/", "Path to restoration context");
 
 using namespace std;
@@ -205,18 +205,18 @@ int main(int argc, char *argv[]) {
 	// Get the number of found groups
 	int participating_groups = cl_comm.number_of_discovered_groups();
 
-	cl_comm.send_persistent_task(8);
+	cl_comm.send_persistent_task(participating_groups);
 
 	Sleep(10);
-	time_ret first_time = cl_comm.send_task_synchronous(4, "first");
+	time_ret first_time = cl_comm.send_task_synchronous(participating_groups/2, "first");
 	int first_found = *graphics_result;
 	*graphics_result = INT_MAX;
 	Sleep(10);
-	time_ret second_time = cl_comm.send_task_synchronous(4, "second");
+	time_ret second_time = cl_comm.send_task_synchronous(participating_groups / 2, "second");
 	int second_found = *graphics_result;
 	*graphics_result = INT_MAX;
 	Sleep(10);
-	time_ret third_time = cl_comm.send_task_synchronous(4, "third");
+	time_ret third_time = cl_comm.send_task_synchronous(participating_groups / 2, "third");
 	int third_found = *graphics_result;
 	
 
