@@ -73,3 +73,27 @@ INVALID platform: does not provide OpenCL 2.x
 SUCCESS: At least one device meet the requirements
 
 --------------------------------------------------------------------------------
+Machine: Purple laptop
+OS: Windows 10 Home
+
+num_platforms: 3
+
+platform: Intel(R) OpenCL
+version: OpenCL 2.0
+num_devices: 1
+
+device: Intel(R) Iris(TM) Graphics 6100
+svm fine grain buffer: 1
+svm atomics: 1
+
+platform: Experimental OpenCL 2.1 CPU Only Platform
+version: OpenCL 2.1
+num_devices: 0
+
+platform: Oclgrind
+version: OpenCL 1.2 (Oclgrind 15.5)
+INVALID platform: does not provide OpenCL 2.x
+
+SUCCESS: At least one device meet the requirements
+
+--------------------------------------------------------------------------------
