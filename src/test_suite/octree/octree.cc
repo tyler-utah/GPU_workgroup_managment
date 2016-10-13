@@ -117,7 +117,7 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   kernelOss << kernelFile.rdbuf();
 
   cl::Program program(context, kernelOss.str());
-  err = program.build(devices);
+  err = program.build(devices, "-cl-std=CL2.0");
   if (err != CL_SUCCESS) {
     std::string buildlog;
     buildlog = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0], &err);
