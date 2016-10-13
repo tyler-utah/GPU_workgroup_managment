@@ -7,7 +7,7 @@
 #include <streambuf>
 
 #include "opencl/opencl.h"
-#include "test_suite/octree/octree_host_dev_shared.h"
+#include "test_suite/octree/shared_host_side.h"
 #include "test_suite/octree/lbabp.h"
 #include "test_suite/octree/octree.h"
 #include "test_suite/octree/helper.h"
@@ -109,6 +109,10 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   // /vol/cuda/7.5.18/lib64/libOpenCL.so beforehand
 
   std::ifstream kernelFile("octree_kernel.cl");
+  if (!kernelFile.good()) {
+    std::cout << "Error: Cannot open kernel file octree_kernel.cl" << std::endl;
+    exit(EXIT_FAILURE);
+  }
   std::ostringstream kernelOss;
   kernelOss << kernelFile.rdbuf();
 

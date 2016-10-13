@@ -1,4 +1,35 @@
-#include "octree_host_dev_shared.h"
+/* Device types must be kept in sync with host counterparts */
+
+/*---------------------------------------------------------------------------*/
+/* Task */
+
+typedef struct {
+  float4 middle;
+  bool flip;
+  unsigned int end;
+  unsigned int beg;
+  unsigned int treepos;
+} Task;
+
+/*---------------------------------------------------------------------------*/
+/* class DLBABP */
+
+typedef struct {
+  volatile int tail;
+  volatile int head;
+} DequeHeader;
+
+/*---------------------------------------------------------------------------*/
+/* DLBABP */
+
+typedef struct {
+  /* Hugues: pointers to other buffers declared at the host side,
+   * therefore __global. Moreover, for the 'dh' variable, __global is
+   * required for atomic_cmpxchg() later on */
+  __global Task *deq;
+  __global DequeHeader* dh;
+  unsigned int maxlength;
+} DLBABP;
 
 /*===========================================================================*/
 /* rand */
