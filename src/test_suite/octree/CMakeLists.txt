@@ -7,7 +7,7 @@ lbabp.h
 main.cc
 octree.cc
 octree.h
-octree_host_dev_shared.h
+shared_host_side.h
 rand.cc
 )
 
