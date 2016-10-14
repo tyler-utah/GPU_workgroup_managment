@@ -11,6 +11,8 @@ shared_host_side.h
 rand.cc
 )
 
+file(COPY device/octree_kernel.cl DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
 target_link_libraries(test_suite_octree_octree
   opencl_opencl
 )

@@ -15,8 +15,8 @@ typedef struct {
 /* class DLBABP */
 
 typedef struct {
-  volatile int tail;
-  volatile int head;
+  atomic_int tail;
+  atomic_int head;
 } DequeHeader;
 
 /*---------------------------------------------------------------------------*/
@@ -45,11 +45,13 @@ int myrand(__global int *randdata) {
 
 void DLBABP_push(__global DLBABP *dlbabp, __local Task *val, __global volatile int *maxl) {
   int id = get_group_id(0);
-  dlbabp->deq[id * dlbabp->maxlength + dlbabp->dh[id].tail] = *val;
-  dlbabp->dh[id].tail++;
+  int private_tail = atomic_load_explicit(&(dlbabp->dh[id].tail), memory_order_acquire, memory_scope_device);
+  dlbabp->deq[id * dlbabp->maxlength + private_tail] = *val;
+  private_tail++;
+  atomic_store_explicit(&(dlbabp->dh[id].tail), private_tail, memory_order_release, memory_scope_device);
 
-  if (*maxl < dlbabp->dh[id].tail) {
-    atomic_max(maxl, dlbabp->dh[id].tail);
+  if (*maxl < private_tail) {
+    atomic_max(maxl, private_tail);
   }
 }
 
@@ -89,19 +91,21 @@ int incIndex(int head) {
 /*---------------------------------------------------------------------------*/
 
 int DLBABP_steal(__global DLBABP *dlbabp, __local Task *val, unsigned int idx) {
-  int localTail;
+  int remoteTail;
   int oldHead;
   int newHead;
 
-  oldHead = dlbabp->dh[idx].head;
-  localTail = dlbabp->dh[idx].tail;
-  if(localTail <= getIndex(oldHead)) {
+  oldHead = atomic_load_explicit(&(dlbabp->dh[idx].head), memory_order_acquire, memory_scope_device);
+  /* We need to access dlbabp->dh[idx].tail but we do not modify it,
+     therefore a single load-acquire is enough */
+  remoteTail = atomic_load_explicit(&(dlbabp->dh[idx].tail), memory_order_acquire, memory_scope_device);
+  if(remoteTail <= getIndex(oldHead)) {
     return -1;
   }
 
   *val = dlbabp->deq[idx * dlbabp->maxlength + getIndex(oldHead)];
   newHead = incIndex(oldHead);
-  if (atomic_cmpxchg(&(dlbabp->dh[idx].head), oldHead, newHead) == oldHead) {
+  if (atomic_compare_exchange_weak_explicit(&(dlbabp->dh[idx].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
     return 1;
   }
 
@@ -116,37 +120,37 @@ int DLBABP_pop(__global DLBABP *dlbabp, __local Task *val) {
   int newHead;
   int id = get_group_id(0);
 
-  localTail = dlbabp->dh[id].tail;
+  localTail = atomic_load_explicit(&(dlbabp->dh[id].tail), memory_order_acquire, memory_scope_device);
   if(localTail == 0) {
     return -1;
   }
 
   localTail--;
 
-  dlbabp->dh[id].tail = localTail;
+  atomic_store_explicit(&(dlbabp->dh[id].tail), localTail, memory_order_release, memory_scope_device);
 
   *val = dlbabp->deq[id * dlbabp->maxlength + localTail];
 
-  oldHead = dlbabp->dh[id].head;
+  oldHead = atomic_load_explicit(&(dlbabp->dh[id].head), memory_order_acquire, memory_scope_device);
 
   if (localTail > getIndex(oldHead)) {
     return 1;
   }
 
-  dlbabp->dh[id].tail = 0;
+  atomic_store_explicit(&(dlbabp->dh[id].tail), 0, memory_order_release, memory_scope_device);
   newHead = getZeroIndexIncCtr(oldHead);
   if(localTail == getIndex(oldHead)) {
-    if(atomic_cmpxchg(&(dlbabp->dh[id].head), oldHead, newHead) == oldHead) {
+    if(atomic_compare_exchange_weak_explicit(&(dlbabp->dh[id].head), &oldHead, newHead, memory_order_acq_rel, memory_order_release, memory_scope_device)) {
       return 1;
     }
   }
-  dlbabp->dh[id].head = newHead;
+  atomic_store_explicit(&(dlbabp->dh[id].head), newHead, memory_order_release, memory_scope_device);
   return -1;
 }
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts)
+int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools)
 {
   if (DLBABP_pop(dlbabp, val) == 1) {
     return 1;
@@ -154,7 +158,7 @@ int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *ra
 
   *localStealAttempts += 1;
 
-  if (DLBABP_steal(dlbabp, val, myrand(randdata)%get_num_groups(0)) == 1) {
+  if (DLBABP_steal(dlbabp, val, myrand(randdata) % num_pools) == 1) {
     return 1;
   } else {
     return 0;
@@ -163,12 +167,12 @@ int DLBABP_dequeue2(__global DLBABP *dlbabp, __local Task *val, __global int *ra
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts) {
+int DLBABP_dequeue(__global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools) {
   __local volatile int rval;
   int dval = 0;
 
   if(get_local_id(0) == 0) {
-    rval = DLBABP_dequeue2(dlbabp, val, randdata, localStealAttempts);
+    rval = DLBABP_dequeue2(dlbabp, val, randdata, localStealAttempts, num_pools);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
   dval = rval;
@@ -217,12 +221,9 @@ __kernel void makeOctree(
   __global unsigned int* treeSize,
   __global unsigned int* particlesDone,
   unsigned int maxchilds,
-  int isStatic,
-  __global unsigned int *stealAttempts)
+  __global unsigned int *stealAttempts,
+  const int num_pools)
 {
-  /* Hugues todo: in OpenCL, isStatic is always false since we only
-   * implement dynamic version (i.e., work-stealing) */
-
   /* Hugues: in Cuda version, frompart and topart are __local (i.e.,
    * __shared__), but here the OpenCL compiler complains if I declare
    * them as __local since we assign particles and newparticles to it */
@@ -243,13 +244,12 @@ __kernel void makeOctree(
     localStealAttempts = 0;
   }
 
+  /* main loop */
   while (true) {
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // Try to acquire new task
-    if (DLBABP_dequeue(dlbabp, &t, randdata, &localStealAttempts) == 0) {
-      if (isStatic)
-        return;
+    if (DLBABP_dequeue(dlbabp, &t, randdata, &localStealAttempts, num_pools) == 0) {
       check = *particlesDone;
       barrier(CLK_LOCAL_MEM_FENCE);
       if (check == particleCount) {

@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 #include "opencl/opencl.h"
-#include "test_suite/octree/octree_host_dev_shared.h"
+#include "test_suite/octree/shared_host_side.h"
 #include "test_suite/octree/lbabp.h"
 #include "test_suite/octree/octree.h"
 
