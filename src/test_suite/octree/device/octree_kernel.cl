@@ -41,7 +41,7 @@ int myrand(__global int *randdata) {
 }
 
 /*===========================================================================*/
-/* lbabp */
+/* lbabp: load balance ABP style, aka work-stealing */
 
 void DLBABP_push(__global DLBABP *dlbabp, __local Task *val, __global volatile int *maxl) {
   int id = get_group_id(0);
