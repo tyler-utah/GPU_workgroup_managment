@@ -155,79 +155,6 @@ int scheduler_needs_workgroups(CL_Scheduler_ctx s_ctx) {
   return 0;
 }
 
-int cfork(__global Kernel_ctx *k_ctx, CL_Scheduler_ctx s_ctx,
-          __local int *scratchpad, Restoration_ctx *r_ctx, int *former_groups) {
-
-  if (get_local_id(0) == 0) {
-    int h = *scratchpad;
-    scratchpad[0] = 0;
-    scratchpad[1] = k_get_num_groups(k_ctx);
-
-    if (atomic_load_explicit(s_ctx.available_workgroups, memory_order_relaxed,
-                             memory_scope_device) > 0) {
-      if (try_lock(s_ctx.pool_lock)) {
-
-        int groups = k_get_num_groups(k_ctx);
-        int snapshot =
-            atomic_load_explicit(s_ctx.available_workgroups,
-                                 memory_order_relaxed, memory_scope_device);
-
-        for (int i = groups; i < groups + snapshot; i++) {
-
-          k_ctx->group_ids[i + 1] = i;
-          while (atomic_load_explicit(&(s_ctx.task_array[i + 1]),
-                                      memory_order_relaxed,
-                                      memory_scope_device) != -1)
-            ;
-          s_ctx.r_ctx_arr[i + 1] = *r_ctx;
-
-          atomic_store_explicit(&(s_ctx.task_array[i + 1]), 2,
-                                memory_order_release, memory_scope_device);
-        }
-
-        atomic_fetch_add(&(k_ctx->num_groups), snapshot);
-        atomic_fetch_add(&(k_ctx->executing_groups), snapshot);
-
-        atomic_fetch_sub(s_ctx.available_workgroups, snapshot);
-
-        scheduler_unlock(s_ctx.pool_lock);
-        scratchpad[0] = snapshot + groups;
-        scratchpad[1] = groups;
-      }
-    }
-  }
-
-  barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-  *former_groups = scratchpad[1];
-  return scratchpad[0];
-}
-
-int __ckill(__global Kernel_ctx *k_ctx, CL_Scheduler_ctx s_ctx,
-            __local int *scratchpad, const int group_id) {
-
-  if (get_local_id(0) == 0) {
-    *scratchpad = 0;
-
-    if (group_id == k_get_num_groups(k_ctx) - 1) {
-      atomic_work_item_fence((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE),
-                             memory_order_acquire, memory_scope_device);
-      int to_kill = atomic_load_explicit(
-          s_ctx.groups_to_kill, memory_order_relaxed, memory_scope_device);
-
-      if (to_kill > 0) {
-        atomic_store_explicit(s_ctx.groups_to_kill, to_kill - 1,
-                              memory_order_relaxed, memory_scope_device);
-
-        atomic_fetch_sub(&(k_ctx->num_groups), 1);
-        *scratchpad = -1;
-      }
-    }
-  }
-
-  barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-  return *scratchpad;
-}
-
 void scheduler_assign_tasks_graphics(CL_Scheduler_ctx s_ctx,
                                      __global Kernel_ctx *graphics_kernel_ctx) {
 
@@ -429,177 +356,6 @@ typedef struct {
 
 } IW_barrier;
 
-int global_barrier(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx,
-                   CL_Scheduler_ctx s_ctx, __local int *scratchpad) {
-
-  int id = k_get_group_id(kernel_ctx);
-
-  if (id == 0) {
-    for (int peer_block = get_local_id(0) + 1;
-         peer_block < k_get_num_groups(kernel_ctx);
-         peer_block += get_local_size(0)) {
-
-      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]),
-                                  memory_order_relaxed,
-                                  memory_scope_device) == 0)
-        ;
-
-      atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire,
-                             memory_scope_device);
-    }
-
-    barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-
-    for (int peer_block = get_local_id(0) + 1;
-         peer_block < k_get_num_groups(kernel_ctx);
-         peer_block += get_local_size(0)) {
-
-      atomic_store_explicit(&(bar->barrier_flags[peer_block]), 0,
-                            memory_order_release, memory_scope_device);
-    }
-  }
-
-  else {
-    barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-
-    if (get_local_id(0) == 0) {
-
-      atomic_store_explicit(&(bar->barrier_flags[id]), 1, memory_order_release,
-                            memory_scope_device);
-
-      while (atomic_load_explicit(&(bar->barrier_flags[id]),
-                                  memory_order_relaxed,
-                                  memory_scope_device) == 1)
-        ;
-
-      atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire,
-                             memory_scope_device);
-    }
-
-    barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-  }
-  return 0;
-}
-
-int global_barrier_ckill(__global IW_barrier *bar,
-                         __global Kernel_ctx *kernel_ctx,
-                         CL_Scheduler_ctx s_ctx, __local int *scratchpad) {
-
-  int id = k_get_group_id(kernel_ctx);
-
-  if (id == 0) {
-    for (int peer_block = get_local_id(0) + 1;
-         peer_block < k_get_num_groups(kernel_ctx);
-         peer_block += get_local_size(0)) {
-
-      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]),
-                                  memory_order_relaxed,
-                                  memory_scope_device) == 0 &&
-             peer_block < k_get_num_groups(kernel_ctx))
-        ;
-
-      atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire,
-                             memory_scope_device);
-    }
-
-    barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-    int former_groups = k_get_num_groups(kernel_ctx);
-
-    for (int peer_block = get_local_id(0) + 1; peer_block < former_groups;
-         peer_block += get_local_size(0)) {
-
-      atomic_store_explicit(&(bar->barrier_flags[peer_block]), 0,
-                            memory_order_release, memory_scope_device);
-    }
-  }
-
-  else {
-
-    if (__ckill(kernel_ctx, s_ctx, scratchpad, id) == -1) {
-      return -1;
-    };
-
-    if (get_local_id(0) == 0) {
-
-      atomic_store_explicit(&(bar->barrier_flags[id]), 1, memory_order_release,
-                            memory_scope_device);
-
-      while (atomic_load_explicit(&(bar->barrier_flags[id]),
-                                  memory_order_relaxed,
-                                  memory_scope_device) == 1)
-        ;
-
-      atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire,
-                             memory_scope_device);
-    }
-
-    barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-  }
-  return 0;
-}
-
-int __global_barrier_resize(__global IW_barrier *bar,
-                            __global Kernel_ctx *kernel_ctx,
-                            CL_Scheduler_ctx s_ctx, __local int *scratchpad,
-                            Restoration_ctx *r_ctx) {
-
-  int id = k_get_group_id(kernel_ctx);
-
-  if (id == 0) {
-    for (int peer_block = get_local_id(0) + 1;
-         peer_block < k_get_num_groups(kernel_ctx);
-         peer_block += get_local_size(0)) {
-
-      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]),
-                                  memory_order_relaxed,
-                                  memory_scope_device) == 0 &&
-             peer_block < k_get_num_groups(kernel_ctx))
-        ;
-
-      atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire,
-                             memory_scope_device);
-    }
-
-    barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-
-    int former_groups = k_get_num_groups(kernel_ctx);
-
-    int new_workgroup_size =
-        cfork(kernel_ctx, s_ctx, scratchpad, r_ctx, &former_groups);
-
-    for (int peer_block = get_local_id(0) + 1; peer_block < former_groups;
-         peer_block += get_local_size(0)) {
-
-      atomic_store_explicit(&(bar->barrier_flags[peer_block]), 0,
-                            memory_order_release, memory_scope_device);
-    }
-  }
-
-  else {
-
-    if (__ckill(kernel_ctx, s_ctx, scratchpad, id) == -1) {
-      return -1;
-    };
-
-    if (get_local_id(0) == 0) {
-
-      atomic_store_explicit(&(bar->barrier_flags[id]), 1, memory_order_release,
-                            memory_scope_device);
-
-      while (atomic_load_explicit(&(bar->barrier_flags[id]),
-                                  memory_order_relaxed,
-                                  memory_scope_device) == 1)
-        ;
-
-      atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire,
-                             memory_scope_device);
-    }
-
-    barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
-  }
-  return 0;
-}
-
 void MY_reduce(int length, __global int *buffer, __global atomic_int *result,
                __global Kernel_ctx *kernel_ctx) {
 
@@ -680,8 +436,7 @@ __kernel void mega_kernel(
 
     else if (task == 1) {
 
-      MY_reduce(graphics_length, graphics_buffer, graphics_result,
-                non_persistent_kernel_ctx);
+      // Would call non-persistent kernel - removed
 
       barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
 
@@ -692,9 +447,7 @@ __kernel void mega_kernel(
 
     else if (task == 2) {
 
-      simple_barrier(bar, persistent_kernel_ctx, s_ctx, scratchpad,
-                     &r_ctx_local);
-      ;
+      // Would call persistent kernel - removed
 
       barrier((CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE));
 
