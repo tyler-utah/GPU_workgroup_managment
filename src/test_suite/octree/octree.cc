@@ -130,17 +130,7 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
 
   lbws.setQueueSize(context, queue, program, 256, blocks);
 
-  cl::Kernel kernel(program, "initOctree", &err);
-  checkErr(err, "kernel constructor for initOctree");
-  kernel.setArg(0, lbws.deviceptr());
-  kernel.setArg(1, lbws.getMaxl());
-  kernel.setArg(2, stealAttempts);
-  kernel.setArg(3, treeSize);
-  kernel.setArg(4, particlesDone);
-  kernel.setArg(5, numParticles);
-
-  queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(1), cl::NDRange(1), NULL, &event);
-  event.wait();
+  cl::Kernel kernel;
 
   kernel = cl::Kernel(program, "makeOctree", &err);
   checkErr(err, "kernel constructor for makeOctree");

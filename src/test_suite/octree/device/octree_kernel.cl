@@ -217,7 +217,7 @@ __kernel void makeOctree(
   __global float4* particles,
   __global float4* newparticles,
   __global unsigned int* tree,
-  unsigned int particleCount,
+  unsigned int numParticles,
   __global unsigned int* treeSize,
   __global unsigned int* particlesDone,
   unsigned int maxchilds,
@@ -240,6 +240,32 @@ __kernel void makeOctree(
   unsigned int local_size = get_local_size(0);
 
   unsigned int localStealAttempts;
+
+  /* --- initOctree: global init */
+  if (get_global_id(0) == 0) {
+    *treeSize = 100;
+    *particlesDone = 0;
+    /* In Cuda, maxl is a kernel global initialized to 0 */
+    *maxl = 0;
+    *stealAttempts = 0;
+
+    /* create and enqueue the first task */
+    t.treepos=0;
+    t.middle.x=0;
+    t.middle.y=0;
+    t.middle.z=0;
+    t.middle.w=256;
+
+    t.beg = 0;
+    t.end = numParticles;
+    t.flip = false;
+
+    DLBABP_enqueue(dlbabp, &t, maxl);
+  }
+  /* ---------- end of initOctree ---------- */
+
+  barrier(CLK_GLOBAL_MEM_FENCE);
+  
   if (local_id == 0) {
     localStealAttempts = 0;
   }
@@ -252,7 +278,7 @@ __kernel void makeOctree(
     if (DLBABP_dequeue(dlbabp, &t, randdata, &localStealAttempts, num_pools) == 0) {
       check = *particlesDone;
       barrier(CLK_LOCAL_MEM_FENCE);
-      if (check == particleCount) {
+      if (check == numParticles) {
         if (local_id == 0) {
           atomic_add(stealAttempts, localStealAttempts);
         }
@@ -355,37 +381,6 @@ __kernel void initDLBABP(
     dlbabp->dh = dh;
     dlbabp->maxlength = maxlength;
   }
-}
-
-/*---------------------------------------------------------------------------*/
-
-__kernel void initOctree(
-  __global DLBABP *dlbabp,
-  __global volatile int *maxl,
-  __global unsigned int *stealAttempts,
-  __global unsigned int *treeSize,
-  __global unsigned int* particlesDone,
-  int numParticles)
-{
-  *treeSize = 100;
-  *particlesDone = 0;
-  /* In Cuda, maxl is a kernel global initialized to 0 */
-  *maxl = 0;
-  *stealAttempts = 0;
-
-  __local Task t;
-
-  t.treepos=0;
-  t.middle.x=0;
-  t.middle.y=0;
-  t.middle.z=0;
-  t.middle.w=256;
-
-  t.beg = 0;
-  t.end = numParticles;
-  t.flip = false;
-
-  DLBABP_enqueue(dlbabp, &t, maxl);
 }
 
 /*---------------------------------------------------------------------------*/
