@@ -51,4 +51,6 @@ typedef struct {
 
   MY_CL_GLOBAL Restoration_ctx * r_ctx_arr;
   
+  MY_CL_GLOBAL ATOMIC_CL_INT_TYPE * check_value;
+  
 } CL_Scheduler_ctx;

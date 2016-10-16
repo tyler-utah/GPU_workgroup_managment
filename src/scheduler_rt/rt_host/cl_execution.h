@@ -132,8 +132,6 @@ class CL_Execution {
 		options << "-I" << extra_include << " ";
 	}
 
-	std::cout << options.str() << std::endl;
-
 	//Define the int and atomic int type
 	options << "-D" << "CL_INT_TYPE=int" << " ";
 
@@ -153,7 +151,7 @@ class CL_Execution {
     
     //build the program
     ret = exec_program.build(options.str().c_str());
-    
+
     if (ret != CL_SUCCESS) {
       std::string log = exec_program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(exec_device);
       std::cerr << log << std::endl;

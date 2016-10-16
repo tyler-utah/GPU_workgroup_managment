@@ -37,6 +37,8 @@ class CL_Communicator {
 		}
 
 		int launch_mega_kernel() {
+			std::cout << "launching mega kernel..." << std::endl;
+			Sleep(100);
 			int err = exec->exec_queue.enqueueNDRangeKernel(exec->exec_kernels[mega_kernel_name],
 			cl::NullRange,
 			global_size,

@@ -4,6 +4,14 @@
 #include "kernel_ctx.cl"
 #include "scheduler_1.cl"
 
+int b_get_global_id(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx) {
+	return k_get_group_id(kernel_ctx) * get_local_size(0) + get_local_id(0);
+}
+
+int b_get_global_size(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx) {
+	return bar->num_groups  * get_local_size(0); 
+}
+
 int global_barrier(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx, CL_Scheduler_ctx s_ctx, __local int * scratchpad) {
   
   int id = k_get_group_id(kernel_ctx);
@@ -128,7 +136,12 @@ int __global_barrier_resize(__global IW_barrier *bar, __global Kernel_ctx *kerne
 	
 	int former_groups = k_get_num_groups(kernel_ctx);
 	
+	if (get_local_id(0) == 0) {
+	  bar->num_groups = former_groups;
+	}
+	
 	int new_workgroup_size = cfork(kernel_ctx, s_ctx, scratchpad, r_ctx, &former_groups);
+	//BARRIER;
 		
 	for (int peer_block = get_local_id(0) + 1;
          peer_block < former_groups;

@@ -4,6 +4,8 @@
   
   
   __local int scratchpad[2];
+  __local Restoration_ctx lm_r_ctx;
+  
   DISCOVERY_PROTOCOL(d_ctx, scratchpad);
   
   // Scheduler init (makes a variable named s_ctx)
@@ -19,7 +21,7 @@
 	  scheduler_init(s_ctx, d_ctx, non_persistent_kernel_ctx, persistent_kernel_ctx);
 	
 	  // Loops forever waiting for signals from the host. Host can issue a quit signal though.
-	  scheduler_loop(s_ctx, d_ctx, non_persistent_kernel_ctx, persistent_kernel_ctx);
+	  scheduler_loop(s_ctx, d_ctx, non_persistent_kernel_ctx, persistent_kernel_ctx, bar);
 	  
 	}
 	BARRIER;
@@ -40,7 +42,7 @@
     }
 	
 	// This is synchronous, returns QUIT, MULT, or PERSIST tasks
-    int task = get_task(s_ctx, group_id, scratchpad, &r_ctx_local);
+    int task = get_task(s_ctx, group_id, scratchpad, &r_ctx_local, &lm_r_ctx);
 	
 	// Quit is easy
     if (task == TASK_QUIT) {
@@ -64,6 +66,8 @@
     
 	// The persistent task.
     else if (task == TASK_PERSIST) {
+			  
+	  
 	  
 	  PERSISTENT_KERNEL;
 	  

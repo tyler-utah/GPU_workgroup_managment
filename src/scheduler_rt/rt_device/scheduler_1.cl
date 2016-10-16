@@ -22,6 +22,7 @@ int cfork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scra
           k_ctx->group_ids[i + 1] = i;
 		  while (atomic_load_explicit(&(s_ctx.task_array[i + 1]), memory_order_relaxed, memory_scope_device) !=  TASK_WAIT);
 		  s_ctx.r_ctx_arr[i + 1] = *r_ctx;
+		 
 		  
 		  // Set the task
           atomic_store_explicit(&(s_ctx.task_array[i + 1]), TASK_PERSIST, memory_order_release, memory_scope_device);
@@ -36,7 +37,7 @@ int cfork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scra
 	    scheduler_unlock(s_ctx.pool_lock);
 		scratchpad[0] = snapshot + groups;
 		scratchpad[1] = groups;
-	  }
+	  } 
 	}
   }
   
@@ -98,8 +99,13 @@ void scheduler_assign_tasks_persistent(CL_Scheduler_ctx s_ctx, __global Kernel_c
   int local_task_size = *(s_ctx.task_size);
   int lpg = *(s_ctx.participating_groups);
   
+
+  
   // Send the tasks to do the task. 
   for(int i = 0; i < local_task_size; i++) {
+	  
+	    
+
 
     // the index is i + 1 because we're already missing one group because of the scheduler.
 

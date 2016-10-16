@@ -3,9 +3,10 @@
 #include "../rt_common/cl_scheduler.h"
 #include "kernel_ctx.cl"
 #include "ocl_utility.cl"
+#include "../rt_common/iw_barrier.h"
 
 int try_lock(atomic_int *m) {
-	return !(atomic_exchange_explicit(m, 1, memory_order_relaxed, memory_scope_device));
+	return (atomic_exchange_explicit(m, 1, memory_order_relaxed, memory_scope_device)) == 0;
 }
 
 void scheduler_lock(atomic_int *m) {
@@ -27,21 +28,24 @@ int scheduler_needs_workgroups(CL_Scheduler_ctx s_ctx) {
 // Don't move this! It needs the lock functions defined above.
 #include "scheduler_1.cl"
 
-int get_task(CL_Scheduler_ctx s_ctx, int group_id, __local int * scratchpad, Restoration_ctx *r_ctx) {
+int get_task(CL_Scheduler_ctx s_ctx, int group_id, __local int * scratchpad, Restoration_ctx *r_ctx, __local Restoration_ctx *r_lm_ctx) {
   if (get_local_id(0) == 0) {
     // Could be optimised to place a fence after the spin
 	int tmp;
 	while (true) {
 	  tmp = atomic_load_explicit(&(s_ctx.task_array[group_id]), memory_order_relaxed, memory_scope_device);
+
 	  if (tmp != TASK_WAIT) {
 	    break;
 	  }
 	}
     atomic_work_item_fence(FULL_FENCE, memory_order_acquire, memory_scope_work_group);
 	*scratchpad = tmp;
-	*r_ctx = s_ctx.r_ctx_arr[group_id];
+	*r_lm_ctx = s_ctx.r_ctx_arr[group_id];
+
   }
   BARRIER;
+  *r_ctx = *r_lm_ctx;
   return *scratchpad;
 }
 
@@ -57,7 +61,8 @@ void scheduler_init(CL_Scheduler_ctx s_ctx, __global Discovery_ctx *d_ctx, __glo
 void scheduler_loop(CL_Scheduler_ctx s_ctx,
                     __global Discovery_ctx *d_ctx,
 					__global Kernel_ctx *graphics_kernel_ctx,
-					__global Kernel_ctx *persistent_kernel_ctx) {
+					__global Kernel_ctx *persistent_kernel_ctx,
+					__global IW_barrier *bar) {
 	
   // Scheduler loop
   while (true) {
@@ -70,11 +75,17 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 	  
 	  
       for(int i = 0; i < MAX_P_GROUPS; i++) {
-		  
+		while (atomic_load_explicit(&(graphics_kernel_ctx->executing_groups), memory_order_relaxed, memory_scope_device) != 0)
+          ;	
+	    while (atomic_load_explicit(&(persistent_kernel_ctx->executing_groups), memory_order_relaxed, memory_scope_device) != 0)
+          ;	
+	    scheduler_lock(s_ctx.pool_lock);
         while (atomic_load_explicit(&(s_ctx.task_array[i]), memory_order_relaxed, memory_scope_device) !=  TASK_WAIT)
         ;
         atomic_store_explicit(&(s_ctx.task_array[i]), TASK_QUIT, memory_order_release, memory_scope_device);	
 		atomic_fetch_sub(s_ctx.available_workgroups, 1);
+        scheduler_unlock(s_ctx.pool_lock);
+
 	  }
 	  break;
 	}
@@ -121,6 +132,7 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 	  int local_task_size = *(s_ctx.task_size);
 	  
 	  atomic_store_explicit(&(persistent_kernel_ctx->num_groups), local_task_size, memory_order_relaxed, memory_scope_device);
+	  bar->num_groups = local_task_size;
 	  
 	  //persistent_kernel_ctx->num_groups = local_task_size;
 	  
@@ -138,7 +150,7 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 	  
       while (atomic_load_explicit(s_ctx.scheduler_flag, memory_order_relaxed, memory_scope_all_svm_devices) != DEVICE_TO_EXECUTE)
       ;
-
+  
 	  scheduler_assign_tasks_persistent(s_ctx, persistent_kernel_ctx);
 	  
 	  scheduler_unlock(s_ctx.pool_lock);
@@ -156,7 +168,8 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 					   __global atomic_int *pool_lock,            \
 					   __global atomic_int *groups_to_kill,       \
 					   __global atomic_int *persistent_flag,      \
-					   __global Restoration_ctx *r_ctx_arr
+					   __global Restoration_ctx *r_ctx_arr,       \
+					   __global atomic_int *check_value
 					   
 					   
 #define INIT_SCHEDULER \
@@ -169,7 +182,8 @@ CL_Scheduler_ctx s_ctx;                              \
   s_ctx.pool_lock = pool_lock;                       \
   s_ctx.groups_to_kill = groups_to_kill;             \
   s_ctx.persistent_flag = persistent_flag;           \
-  s_ctx.r_ctx_arr = r_ctx_arr
+  s_ctx.r_ctx_arr = r_ctx_arr;                       \
+  s_ctx.check_value = check_value
   
 
   
