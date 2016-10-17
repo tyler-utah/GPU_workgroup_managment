@@ -34,6 +34,11 @@
   Restoration_ctx r_ctx_local;
   
   while(true) {
+
+  // Tyler: Do not remove! This doesn't seem to be semantically required,
+	// but if its not included then intel 500/520 GPUs deadlock. Probably
+	// due to some compiler re-ordering, etc.
+	BARRIER;
 	  
 	// Workgroups are initially available
     if (get_local_id(0) == 0) {
