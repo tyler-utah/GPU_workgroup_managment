@@ -38,7 +38,8 @@ class CL_Communicator {
 
 		int launch_mega_kernel() {
 			std::cout << "launching mega kernel..." << std::endl;
-			Sleep(100);
+			std::flush(std::cout);
+			Sleep(300);
 			int err = exec->exec_queue.enqueueNDRangeKernel(exec->exec_kernels[mega_kernel_name],
 			cl::NullRange,
 			global_size,
@@ -46,7 +47,7 @@ class CL_Communicator {
 
 			check_ocl(err);
 
-			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING);
+			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_acquire) != DEVICE_WAITING);
 			std::atomic_thread_fence(std::memory_order_acquire);
 			participating_groups = *(scheduler.participating_groups);
 			
@@ -61,7 +62,7 @@ class CL_Communicator {
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_QUIT, std::memory_order_release);
 		}
 
-		uint64_t gettime_Windows() {
+		uint64_t gettime_chrono() {
 			//return 0;
 			return std::chrono::duration_cast<std::chrono::nanoseconds>(
 				std::chrono::high_resolution_clock::now().time_since_epoch())
@@ -79,24 +80,24 @@ class CL_Communicator {
 			std::string buf(label);
 			buf.append("_response");
 
-			response_begin = gettime_Windows();
+			response_begin = gettime_chrono();
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_GOT_GROUPS) {
 				YieldProcessor();
 			}
 			std::atomic_thread_fence(std::memory_order_acquire);
-			response_end = gettime_Windows();
+			response_end = gettime_chrono();
 
 			std::string buf2(label);
 			buf.append("_execution");
 
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
 			
-			execution_begin = gettime_Windows(); //start application timer here
+			execution_begin = gettime_chrono(); //start application timer here
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
 				YieldProcessor();
 			}
 			std::atomic_thread_fence(std::memory_order_acquire);
-			execution_end = gettime_Windows(); //end application timer after waiting here.
+			execution_end = gettime_chrono(); //end application timer after waiting here.
 
 			time_ret ret = std::make_pair(execution_end - execution_begin, response_end - response_begin);
 			return ret;
@@ -107,7 +108,7 @@ class CL_Communicator {
 				YieldProcessor();
 			}
 
-			persistent_end = gettime_Windows();
+			persistent_end = gettime_chrono();
 
 			// Technically a data-race. should be fixed
 			executing_persistent = false;
@@ -121,7 +122,7 @@ class CL_Communicator {
 			}
 
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
-			persistent_begin = gettime_Windows();
+			persistent_begin = gettime_chrono();
 			executing_persistent = true;
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
 				YieldProcessor();
@@ -139,6 +140,23 @@ class CL_Communicator {
 		time_stamp get_persistent_time() {
 			assert(executing_persistent == false);
 			return persistent_end - persistent_begin;
+		}
+
+		double reduce_times_ms(std::vector<time_stamp> v) {
+			double total = 0.0;
+			for (int i = 0; i < v.size(); i++) {
+				total += v[i];
+			}
+			return total / 1000000.0;
+		}
+
+		double get_average_time_ms(std::vector<time_stamp> v) {
+			if (v.size() == 0) {
+				return 0.0;
+			}
+			double total = reduce_times_ms(v);
+		
+			return (total / double(v.size()));
 		}
 
 		double nano_to_milli(time_stamp t) {

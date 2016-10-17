@@ -16,6 +16,7 @@
   // Scheduler workgroup
   if (group_id == 0) {
     if (get_local_id(0) == 0) {
+		
 	
       // Do any initialisation here before the main loop.
 	  scheduler_init(s_ctx, d_ctx, non_persistent_kernel_ctx, persistent_kernel_ctx);
@@ -27,7 +28,6 @@
 	BARRIER;
 	return;
   }
-  
   
   // All other workgroups
   
@@ -45,6 +45,7 @@
 	  atomic_store_explicit(&(s_ctx.task_array[group_id]), TASK_WAIT, memory_order_relaxed, memory_scope_device);
       atomic_fetch_add(s_ctx.available_workgroups, 1);
     }
+	
 	
 	// This is synchronous, returns QUIT, MULT, or PERSIST tasks
     int task = get_task(s_ctx, group_id, scratchpad, &r_ctx_local, &lm_r_ctx);
@@ -72,8 +73,7 @@
 	// The persistent task.
     else if (task == TASK_PERSIST) {
 			  
-	  
-	  
+	    
 	  PERSISTENT_KERNEL;
 	  
 	  // Wait for all threads in the workgroup to reach this point
@@ -83,7 +83,7 @@
 	  if (get_local_id(0) == 0) {
 	    int check = atomic_fetch_sub(&(persistent_kernel_ctx->executing_groups), 1);
 		if (check == 1) {
-          atomic_store_explicit(s_ctx.persistent_flag, PERSIST_TASK_DONE, memory_order_relaxed, memory_scope_all_svm_devices);
+          atomic_store_explicit(s_ctx.persistent_flag, PERSIST_TASK_DONE, memory_order_seq_cst, memory_scope_all_svm_devices);
 		}
 	  }
 	}

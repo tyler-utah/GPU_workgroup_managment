@@ -29,6 +29,7 @@ int scheduler_needs_workgroups(CL_Scheduler_ctx s_ctx) {
 #include "scheduler_1.cl"
 
 int get_task(CL_Scheduler_ctx s_ctx, int group_id, __local int * scratchpad, Restoration_ctx *r_ctx, __local Restoration_ctx *r_lm_ctx) {
+  
   if (get_local_id(0) == 0) {
     // Could be optimised to place a fence after the spin
 	int tmp;
@@ -36,13 +37,12 @@ int get_task(CL_Scheduler_ctx s_ctx, int group_id, __local int * scratchpad, Res
 	  tmp = atomic_load_explicit(&(s_ctx.task_array[group_id]), memory_order_relaxed, memory_scope_device);
 
 	  if (tmp != TASK_WAIT) {
+		atomic_work_item_fence(FULL_FENCE, memory_order_acquire, memory_scope_work_group);
+		*scratchpad = tmp;
+	    *r_lm_ctx = s_ctx.r_ctx_arr[group_id];
 	    break;
 	  }
 	}
-    atomic_work_item_fence(FULL_FENCE, memory_order_acquire, memory_scope_work_group);
-	*scratchpad = tmp;
-	*r_lm_ctx = s_ctx.r_ctx_arr[group_id];
-
   }
   BARRIER;
   *r_ctx = *r_lm_ctx;
@@ -55,6 +55,9 @@ void scheduler_init(CL_Scheduler_ctx s_ctx, __global Discovery_ctx *d_ctx, __glo
 	 *(s_ctx.participating_groups) = d_ctx->count - 1;
 	 graphics_kernel_ctx->d_ctx = d_ctx;
 	 persistent_kernel_ctx->d_ctx = d_ctx;
+	 atomic_store_explicit(s_ctx.pool_lock, 0, memory_order_release, memory_scope_device);
+	 atomic_store_explicit(&(graphics_kernel_ctx->executing_groups), 0, memory_order_release, memory_scope_device);
+	 atomic_store_explicit(&(persistent_kernel_ctx->executing_groups), 0, memory_order_release, memory_scope_device);
      atomic_store_explicit(s_ctx.scheduler_flag, DEVICE_WAITING, memory_order_release, memory_scope_all_svm_devices);
 }
 
@@ -73,20 +76,23 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 		
       atomic_work_item_fence(FULL_FENCE, memory_order_acquire, memory_scope_all_svm_devices);
 	  
+	  while (atomic_load_explicit(&(graphics_kernel_ctx->executing_groups), memory_order_relaxed, memory_scope_device) != 0)
+          ;	
+	  while (atomic_load_explicit(&(persistent_kernel_ctx->executing_groups), memory_order_relaxed, memory_scope_device) != 0)
+          ;	
+	  scheduler_lock(s_ctx.pool_lock);
 	  
-      for(int i = 0; i < MAX_P_GROUPS; i++) {
-		while (atomic_load_explicit(&(graphics_kernel_ctx->executing_groups), memory_order_relaxed, memory_scope_device) != 0)
-          ;	
-	    while (atomic_load_explicit(&(persistent_kernel_ctx->executing_groups), memory_order_relaxed, memory_scope_device) != 0)
-          ;	
-	    scheduler_lock(s_ctx.pool_lock);
+      for(int i = 1; i < *(s_ctx.participating_groups) + 1; i++) {
+		
+	    
         while (atomic_load_explicit(&(s_ctx.task_array[i]), memory_order_relaxed, memory_scope_device) !=  TASK_WAIT)
         ;
         atomic_store_explicit(&(s_ctx.task_array[i]), TASK_QUIT, memory_order_release, memory_scope_device);	
 		atomic_fetch_sub(s_ctx.available_workgroups, 1);
-        scheduler_unlock(s_ctx.pool_lock);
+        
 
 	  }
+	  scheduler_unlock(s_ctx.pool_lock);
 	  break;
 	}
 

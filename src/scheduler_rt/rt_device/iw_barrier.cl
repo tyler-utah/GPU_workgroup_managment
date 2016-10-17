@@ -117,7 +117,8 @@ int global_barrier_ckill(__global IW_barrier *bar, __global Kernel_ctx *kernel_c
 int __global_barrier_resize(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx, CL_Scheduler_ctx s_ctx, __local int * scratchpad, Restoration_ctx *r_ctx) {
   
   int id = k_get_group_id(kernel_ctx);
-	
+  BARRIER;
+
   // Master workgroup
   if (id == 0) {
     for (int peer_block = get_local_id(0) + 1;
@@ -136,12 +137,13 @@ int __global_barrier_resize(__global IW_barrier *bar, __global Kernel_ctx *kerne
 	
 	int former_groups = k_get_num_groups(kernel_ctx);
 	
-	if (get_local_id(0) == 0) {
-	  bar->num_groups = former_groups;
-	}
-	
 	int new_workgroup_size = cfork(kernel_ctx, s_ctx, scratchpad, r_ctx, &former_groups);
-	//BARRIER;
+	
+	if (get_local_id(0) == 0) {
+	  bar->num_groups = new_workgroup_size;
+	}
+
+	BARRIER;
 		
 	for (int peer_block = get_local_id(0) + 1;
          peer_block < former_groups;
@@ -172,8 +174,10 @@ int __global_barrier_resize(__global IW_barrier *bar, __global Kernel_ctx *kerne
 	
 	BARRIER;
   }
+
   return 0;
 }
 
 #define global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx) if (__global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx) == -1) { return;}
+//#define global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx) __global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx);
 
