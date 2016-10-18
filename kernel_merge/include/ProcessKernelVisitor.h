@@ -34,6 +34,17 @@ public:
     out << std::string(RewriteBuf->begin(), RewriteBuf->end());
   }
 
+  virtual void ProcessKernelFunction(FunctionDecl *D) = 0;
+
+  bool VisitFunctionDecl(FunctionDecl *D)
+  {
+
+    if (D->hasAttr<OpenCLKernelAttr>() && D->hasBody()) {
+      ProcessKernelFunction(D);
+    }
+    return RecursiveASTVisitor::VisitFunctionDecl(D);
+  }
+
 private:
 
   ASTUnit *AU;

@@ -17,13 +17,9 @@ public:
     }
   }
 
-  bool VisitFunctionDecl(FunctionDecl *D);
-
   bool VisitCallExpr(CallExpr *CE);
 
-private:
-
-  void ProcessKernelFunction(FunctionDecl * D);
+  virtual void ProcessKernelFunction(FunctionDecl *D);
 
 };
 

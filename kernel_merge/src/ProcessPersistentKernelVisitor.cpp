@@ -67,17 +67,6 @@ private:
 
 };
 
-bool ProcessPersistentKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
-{
-
-  if (D->hasAttr<OpenCLKernelAttr>() && D->hasBody()) {
-    ProcessKernelFunction(D);
-  }
-
-  return RecursiveASTVisitor::VisitFunctionDecl(D);
-
-}
-
 void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
 
   CompoundStmt *CS = dyn_cast<CompoundStmt>(S->getBody());

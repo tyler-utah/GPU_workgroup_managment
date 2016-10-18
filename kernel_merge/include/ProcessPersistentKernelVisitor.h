@@ -19,17 +19,16 @@ public:
     }
   }
 
-  bool VisitFunctionDecl(FunctionDecl *D);
-
   bool VisitCallExpr(CallExpr *CE);
 
   std::string GetRestorationCtx() {
     return RestorationCtx;
   }
 
+  virtual void ProcessKernelFunction(FunctionDecl *D);
+
 private:
 
-  void ProcessKernelFunction(FunctionDecl *D);
   void ProcessWhileStmt(WhileStmt *S);
 
   std::vector<DeclStmt*> DeclsToRestore;

@@ -1,14 +1,5 @@
 #include "ProcessNonPersistentKernelVisitor.h"
 
-bool ProcessNonPersistentKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
-{
-
-  if (D->hasAttr<OpenCLKernelAttr>() && D->hasBody()) {
-    ProcessKernelFunction(D);
-  }
-  return RecursiveASTVisitor::VisitFunctionDecl(D);
-}
-
 bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   auto name = CE->getCalleeDecl()->getAsFunction()->getNameAsString();
   if(name == "get_global_id" ||
