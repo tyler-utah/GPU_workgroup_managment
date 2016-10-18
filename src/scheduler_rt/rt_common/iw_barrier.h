@@ -10,5 +10,6 @@ typedef struct {
   // (likely for the arbitrary scheduler)
   ATOMIC_CL_INT_TYPE phase;
   CL_INT_TYPE num_groups;
+  CL_INT_TYPE to_kill;
   
 } IW_barrier;

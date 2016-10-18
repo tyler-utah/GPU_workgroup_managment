@@ -3,19 +3,25 @@
 #include "kernel_ctx.cl"
 #include "cl_scheduler.cl"
 
-int cfork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scratchpad, Restoration_ctx *r_ctx, int *former_groups) {
+int query_workgroups_to_kill(CL_Scheduler_ctx s_ctx) {
+	return atomic_load_explicit(s_ctx.groups_to_kill, memory_order_relaxed, memory_scope_device);
+}
+
+int cfork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scratchpad, Restoration_ctx *r_ctx, int *former_groups, __global int *update) {
 	
   if (get_local_id(0) == 0) {
 	int h = *scratchpad;
 	int pre_groups = k_get_num_groups(k_ctx);
     scratchpad[0] = pre_groups;
 	scratchpad[1] = pre_groups;
+	*update = pre_groups;
 
 	if (atomic_load_explicit(s_ctx.available_workgroups, memory_order_relaxed, memory_scope_device) > 0) {
       if (try_lock(s_ctx.pool_lock)) {
 		
 		int groups = k_get_num_groups(k_ctx);
 		int snapshot = atomic_load_explicit(s_ctx.available_workgroups, memory_order_relaxed, memory_scope_device);
+		*update = groups + snapshot;
 		
 	    for (int i = groups; i < groups+snapshot; i++) {
 			
