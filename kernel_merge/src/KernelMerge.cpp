@@ -84,6 +84,8 @@ int main(int argc, const char **argv) {
   Merged << "  #include \"main_device_body.cl\"\n";
   Merged << "}\n";
 
+  Merged.close();
+
   return 0;
 
 }

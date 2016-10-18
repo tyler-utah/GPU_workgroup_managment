@@ -18,6 +18,10 @@ public:
     this->RW = Rewriter(AU->getSourceManager(),
       AU->getLangOpts());
     TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
+    if (!KI.KernelFunction) {
+      errs() << "Non-persistent kernel file must declare a kernel function.\n";
+      exit(1);
+    }
   }
 
   bool VisitFunctionDecl(FunctionDecl *D);

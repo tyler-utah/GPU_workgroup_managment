@@ -20,6 +20,10 @@ public:
     this->RestorationCtx = "";
     this->ForkPointCounter = 0;
     TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
+    if (!KI.KernelFunction) {
+      errs() << "Persistent kernel file must declare a kernel function.\n";
+      exit(1);
+    }
   }
 
   bool VisitFunctionDecl(FunctionDecl *D);
