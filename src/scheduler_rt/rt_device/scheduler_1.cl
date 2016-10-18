@@ -7,8 +7,9 @@ int cfork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scra
 	
   if (get_local_id(0) == 0) {
 	int h = *scratchpad;
-    scratchpad[0] = 0;
-	scratchpad[1] = k_get_num_groups(k_ctx);
+	int pre_groups = k_get_num_groups(k_ctx);
+    scratchpad[0] = pre_groups;
+	scratchpad[1] = pre_groups;
 
 	if (atomic_load_explicit(s_ctx.available_workgroups, memory_order_relaxed, memory_scope_device) > 0) {
       if (try_lock(s_ctx.pool_lock)) {

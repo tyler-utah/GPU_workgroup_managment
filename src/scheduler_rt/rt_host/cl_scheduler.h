@@ -23,7 +23,7 @@ void mk_init_scheduler_ctx(CL_Execution *exec, CL_Scheduler_ctx *s_ctx) {
   *(s_ctx->check_value) = -1;
 
   for (int i = 0; i < MAX_P_GROUPS; i++) {
-	  s_ctx->task_array[i] = TASK_WAIT;
+	  s_ctx->task_array[i] = TASK_UNINIT;
 	  s_ctx->r_ctx_arr[i].target = 0;
   }
 
