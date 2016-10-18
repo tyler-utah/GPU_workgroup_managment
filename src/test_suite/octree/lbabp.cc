@@ -7,19 +7,6 @@
 
 /*---------------------------------------------------------------------------*/
 
-// // LBABP::~LBABP()
-// {
-//   //if(init) {
-//     // Hugues: do we need to delete buffers in opencl ?
-//     // this used to be cudaFree() calls...
-//     // delete(&dwq);
-//     // delete(wq->deq);
-//     // delete(wq->dh);
-//   //}
-// }
-
-/*---------------------------------------------------------------------------*/
-
 bool LBABP::setQueueSize(cl::Context context, cl::CommandQueue queue, cl::Program program, unsigned int dequelength, unsigned int blocks)
 {
   init = true;
@@ -41,18 +28,5 @@ bool LBABP::setQueueSize(cl::Context context, cl::CommandQueue queue, cl::Progra
 
   return true;
 }
-
-/*---------------------------------------------------------------------------*/
-
-// Hugues: the retrievial of maxl is now done at the end of Octree::run()
-
-// int LBABP::getMaxMem(cl::CommandQueue queue)
-// {
-//   int maxle = 0;
-
-//   queue.enqueueReadBuffer(maxl, CL_TRUE, 0, sizeof(int), &maxle, NULL, NULL);
-
-//   return maxle;
-// }
 
 /*---------------------------------------------------------------------------*/
