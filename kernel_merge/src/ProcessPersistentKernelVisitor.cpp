@@ -125,18 +125,18 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
 }
 
 void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
-  if (KI.KernelFunction) {
+  if (GetKI().KernelFunction) {
     errs() << "Multiple kernel functions in source file not supported, stopping.\n";
     exit(1);
   }
 
-  KI.KernelFunction = D;
+  GetKI().KernelFunction = D;
 
   if (D->getNumParams() == 0) {
     errs() << "The kernel must have at least one parameter, for technical reasons; please add a dummy parameter if necessary.  Stopping.\n";
     exit(1);
   }
-  KI.OriginalParameterText = RW.getRewrittenText(
+  GetKI().OriginalParameterText = RW.getRewrittenText(
     SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
       D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
 
@@ -226,14 +226,4 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
 
   ProcessWhileStmt(WhileLoop);
 
-}
-
-void ProcessPersistentKernelVisitor::EmitRewrittenText(std::ostream & out) {
-  const RewriteBuffer *RewriteBuf =
-    RW.getRewriteBufferFor(AU->getSourceManager().getMainFileID());
-  if (!RewriteBuf) {
-    errs() << "Nothing was re-written\n";
-    exit(1);
-  }
-  out << std::string(RewriteBuf->begin(), RewriteBuf->end());
 }
