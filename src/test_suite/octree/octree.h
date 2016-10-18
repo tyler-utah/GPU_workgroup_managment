@@ -22,11 +22,7 @@ class Octree
 	cl::Buffer tree;
 	cl::Buffer treeSize;
 	cl::Buffer particlesDone;
-        cl::Buffer stealAttempts;
-
-	LBABP lbws;
-        /* Hugues: we do not implement the static method in OpenCL */
-	/* LBStatic lbstat; */
+  cl::Buffer stealAttempts;
 
 	float totalTime;
 	LBMethod method;

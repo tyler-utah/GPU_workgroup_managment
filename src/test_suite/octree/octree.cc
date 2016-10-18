@@ -8,7 +8,6 @@
 
 #include "opencl/opencl.h"
 #include "test_suite/octree/shared_host_side.h"
-#include "test_suite/octree/lbabp.h"
 #include "test_suite/octree/octree.h"
 #include "test_suite/octree/helper.h"
 
@@ -125,18 +124,30 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
     exit(EXIT_FAILURE);
   }
 
+  // Prepare kernel arguments related to work-stealing management
+  unsigned int dequelength = 256;
+  cl::Buffer maxl(context, CL_MEM_READ_WRITE, sizeof(int));
+  cl::Buffer dwq(context, CL_MEM_READ_WRITE, sizeof(DLBABP));
+  cl::Buffer deq(context, CL_MEM_READ_WRITE, sizeof(Task) * dequelength * blocks);
+  cl::Buffer dh(context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * blocks);
+  unsigned int maxlength = dequelength;
+
+  queue.enqueueFillBuffer(deq, 0, 0, sizeof(Task) * dequelength * blocks, NULL, NULL);
+  queue.enqueueFillBuffer(dh, 0, 0, sizeof(DequeHeader) * blocks, NULL, NULL);
+
+
   //--------------------------------------------------
   // In OpenCL, only dynamic method is implemented
 
-  lbws.setQueueSize(context, queue, program, 256, blocks);
+  //lbws.setQueueSize(context, queue, program, 256, blocks);
 
   cl::Kernel kernel;
 
   kernel = cl::Kernel(program, "makeOctree", &err);
   checkErr(err, "kernel constructor for makeOctree");
-  kernel.setArg(0, lbws.deviceptr());
+  kernel.setArg(0, dwq);
   kernel.setArg(1, randdata);
-  kernel.setArg(2, lbws.getMaxl());
+  kernel.setArg(2, maxl);
   kernel.setArg(3, particles);
   kernel.setArg(4, newParticles);
   kernel.setArg(5, tree);
@@ -146,9 +157,9 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   kernel.setArg(9, maxChildren);
   kernel.setArg(10, stealAttempts);
   kernel.setArg(11, blocks);
-  kernel.setArg(12, lbws.deq);
-  kernel.setArg(13, lbws.dh);
-  kernel.setArg(14, lbws.maxlength);
+  kernel.setArg(12, deq);
+  kernel.setArg(13, dh);
+  kernel.setArg(14, maxlength);
 
   cl::NDRange local_size(threads);
   cl::NDRange global_size(blocks * threads);
@@ -172,7 +183,7 @@ bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int
   // Hugues: in Cuda version, maxl is set within LBABP::getMaxMem(), but
   // that would need to pass the queue around. I thinks this is
   // overkill, we just gather all stats here.
-  queue.enqueueReadBuffer(lbws.getMaxl(), CL_TRUE, 0, sizeof(int), &maxMem, NULL, NULL);
+  queue.enqueueReadBuffer(maxl, CL_TRUE, 0, sizeof(int), &maxMem, NULL, NULL);
 
   // Hugues: the Cuda code corresponding to the following is in
   // Octree::printStats()
