@@ -7,15 +7,15 @@ class LBABP
 {
   bool init;
   /* fields of DLBABP */
-  cl::Buffer deq;
-  cl::Buffer dh;
-  unsigned int maxlength;
   /* The device buffer for DLBABP */
   cl::Buffer dwq;
   /* This is a kernel global in Cuda */
   cl::Buffer maxl;
 
 public:
+  cl::Buffer deq;
+  cl::Buffer dh;
+  unsigned int maxlength;
   cl::Buffer getMaxl() {return maxl;}
   LBABP():init(false){}
   //~LBABP();

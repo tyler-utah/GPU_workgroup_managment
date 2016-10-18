@@ -39,17 +39,6 @@ bool LBABP::setQueueSize(cl::Context context, cl::CommandQueue queue, cl::Progra
   queue.enqueueFillBuffer(dh, 0, 0, sizeof(DequeHeader) * blocks, NULL, NULL);
   maxlength = dequelength;
 
-  cl_int err;
-  cl::Kernel kernel(program, "initDLBABP", &err);
-  checkErr(err, "kernel constructor for initDLBABP");
-  kernel.setArg(0, dwq);
-  kernel.setArg(1, deq);
-  kernel.setArg(2, dh);
-  kernel.setArg(3, maxlength);
-  cl::Event event;
-  queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(1), cl::NDRange(1), NULL, &event);
-  event.wait();
-
   return true;
 }
 
