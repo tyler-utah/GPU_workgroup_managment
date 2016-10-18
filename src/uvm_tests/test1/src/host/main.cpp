@@ -8,9 +8,8 @@
 #include "cl_execution.h"
 
 DEFINE_string(input, "", "Input path");
-DEFINE_string(output, "", "Output path");
-DEFINE_int32(platform_id, -1, "OpenCL platform ID to use");
-DEFINE_int32(device_id, -1, "OpenCL device ID to use");
+DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
+DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_bool(list, false, "List OpenCL platforms and devices");
 
 using namespace std;
@@ -71,7 +70,7 @@ int get_kernels(CL_Execution &exec) {
 int main(int argc, char *argv[]) {
 	flags::ParseCommandLineFlags(&argc, &argv, true);
 
-	if (FLAGS_input.empty() || FLAGS_output.empty()) {
+	if (FLAGS_input.empty()) {
 		printf("Input and output files not specified.");
 		exit(0);
 	}
@@ -111,10 +110,14 @@ int main(int argc, char *argv[]) {
 	
 	//Tyler: mixing C++ and C opencl is usually pretty frowned on. However, I cannot
 	//figure out the C++ api for fine-grained SVM! And there are very few examples.
+
 	cl_int * flag = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS, sizeof(cl_int), 4);
-	cl_int * data1 = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
-	cl_int * data2 = (cl_int*)clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
-	cl_int * result = (cl_int*)clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
+
+	//Tyler: on AMD it appears that these also need the CL_MEM_SVM_ATOMIC flag. This
+	//doesn't seem to be required by the spec, but I don't think it hurts (??)
+	cl_int * data1 = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS, sizeof(cl_int), 4);
+	cl_int * data2 = (cl_int*)clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS, sizeof(cl_int), 4);
+	cl_int * result = (cl_int*)clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS, sizeof(cl_int), 4);
 	*flag = GPU_WAIT;
 	*data1 = 0;
 	*data2 = 0;
@@ -141,22 +144,22 @@ int main(int argc, char *argv[]) {
 	int a, b;
 	vector<int> results;
 	while (infile >> tag >> a >> b) {
-		if (tag.compare("ADD") == 0) {
-			*data1 = a;
-			*data2 = b;
-			std::atomic_store_explicit((std::atomic<int> *) flag, GPU_ADD, std::memory_order_release);
-			while (std::atomic_load_explicit((std::atomic<int> *) flag, std::memory_order_acquire) != GPU_WAIT);
-			results.push_back(*result);
-			//cout << a + b << endl;
-		}
-		if (tag.compare("MULT") == 0) {
-			*data1 = a;
-			*data2 = b;
-			std::atomic_store_explicit((std::atomic<int> *) flag, GPU_MULT, std::memory_order_release);
-			while (std::atomic_load_explicit((std::atomic<int> *) flag, std::memory_order_acquire) != GPU_WAIT);
-			results.push_back(*result);
-			//cout << a * b << endl;
-		}
+	  if (tag.compare("ADD") == 0) {
+	    *data1 = a;
+	    *data2 = b;
+	    std::atomic_store_explicit((std::atomic<int> *) flag, GPU_ADD, std::memory_order_release);
+	    while (std::atomic_load_explicit((std::atomic<int> *) flag, std::memory_order_acquire) != GPU_WAIT);
+	    results.push_back(*result);
+	    //cout << a << " + " << b << " = " << a + b << endl;
+	  }
+	  if (tag.compare("MULT") == 0) {
+	    *data1 = a;
+	    *data2 = b;
+	    std::atomic_store_explicit((std::atomic<int> *) flag, GPU_MULT, std::memory_order_release);
+	    while (std::atomic_load_explicit((std::atomic<int> *) flag, std::memory_order_acquire) != GPU_WAIT);
+	    results.push_back(*result);
+	    //cout << a << " * " << b << " = " << a * b << endl;
+	  }
 	}
 
 	std::atomic_store_explicit((std::atomic<int> *) flag, GPU_QUIT, std::memory_order_release);

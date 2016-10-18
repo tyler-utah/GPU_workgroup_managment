@@ -222,7 +222,10 @@ __kernel void makeOctree(
   __global unsigned int* particlesDone,
   unsigned int maxchilds,
   __global unsigned int *stealAttempts,
-  const int num_pools)
+  const int num_pools,
+  __global Task *deq,
+  __global DequeHeader *dh,
+  unsigned int maxlength)
 {
   /* Hugues: in Cuda version, frompart and topart are __local (i.e.,
    * __shared__), but here the OpenCL compiler complains if I declare
@@ -241,8 +244,14 @@ __kernel void makeOctree(
 
   unsigned int localStealAttempts;
 
-  /* --- initOctree: global init */
   if (get_global_id(0) == 0) {
+    /* ---------- initDLBABP ----------*/
+    dlbabp->deq = deq;
+    dlbabp->dh = dh;
+    dlbabp->maxlength = maxlength;
+    /* ---------- end of initDLBABP ----------*/
+
+    /* ---------- initOctree: global init ---------- */
     *treeSize = 100;
     *particlesDone = 0;
     /* In Cuda, maxl is a kernel global initialized to 0 */
@@ -261,8 +270,8 @@ __kernel void makeOctree(
     t.flip = false;
 
     DLBABP_enqueue(dlbabp, &t, maxl);
+    /* ---------- end of initOctree ---------- */
   }
-  /* ---------- end of initOctree ---------- */
 
   barrier(CLK_GLOBAL_MEM_FENCE);
   
@@ -364,22 +373,6 @@ __kernel void makeOctree(
         }
       }
     }
-  }
-}
-
-/*---------------------------------------------------------------------------*/
-
-__kernel void initDLBABP(
-  __global DLBABP *dlbabp,
-  __global Task *deq,
-  __global DequeHeader *dh,
-  unsigned int maxlength)
-{
-  /* Hugues: only one thread might touch global memory */
-  if (get_global_id(0) == 0) {
-    dlbabp->deq = deq;
-    dlbabp->dh = dh;
-    dlbabp->maxlength = maxlength;
   }
 }
 
