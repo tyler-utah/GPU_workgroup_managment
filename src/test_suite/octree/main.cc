@@ -37,10 +37,8 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  LBMethod method = Dynamic;
-
   Octree o;
-  o.run(threads, blocks, method, maxChildren, particleCount);
+  o.run(threads, blocks, maxChildren, particleCount);
 
   printf("Threads: %d Blocks: %d Method: dynamic ParticleCount: %d maxChildren: %d "
          "MaxMem: %d Time: %f\n",
