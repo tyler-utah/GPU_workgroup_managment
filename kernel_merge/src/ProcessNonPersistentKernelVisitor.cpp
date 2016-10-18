@@ -27,29 +27,18 @@ bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   return true;
 }
 
-
-void ProcessNonPersistentKernelVisitor::EmitRewrittenText(std::ostream & out) {
-  const RewriteBuffer *RewriteBuf =
-    RW.getRewriteBufferFor(AU->getSourceManager().getMainFileID());
-  if (!RewriteBuf) {
-    errs() << "Nothing was re-written\n";
-    exit(1);
-  }
-  out << std::string(RewriteBuf->begin(), RewriteBuf->end());
-}
-
 void ProcessNonPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
-  if (KI.KernelFunction) {
+  if (GetKI().KernelFunction) {
     errs() << "Multiple kernel functions in source file not supported, stopping.\n";
     exit(1);
   }
-  KI.KernelFunction = D;
+  GetKI().KernelFunction = D;
 
   if (D->getNumParams() == 0) {
-    KI.OriginalParameterText = "";
+    GetKI().OriginalParameterText = "";
   }
   else {
-    KI.OriginalParameterText = RW.getRewrittenText(
+    GetKI().OriginalParameterText = RW.getRewrittenText(
       SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
         D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
   }
@@ -64,4 +53,5 @@ void ProcessNonPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
 
   // Remove the "kernel" attribute
   RW.RemoveText(D->getAttr<OpenCLKernelAttr>()->getRange());
+
 }

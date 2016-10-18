@@ -31,6 +31,7 @@ add_executable(kernel_merge
   src/ProcessNonPersistentKernelVisitor.cpp
   include/ProcessPersistentKernelVisitor.h
   include/ProcessNonPersistentKernelVisitor.h
+  include/ProcessKernelVisitor.h
   include/KernelInfo.h
 )
 
