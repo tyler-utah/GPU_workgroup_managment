@@ -4,6 +4,69 @@
 
 #include <ARCMigrate\Transforms.h>
 
+template <class T>
+class RecordLoopAndSwitchDepth : public RecursiveASTVisitor<T> {
+
+public:
+
+  explicit RecordLoopAndSwitchDepth() {
+    this->count = 0;
+  }
+
+  bool TraverseWhileStmt(WhileStmt *S) {
+    this->count++;
+    bool result = RecursiveASTVisitor::TraverseWhileStmt(S);
+    this->count--;
+    return result;
+  }
+
+  bool TraverseForStmt(ForStmt *S) {
+    this->count++;
+    bool result = RecursiveASTVisitor::TraverseForStmt(S);
+    this->count--;
+    return result;
+  }
+
+  bool TraverseDoStmt(DoStmt *S) {
+    this->count++;
+    bool result = RecursiveASTVisitor::TraverseDoStmt(S);
+    this->count--;
+    return result;
+  }
+
+  bool TraverseSwitchStmt(SwitchStmt *S) {
+    this->count++;
+    bool result = RecursiveASTVisitor::TraverseSwitchStmt(S);
+    this->count--;
+    return result;
+  }
+
+protected:
+  int count;
+
+};
+
+class ReplaceTopLevelBreakWithReturn : public RecordLoopAndSwitchDepth<ReplaceTopLevelBreakWithReturn> {
+
+public:
+
+  explicit ReplaceTopLevelBreakWithReturn(WhileStmt *S, Rewriter &RW) : RW(RW) {
+    TraverseStmt(S->getBody());
+  }
+
+  bool VisitBreakStmt(BreakStmt *S) {
+    if (this->count == 0) {
+      // This is a top-level break, so replace it with a return
+      RW.ReplaceText(S->getSourceRange(), "return");
+    }
+    return true;
+  }
+
+private:
+  Rewriter &RW;
+
+};
+
 bool ProcessPersistentKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
 {
 
@@ -28,6 +91,8 @@ void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
   RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(__restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { return; }\n");
   RW.InsertTextBefore(CS->getRBracLoc(), "}");
 
+  ReplaceTopLevelBreakWithReturn RTLBWR(S, RW);
+
 }
 
 bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
@@ -45,14 +110,14 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     ForkPointCounter++;
     assert(CE->getNumArgs() == 1);
     std::stringstream sstr;
-    sstr << "{ Restoration_ctx to_fork; to_fork.target = " << ForkPointCounter << "; ";
+    sstr << "{ Restoration_ctx __to_fork; __to_fork.target = " << ForkPointCounter << "; ";
     for (auto DS : DeclsToRestore) {
       for (auto D : DS->decls()) {
         VarDecl *VD = dyn_cast<VarDecl>(D);
-        sstr << "to_fork." << VD->getNameAsString() << " = " << VD->getNameAsString() << "; ";
+        sstr << "__to_fork." << VD->getNameAsString() << " = " << VD->getNameAsString() << "; ";
       }
     }
-    sstr << "global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad, &to_fork); } ";
+    sstr << "global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad, &__to_fork); } ";
     sstr << "case " << ForkPointCounter << ": __restoration_ctx->target = 0";
     RW.ReplaceText(CE->getSourceRange(), sstr.str());
   }
@@ -145,19 +210,19 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   this->RestorationCtx = "typedef struct {\n";
   this->RestorationCtx += "  uchar target;\n";
 
-  std::string restorationCode;
-  restorationCode += "if(__restoration_ctx->target != 0) {\n";
+  std::string preLoopCode;
+  preLoopCode += "if(__restoration_ctx->target != 0) {\n";
   for (auto DS : DeclsToRestore) {
     for (auto D : DS->decls()) {
       VarDecl *VD = dyn_cast<VarDecl>(D);
-      restorationCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
+      preLoopCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
       this->RestorationCtx += "  " + VD->getType().getAsString() + " " + VD->getNameAsString() + ";\n";
     }
   }
-  restorationCode += "}\n";
+  preLoopCode += "}\n";
   this->RestorationCtx += "} Restoration_ctx;\n\n";
 
-  RW.InsertTextBefore(WhileLoop->getLocStart(), restorationCode);
+  RW.InsertTextBefore(WhileLoop->getLocStart(), preLoopCode);
 
   ProcessWhileStmt(WhileLoop);
 

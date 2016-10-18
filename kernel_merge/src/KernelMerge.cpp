@@ -46,6 +46,7 @@ int main(int argc, const char **argv) {
   std::ofstream Merged;
   Merged.open("merged.cl");
 
+  Merged << "#include \"restoration_ctx.h\"\n";
   Merged << "#include \"discovery.cl\"\n";
   Merged << "#include \"kernel_ctx.cl\"\n";
   Merged << "#include \"cl_scheduler.cl\"\n";
@@ -83,6 +84,7 @@ int main(int argc, const char **argv) {
 
   Merged << "  #include \"main_device_body.cl\"\n";
   Merged << "}\n";
+  Merged << "//";
 
   Merged.close();
 
