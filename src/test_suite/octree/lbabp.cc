@@ -9,8 +9,6 @@
 
 bool LBABP::setQueueSize(cl::Context context, cl::CommandQueue queue, cl::Program program, unsigned int dequelength, unsigned int blocks)
 {
-  init = true;
-
   // Hugues: Cuda version builds and fill a host-side 'wq' and then
   // copies it to device, but 'wq' contains pointers... In OpenCL, I
   // guess we can edit these pointers only through a kernel
