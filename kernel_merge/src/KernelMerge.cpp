@@ -59,7 +59,7 @@ int main(int argc, const char **argv) {
   Merged << "kernel void mega_kernel("
                << NonPersistentVisitor.GetKI().OriginalParameterText << ", "
                << PersistentVisitor.GetKI().OriginalParameterText << ", "
-               << "__global IW_barrier * __bar, "
+               << "__global IW_barrier * bar, "
                << "__global Discovery_ctx * d_ctx, "
                << "__global Kernel_ctx * non_persistent_kernel_ctx, "
                << "__global Kernel_ctx * persistent_kernel_ctx, "
@@ -79,7 +79,7 @@ int main(int argc, const char **argv) {
   for (auto param : PersistentVisitor.GetKI().KernelFunction->parameters()) {
     Merged << param->getNameAsString() << ", ";
   }
-  Merged << "__bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local)\n";
+  Merged << "bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local)\n";
 
   Merged << "  #include \"main_device_body.cl\"\n";
   Merged << "}\n";
