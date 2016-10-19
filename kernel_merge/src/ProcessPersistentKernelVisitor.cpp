@@ -2,8 +2,6 @@
 
 #include <sstream>
 
-#include <ARCMigrate\Transforms.h>
-
 template <class T>
 class RecordLoopAndSwitchDepth : public RecursiveASTVisitor<T> {
 
@@ -103,6 +101,10 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     for (auto DS : DeclsToRestore) {
       for (auto D : DS->decls()) {
         VarDecl *VD = dyn_cast<VarDecl>(D);
+        if (dyn_cast<ArrayType>(VD->getType())) {
+          // We do not restore arrays
+          continue;
+        }
         sstr << "__to_fork." << VD->getNameAsString() << " = " << VD->getNameAsString() << "; ";
       }
     }
@@ -131,6 +133,17 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
 
   // Remove the "kernel" attribute
   RW.RemoveText(D->getAttr<OpenCLKernelAttr>()->getRange());
+
+  DetectLocalStorage(D->getBody());
+
+  for (auto VD : LocalArrays) {
+    std::stringstream strstr;
+    strstr << ", __local ";
+    std::string typeName = dyn_cast<BuiltinType>(dyn_cast<ConstantArrayType>(VD->getType())->getElementType())->getName(PrintingPolicy(AU->getLangOpts()));
+    strstr << typeName;
+    strstr << " * " << VD->getNameAsString();
+    RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), strstr.str());
+  }
 
   RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global IW_barrier * __bar");
   RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global Kernel_ctx * __k_ctx");
@@ -204,6 +217,10 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   for (auto DS : DeclsToRestore) {
     for (auto D : DS->decls()) {
       VarDecl *VD = dyn_cast<VarDecl>(D);
+      if (dyn_cast<ArrayType>(VD->getType())) {
+        // We do not restore arrays
+        continue;
+      }
       preLoopCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
       this->RestorationCtx += "  " + VD->getType().getAsString() + " " + VD->getNameAsString() + ";\n";
     }

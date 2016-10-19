@@ -1,5 +1,7 @@
 #include "ProcessNonPersistentKernelVisitor.h"
 
+#include <sstream>
+
 bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   auto name = CE->getCalleeDecl()->getAsFunction()->getNameAsString();
   if(name == "get_global_id" ||
@@ -26,21 +28,27 @@ void ProcessNonPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   GetKI().KernelFunction = D;
 
   if (D->getNumParams() == 0) {
-    GetKI().OriginalParameterText = "";
+    errs() << "The kernel must have at least one parameter, for technical reasons; please add a dummy parameter if necessary.  Stopping.\n";
+    exit(1);
   }
-  else {
-    GetKI().OriginalParameterText = RW.getRewrittenText(
-      SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
-        D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
+
+  GetKI().OriginalParameterText = RW.getRewrittenText(
+    SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
+      D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
+
+  DetectLocalStorage(D->getBody());
+
+  for (auto VD : LocalArrays) {
+    std::stringstream strstr;
+    strstr << ", __local ";
+    std::string typeName = dyn_cast<BuiltinType>(dyn_cast<ConstantArrayType>(VD->getType())->getElementType())->getName(PrintingPolicy(AU->getLangOpts()));
+    strstr << typeName;
+    strstr << " * " << VD->getNameAsString();
+    RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), strstr.str());
   }
 
   // Add "__k_ctx" parameter to kernel
-  std::string newParam = "";
-  if (D->getNumParams() > 0) {
-    newParam = ", ";
-  }
-  newParam += "__global Kernel_ctx * __k_ctx";
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), newParam);
+  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global Kernel_ctx * __k_ctx");
 
   // Remove the "kernel" attribute
   RW.RemoveText(D->getAttr<OpenCLKernelAttr>()->getRange());

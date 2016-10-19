@@ -6,6 +6,7 @@
 #include "clang/Rewrite/Core/Rewriter.h"
 
 #include "KernelInfo.h"
+#include "LocalStorageDetector.h"
 
 using namespace clang;
 using namespace llvm;
@@ -24,6 +25,10 @@ public:
     return this->KI;
   }
 
+  Rewriter& GetRW() {
+    return this->RW;
+  }
+
   void EmitRewrittenText(std::ostream & out) {
     const RewriteBuffer *RewriteBuf =
       RW.getRewriteBufferFor(AU->getSourceManager().getMainFileID());
@@ -36,6 +41,15 @@ public:
 
   virtual void ProcessKernelFunction(FunctionDecl *D) = 0;
 
+  void DetectLocalStorage(Stmt *S) {
+    LocalStorageDetector LSD(S);
+    LocalArrays = LSD.GetLocalArrays();
+  }
+
+  std::vector<VarDecl*> GetLocalArrays() {
+    return LocalArrays;
+  }
+
   bool VisitFunctionDecl(FunctionDecl *D)
   {
 
@@ -47,11 +61,12 @@ public:
 
 private:
 
-  ASTUnit *AU;
   KernelInfo KI;
 
 protected:
+  ASTUnit *AU;
   Rewriter RW;
+  std::vector<VarDecl*> LocalArrays;
 
 };
 
