@@ -227,11 +227,10 @@ __kernel void makeOctree(
   __global DequeHeader *dh,
   unsigned int maxlength)
 {
-  /* Hugues: in Cuda version, frompart and topart are __local (i.e.,
-   * __shared__), but here the OpenCL compiler complains if I declare
-   * them as __local since we assign particles and newparticles to it */
-  __global float4* frompart;
-  __global float4* topart;
+  /* Hugues: pointers to global memory, but the pointers are stored in
+     local memory */
+  __global float4* __local frompart;
+  __global float4* __local topart;
 
   __local unsigned int count[8];
   __local int sum[8];
@@ -304,9 +303,7 @@ __kernel void makeOctree(
       topart = newparticles;
     }
 
-    /* Hugues: here we use global since we've just updated frompart /
-     * topart */
-    barrier(CLK_GLOBAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 
     for(int i = local_id; i < 8; i += local_size) {
       count[i] = 0;
