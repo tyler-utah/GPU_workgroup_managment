@@ -1,4 +1,5 @@
-set(CMAKE_AMDOPENCL "c:/Program\ Files\ (x86)/AMD\ APP\ SDK/3.0/")
+#set(CMAKE_AMDOPENCL "c:/Program\ Files\ (x86)/AMD\ APP\ SDK/3.0/")
+set(CMAKE_AMDOPENCL "/opt/AMDAPPSDK-3.0")
 
 FIND_PATH(OPENCL_INCLUDE_DIR
   NAMES

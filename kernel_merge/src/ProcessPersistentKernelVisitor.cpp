@@ -1,19 +1,71 @@
 #include "ProcessPersistentKernelVisitor.h"
 
+#include "clang/Lex/Lexer.h"
+
 #include <sstream>
 
-#include <ARCMigrate\Transforms.h>
+template <class T>
+class RecordLoopAndSwitchDepth : public RecursiveASTVisitor<T> {
 
-bool ProcessPersistentKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
-{
+public:
 
-  if (D->hasAttr<OpenCLKernelAttr>() && D->hasBody()) {
-    ProcessKernelFunction(D);
+  explicit RecordLoopAndSwitchDepth() {
+    this->count = 0;
   }
 
-  return RecursiveASTVisitor::VisitFunctionDecl(D);
+  bool TraverseWhileStmt(WhileStmt *S) {
+    this->count++;
+    bool result = RecursiveASTVisitor::TraverseWhileStmt(S);
+    this->count--;
+    return result;
+  }
 
-}
+  bool TraverseForStmt(ForStmt *S) {
+    this->count++;
+    bool result = RecursiveASTVisitor::TraverseForStmt(S);
+    this->count--;
+    return result;
+  }
+
+  bool TraverseDoStmt(DoStmt *S) {
+    this->count++;
+    bool result = RecursiveASTVisitor::TraverseDoStmt(S);
+    this->count--;
+    return result;
+  }
+
+  bool TraverseSwitchStmt(SwitchStmt *S) {
+    this->count++;
+    bool result = RecursiveASTVisitor::TraverseSwitchStmt(S);
+    this->count--;
+    return result;
+  }
+
+protected:
+  int count;
+
+};
+
+class ReplaceTopLevelBreakWithReturn : public RecordLoopAndSwitchDepth<ReplaceTopLevelBreakWithReturn> {
+
+public:
+
+  explicit ReplaceTopLevelBreakWithReturn(WhileStmt *S, Rewriter &RW) : RW(RW) {
+    TraverseStmt(S->getBody());
+  }
+
+  bool VisitBreakStmt(BreakStmt *S) {
+    if (this->count == 0) {
+      // This is a top-level break, so replace it with a return
+      RW.ReplaceText(S->getSourceRange(), "return");
+    }
+    return true;
+  }
+
+private:
+  Rewriter &RW;
+
+};
 
 void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
 
@@ -27,6 +79,8 @@ void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
   RW.ReplaceText(S->getCond()->getSourceRange(), "true");
   RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(__restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { return; }\n");
   RW.InsertTextBefore(CS->getRBracLoc(), "}");
+
+  ReplaceTopLevelBreakWithReturn RTLBWR(S, RW);
 
 }
 
@@ -45,14 +99,18 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     ForkPointCounter++;
     assert(CE->getNumArgs() == 1);
     std::stringstream sstr;
-    sstr << "{ Restoration_ctx to_fork; to_fork.target = " << ForkPointCounter << "; ";
+    sstr << "{ Restoration_ctx __to_fork; __to_fork.target = " << ForkPointCounter << "; ";
     for (auto DS : DeclsToRestore) {
       for (auto D : DS->decls()) {
         VarDecl *VD = dyn_cast<VarDecl>(D);
-        sstr << "to_fork." << VD->getNameAsString() << " = " << VD->getNameAsString() << "; ";
+        if (dyn_cast<ArrayType>(VD->getType())) {
+          // We do not restore arrays
+          continue;
+        }
+        sstr << "__to_fork." << VD->getNameAsString() << " = " << VD->getNameAsString() << "; ";
       }
     }
-    sstr << "global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad, &to_fork); } ";
+    sstr << "global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad, &__to_fork); } ";
     sstr << "case " << ForkPointCounter << ": __restoration_ctx->target = 0";
     RW.ReplaceText(CE->getSourceRange(), sstr.str());
   }
@@ -60,29 +118,57 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
 }
 
 void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
-  if (KI.KernelFunction) {
+  if (GetKI().KernelFunction) {
     errs() << "Multiple kernel functions in source file not supported, stopping.\n";
     exit(1);
   }
 
-  KI.KernelFunction = D;
+  GetKI().KernelFunction = D;
 
+  SourceLocation endOfParams;
+  bool paramAlreadyExists;
   if (D->getNumParams() == 0) {
-    errs() << "The kernel must have at least one parameter, for technical reasons; please add a dummy parameter if necessary.  Stopping.\n";
-    exit(1);
+    GetKI().OriginalParameterText = "";
+    endOfParams = Lexer::findLocationAfterToken(D->getLocation(),
+                                                tok::l_paren,
+                                                AU->getSourceManager(),
+                                                AU->getLangOpts(),
+                                                /*SkipTrailingWhitespaceAndNewLine=*/true);
+    paramAlreadyExists = false;
+  } else {
+    GetKI().OriginalParameterText = RW.getRewrittenText(
+      SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
+        D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
+    endOfParams = Lexer::getLocForEndOfToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), 0, AU->getSourceManager(), AU->getLangOpts());
+    paramAlreadyExists = true;
   }
-  KI.OriginalParameterText = RW.getRewrittenText(
-    SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
-      D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
 
   // Remove the "kernel" attribute
   RW.RemoveText(D->getAttr<OpenCLKernelAttr>()->getRange());
 
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global IW_barrier * __bar");
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global Kernel_ctx * __k_ctx");
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", CL_Scheduler_ctx __s_ctx");
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __local int * __scratchpad");
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", Restoration_ctx * __restoration_ctx");
+  DetectLocalStorage(D->getBody());
+
+  for (auto VD : LocalArrays) {
+    std::stringstream strstr;
+    if (paramAlreadyExists) {
+      strstr << ", ";
+    }
+    paramAlreadyExists = true;
+    strstr << "__local ";
+    std::string typeName = dyn_cast<BuiltinType>(dyn_cast<ConstantArrayType>(VD->getType())->getElementType())->getName(PrintingPolicy(AU->getLangOpts()));
+    strstr << typeName;
+    strstr << " * " << VD->getNameAsString();
+    RW.InsertTextAfter(endOfParams, strstr.str());
+  }
+
+  if (paramAlreadyExists) {
+    RW.InsertTextAfter(endOfParams, ", ");
+  }
+  RW.InsertTextAfter(endOfParams, "__global IW_barrier * __bar");
+  RW.InsertTextAfter(endOfParams, ", __global Kernel_ctx * __k_ctx");
+  RW.InsertTextAfter(endOfParams, ", CL_Scheduler_ctx __s_ctx");
+  RW.InsertTextAfter(endOfParams, ", __local int * __scratchpad");
+  RW.InsertTextAfter(endOfParams, ", Restoration_ctx * __restoration_ctx");
 
   // Add "__k_ctx" parameter to kernel
 
@@ -145,30 +231,24 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   this->RestorationCtx = "typedef struct {\n";
   this->RestorationCtx += "  uchar target;\n";
 
-  std::string restorationCode;
-  restorationCode += "if(__restoration_ctx->target != 0) {\n";
+  std::string preLoopCode;
+  preLoopCode += "if(__restoration_ctx->target != 0) {\n";
   for (auto DS : DeclsToRestore) {
     for (auto D : DS->decls()) {
       VarDecl *VD = dyn_cast<VarDecl>(D);
-      restorationCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
+      if (dyn_cast<ArrayType>(VD->getType())) {
+        // We do not restore arrays
+        continue;
+      }
+      preLoopCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
       this->RestorationCtx += "  " + VD->getType().getAsString() + " " + VD->getNameAsString() + ";\n";
     }
   }
-  restorationCode += "}\n";
+  preLoopCode += "}\n";
   this->RestorationCtx += "} Restoration_ctx;\n\n";
 
-  RW.InsertTextBefore(WhileLoop->getLocStart(), restorationCode);
+  RW.InsertTextBefore(WhileLoop->getLocStart(), preLoopCode);
 
   ProcessWhileStmt(WhileLoop);
 
-}
-
-void ProcessPersistentKernelVisitor::EmitRewrittenText(std::ostream & out) {
-  const RewriteBuffer *RewriteBuf =
-    RW.getRewriteBufferFor(AU->getSourceManager().getMainFileID());
-  if (!RewriteBuf) {
-    errs() << "Nothing was re-written\n";
-    exit(1);
-  }
-  out << std::string(RewriteBuf->begin(), RewriteBuf->end());
 }

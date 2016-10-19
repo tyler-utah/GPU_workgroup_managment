@@ -1,4 +1,5 @@
 #include <fstream>
+#include <sstream>
 
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Rewrite/Core/Rewriter.h"
@@ -46,6 +47,63 @@ int main(int argc, const char **argv) {
   std::ofstream Merged;
   Merged.open("merged.cl");
 
+  std::stringstream MegaKernel;
+
+  MegaKernel << "kernel void mega_kernel(";
+
+  if(NonPersistentVisitor.GetKI().OriginalParameterText != "") {
+    MegaKernel << NonPersistentVisitor.GetKI().OriginalParameterText << ", ";
+  }
+
+  if (PersistentVisitor.GetKI().OriginalParameterText != "") {
+    MegaKernel << PersistentVisitor.GetKI().OriginalParameterText << ", ";
+  }
+
+  MegaKernel
+    << "__global IW_barrier * bar, "
+    << "__global Discovery_ctx * d_ctx, "
+    << "__global Kernel_ctx * non_persistent_kernel_ctx, "
+    << "__global Kernel_ctx * persistent_kernel_ctx, "
+    << "SCHEDULER_ARGS) {\n";
+
+  for (auto VD : NonPersistentVisitor.GetLocalArrays()) {
+    MegaKernel << NonPersistentVisitor.GetRW().getRewrittenText(VD->getSourceRange()) << ";\n";
+  }
+  for (auto VD : PersistentVisitor.GetLocalArrays()) {
+    MegaKernel << PersistentVisitor.GetRW().getRewrittenText(VD->getSourceRange()) << ";\n";
+  }
+
+  MegaKernel << "  #define NON_PERSISTENT_KERNEL "
+    << NonPersistentVisitor.GetKI().KernelFunction->getNameAsString()
+    << "(";
+  for (auto param : NonPersistentVisitor.GetKI().KernelFunction->parameters()) {
+    MegaKernel << param->getNameAsString() << ", ";
+  }
+  for (auto VD : NonPersistentVisitor.GetLocalArrays()) {
+    MegaKernel << VD->getNameAsString() << ", ";
+    NonPersistentVisitor.GetRW().ReplaceText(VD->getSourceRange(), "");
+  }
+
+  MegaKernel << "non_persistent_kernel_ctx)\n";
+
+  MegaKernel << "  #define PERSISTENT_KERNEL "
+    << PersistentVisitor.GetKI().KernelFunction->getNameAsString()
+    << "(";
+  for (auto param : PersistentVisitor.GetKI().KernelFunction->parameters()) {
+    MegaKernel << param->getNameAsString() << ", ";
+  }
+  for (auto VD : PersistentVisitor.GetLocalArrays()) {
+    MegaKernel << VD->getNameAsString() << ", ";
+    PersistentVisitor.GetRW().ReplaceText(VD->getSourceRange(), "");
+  }
+  MegaKernel << "bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local)\n";
+
+  MegaKernel << "  #include \"main_device_body.cl\"\n";
+  MegaKernel << "}\n";
+  MegaKernel << "//";
+
+
+  Merged << "#include \"restoration_ctx.h\"\n";
   Merged << "#include \"discovery.cl\"\n";
   Merged << "#include \"kernel_ctx.cl\"\n";
   Merged << "#include \"cl_scheduler.cl\"\n";
@@ -56,33 +114,10 @@ int main(int argc, const char **argv) {
   PersistentVisitor.EmitRewrittenText(Merged);
   Merged << "\n";
   Merged << "\n";
-  Merged << "kernel void mega_kernel("
-               << NonPersistentVisitor.GetKI().OriginalParameterText << ", "
-               << PersistentVisitor.GetKI().OriginalParameterText << ", "
-               << "__global IW_barrier * __bar, "
-               << "__global Discovery_ctx * d_ctx, "
-               << "__global Kernel_ctx * non_persistent_kernel_ctx, "
-               << "__global Kernel_ctx * persistent_kernel_ctx, "
-               << "SCHEDULER_ARGS) {\n";
 
-  Merged << "  #define NON_PERSISTENT_KERNEL "
-         << NonPersistentVisitor.GetKI().KernelFunction->getNameAsString()
-         << "(";
-  for (auto param : NonPersistentVisitor.GetKI().KernelFunction->parameters()) {
-    Merged << param->getNameAsString() << ", ";
-  }
-  Merged << "non_persistent_kernel_ctx)\n";
+  Merged << MegaKernel.str();
 
-  Merged << "  #define PERSISTENT_KERNEL "
-         << PersistentVisitor.GetKI().KernelFunction->getNameAsString()
-         << "(";
-  for (auto param : PersistentVisitor.GetKI().KernelFunction->parameters()) {
-    Merged << param->getNameAsString() << ", ";
-  }
-  Merged << "__bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local)\n";
-
-  Merged << "  #include \"main_device_body.cl\"\n";
-  Merged << "}\n";
+  Merged.close();
 
   return 0;
 

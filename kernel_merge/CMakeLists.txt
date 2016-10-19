@@ -29,9 +29,12 @@ add_executable(kernel_merge
   src/KernelMerge.cpp
   src/ProcessPersistentKernelVisitor.cpp
   src/ProcessNonPersistentKernelVisitor.cpp
+  src/LocalStorageDetector.cpp
   include/ProcessPersistentKernelVisitor.h
   include/ProcessNonPersistentKernelVisitor.h
+  include/ProcessKernelVisitor.h
   include/KernelInfo.h
+  include/LocalStorageDetector.h
 )
 
 set_target_properties(kernel_merge

@@ -8,3 +8,5 @@ write-ups/PLDI/paper.pdf
 
 *~
 *.bak
+
+build

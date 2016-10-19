@@ -1,13 +1,8 @@
 #include "ProcessNonPersistentKernelVisitor.h"
 
-bool ProcessNonPersistentKernelVisitor::VisitFunctionDecl(FunctionDecl *D)
-{
+#include <sstream>
 
-  if (D->hasAttr<OpenCLKernelAttr>() && D->hasBody()) {
-    ProcessKernelFunction(D);
-  }
-  return RecursiveASTVisitor::VisitFunctionDecl(D);
-}
+#include "clang/Lex/Lexer.h"
 
 bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   auto name = CE->getCalleeDecl()->getAsFunction()->getNameAsString();
@@ -27,41 +22,54 @@ bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   return true;
 }
 
-
-void ProcessNonPersistentKernelVisitor::EmitRewrittenText(std::ostream & out) {
-  const RewriteBuffer *RewriteBuf =
-    RW.getRewriteBufferFor(AU->getSourceManager().getMainFileID());
-  if (!RewriteBuf) {
-    errs() << "Nothing was re-written\n";
-    exit(1);
-  }
-  out << std::string(RewriteBuf->begin(), RewriteBuf->end());
-}
-
 void ProcessNonPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
-  if (KI.KernelFunction) {
+  if (GetKI().KernelFunction) {
     errs() << "Multiple kernel functions in source file not supported, stopping.\n";
     exit(1);
   }
-  KI.KernelFunction = D;
+  GetKI().KernelFunction = D;
 
+  SourceLocation endOfParams;
+
+  bool paramAlreadyExists;
   if (D->getNumParams() == 0) {
-    KI.OriginalParameterText = "";
-  }
-  else {
-    KI.OriginalParameterText = RW.getRewrittenText(
+    GetKI().OriginalParameterText = "";
+    endOfParams = Lexer::findLocationAfterToken(D->getLocation(),
+      tok::l_paren,
+      AU->getSourceManager(),
+      AU->getLangOpts(),
+      /*SkipTrailingWhitespaceAndNewLine=*/true);
+    paramAlreadyExists = false;
+  } else {
+    GetKI().OriginalParameterText = RW.getRewrittenText(
       SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
         D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
+    endOfParams = Lexer::getLocForEndOfToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), 0, AU->getSourceManager(), AU->getLangOpts());
+    paramAlreadyExists = true;
+  }
+
+  DetectLocalStorage(D->getBody());
+
+  for (auto VD : LocalArrays) {
+    std::stringstream strstr;
+    if (paramAlreadyExists) {
+      strstr << ", ";
+    }
+    paramAlreadyExists = true;
+    strstr << "__local ";
+    std::string typeName = dyn_cast<BuiltinType>(dyn_cast<ConstantArrayType>(VD->getType())->getElementType())->getName(PrintingPolicy(AU->getLangOpts()));
+    strstr << typeName;
+    strstr << " * " << VD->getNameAsString();
+    RW.InsertTextAfter(endOfParams, strstr.str());
   }
 
   // Add "__k_ctx" parameter to kernel
-  std::string newParam = "";
-  if (D->getNumParams() > 0) {
-    newParam = ", ";
+  if(paramAlreadyExists) {
+    RW.InsertTextAfter(endOfParams, ", ");
   }
-  newParam += "__global Kernel_ctx * __k_ctx";
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), newParam);
+  RW.InsertTextAfter(endOfParams, "__global Kernel_ctx * __k_ctx");
 
   // Remove the "kernel" attribute
   RW.RemoveText(D->getAttr<OpenCLKernelAttr>()->getRange());
+
 }

@@ -1,42 +1,25 @@
 #ifndef KERNEL_MERGE_PROCESSNONPERSISTENTKERNELVISITOR_H
 #define KERNEL_MERGE_PROCESSNONPERSISTENTKERNELVISITOR_H
 
-#include "clang/Frontend/ASTUnit.h"
-#include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/Rewrite/Core/Rewriter.h"
-
-#include "KernelInfo.h"
+#include "ProcessKernelVisitor.h"
 
 using namespace clang;
 using namespace llvm;
 
 class ProcessNonPersistentKernelVisitor
-  : public RecursiveASTVisitor<ProcessNonPersistentKernelVisitor> {
+  : public ProcessKernelVisitor<ProcessNonPersistentKernelVisitor> {
 public:
-  ProcessNonPersistentKernelVisitor(ASTUnit * AU) {
-    this->AU = AU;
-    this->RW = Rewriter(AU->getSourceManager(),
-      AU->getLangOpts());
+  ProcessNonPersistentKernelVisitor(ASTUnit * AU) : ProcessKernelVisitor(AU) {
     TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
+    if (!GetKI().KernelFunction) {
+      errs() << "Non-persistent kernel file must declare a kernel function.\n";
+      exit(1);
+    }
   }
-
-  bool VisitFunctionDecl(FunctionDecl *D);
 
   bool VisitCallExpr(CallExpr *CE);
 
-  void EmitRewrittenText(std::ostream & out);
-
-  KernelInfo GetKI() {
-    return this->KI;
-  }
-
-private:
-
-  void ProcessKernelFunction(FunctionDecl * D);
-
-  ASTUnit *AU;
-  Rewriter RW;
-  KernelInfo KI;
+  virtual void ProcessKernelFunction(FunctionDecl *D);
 
 };
 
