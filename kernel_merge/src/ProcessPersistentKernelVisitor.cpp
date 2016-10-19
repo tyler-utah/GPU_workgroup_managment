@@ -1,5 +1,7 @@
 #include "ProcessPersistentKernelVisitor.h"
 
+#include "clang/Lex/Lexer.h"
+
 #include <sstream>
 
 template <class T>
@@ -123,13 +125,23 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
 
   GetKI().KernelFunction = D;
 
+  SourceLocation endOfParams;
+  bool paramAlreadyExists;
   if (D->getNumParams() == 0) {
-    errs() << "The kernel must have at least one parameter, for technical reasons; please add a dummy parameter if necessary.  Stopping.\n";
-    exit(1);
+    GetKI().OriginalParameterText = "";
+    endOfParams = Lexer::findLocationAfterToken(D->getLocation(),
+                                                tok::l_paren,
+                                                AU->getSourceManager(),
+                                                AU->getLangOpts(),
+                                                /*SkipTrailingWhitespaceAndNewLine=*/true);
+    paramAlreadyExists = false;
+  } else {
+    GetKI().OriginalParameterText = RW.getRewrittenText(
+      SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
+        D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
+    endOfParams = Lexer::getLocForEndOfToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), 0, AU->getSourceManager(), AU->getLangOpts());
+    paramAlreadyExists = true;
   }
-  GetKI().OriginalParameterText = RW.getRewrittenText(
-    SourceRange(D->getParamDecl(0)->getSourceRange().getBegin(),
-      D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd()));
 
   // Remove the "kernel" attribute
   RW.RemoveText(D->getAttr<OpenCLKernelAttr>()->getRange());
@@ -138,18 +150,25 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
 
   for (auto VD : LocalArrays) {
     std::stringstream strstr;
-    strstr << ", __local ";
+    if (paramAlreadyExists) {
+      strstr << ", ";
+    }
+    paramAlreadyExists = true;
+    strstr << "__local ";
     std::string typeName = dyn_cast<BuiltinType>(dyn_cast<ConstantArrayType>(VD->getType())->getElementType())->getName(PrintingPolicy(AU->getLangOpts()));
     strstr << typeName;
     strstr << " * " << VD->getNameAsString();
-    RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), strstr.str());
+    RW.InsertTextAfter(endOfParams, strstr.str());
   }
 
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global IW_barrier * __bar");
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __global Kernel_ctx * __k_ctx");
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", CL_Scheduler_ctx __s_ctx");
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", __local int * __scratchpad");
-  RW.InsertTextAfterToken(D->getParamDecl(D->getNumParams() - 1)->getSourceRange().getEnd(), ", Restoration_ctx * __restoration_ctx");
+  if (paramAlreadyExists) {
+    RW.InsertTextAfter(endOfParams, ", ");
+  }
+  RW.InsertTextAfter(endOfParams, "__global IW_barrier * __bar");
+  RW.InsertTextAfter(endOfParams, ", __global Kernel_ctx * __k_ctx");
+  RW.InsertTextAfter(endOfParams, ", CL_Scheduler_ctx __s_ctx");
+  RW.InsertTextAfter(endOfParams, ", __local int * __scratchpad");
+  RW.InsertTextAfter(endOfParams, ", Restoration_ctx * __restoration_ctx");
 
   // Add "__k_ctx" parameter to kernel
 

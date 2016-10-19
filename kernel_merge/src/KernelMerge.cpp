@@ -49,9 +49,17 @@ int main(int argc, const char **argv) {
 
   std::stringstream MegaKernel;
 
-  MegaKernel << "kernel void mega_kernel("
-    << NonPersistentVisitor.GetKI().OriginalParameterText << ", "
-    << PersistentVisitor.GetKI().OriginalParameterText << ", "
+  MegaKernel << "kernel void mega_kernel(";
+
+  if(NonPersistentVisitor.GetKI().OriginalParameterText != "") {
+    MegaKernel << NonPersistentVisitor.GetKI().OriginalParameterText << ", ";
+  }
+
+  if (PersistentVisitor.GetKI().OriginalParameterText != "") {
+    MegaKernel << PersistentVisitor.GetKI().OriginalParameterText << ", ";
+  }
+
+  MegaKernel
     << "__global IW_barrier * bar, "
     << "__global Discovery_ctx * d_ctx, "
     << "__global Kernel_ctx * non_persistent_kernel_ctx, "
