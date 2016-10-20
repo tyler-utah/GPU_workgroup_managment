@@ -73,6 +73,13 @@ class CL_Communicator {
 		// Should possibly check groups here again to make sure we don't ask for too many (compare to participating groups)
 		time_ret send_task_synchronous(int groups, const char * label) {
 
+			if (groups > participating_groups) {
+				send_quit_signal();
+				std::cout << "WARNING CL_Communicator::task_synchronous(): cannot send persistent task with " << groups << " workgroups since there are only " << participating_groups << " participating groups" << std::endl;
+				std::flush(std::cout);
+				exit(EXIT_FAILURE);
+			}
+
 			// For timing. Should be better engineered.
 			unsigned long long response_begin, response_end, execution_begin, execution_end;
 
@@ -117,9 +124,10 @@ class CL_Communicator {
 
 		void send_persistent_task(int groups) {
 			if (groups > participating_groups) {
+				send_quit_signal();
 				std::cout << "WARNING CL_Communicator::send_persistent_task(): cannot send persistent task with " << groups << " workgroups since there are only " << participating_groups << " participating groups" << std::endl;
 				std::flush(std::cout);
-				return;
+				exit(EXIT_FAILURE);
 			}
 			*(scheduler.task_size) = groups;
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_PERSISTENT_TASK, std::memory_order_release);
