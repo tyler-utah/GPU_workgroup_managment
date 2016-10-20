@@ -411,7 +411,9 @@ void octree_main (
          here. I do not change the ckill() macro since this return value
          is currently used in the implementation of global_barrier_*(),
          see iw_barrier.cl source file */
-      __ckill(kernel_ctx, scheduler_ctx, scratchpad, group_id);
+      if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, group_id) == -1) {
+        return;
+      }
     }
 
     // Try to acquire new task
