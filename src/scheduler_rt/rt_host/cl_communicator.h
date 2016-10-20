@@ -34,6 +34,7 @@ class CL_Communicator {
 			scheduler = s_ctx;
 			executing_persistent = false;
 			persistent_begin = persistent_end = 0;
+                        participating_groups = 0;
 		}
 
 		int launch_mega_kernel() {
@@ -115,6 +116,11 @@ class CL_Communicator {
 		}
 
 		void send_persistent_task(int groups) {
+			if (groups > participating_groups) {
+				std::cout << "WARNING CL_Communicator::send_persistent_task(): cannot send persistent task with " << groups << " workgroups since there are only " << participating_groups << " participating groups" << std::endl;
+				std::flush(std::cout);
+				return;
+			}
 			*(scheduler.task_size) = groups;
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_PERSISTENT_TASK, std::memory_order_release);
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_GOT_GROUPS) {

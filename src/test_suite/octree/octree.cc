@@ -43,9 +43,8 @@ float Octree::printStats()
 
 /*---------------------------------------------------------------------------*/
 
-bool Octree::run(unsigned int threads, unsigned int blocks, LBMethod method, int maxChildren, int numParticles)
+bool Octree::run(unsigned int threads, unsigned int blocks, int maxChildren, int numParticles)
 {
-  this->method = method;
   this->numParticles = numParticles;
 
   // Initiate OpenCL
