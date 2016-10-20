@@ -178,7 +178,7 @@ int main(int argc, char *argv[]) {
   // Set up the communicator
   int local_size = FLAGS_threads;
   int wg_size = MAX_P_GROUPS;
-  CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
+  CL_Communicator cl_comm_disco(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
 
   int arg_index = 0;
 
@@ -256,23 +256,21 @@ int main(int argc, char *argv[]) {
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
   check_ocl(err);
   arg_index++;
-  
+
+  // relevant args for a run just to get the number of participating
+  // workgroups
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
   check_ocl(err);
   arg_index++;
-
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_ctx_mem);
   check_ocl(err);
   arg_index++;
-
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
   check_ocl(err);
   arg_index++;
-  
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
   check_ocl(err);
   arg_index++;
-
   err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
   check_ocl(err);
 
@@ -282,19 +280,33 @@ int main(int argc, char *argv[]) {
   exec.exec_queue.finish();
   check_ocl(err);
 
-  err = cl_comm.launch_mega_kernel();
-  int participating_groups = cl_comm.number_of_discovered_groups();
-  cl_comm.send_quit_signal();
+  err = cl_comm_disco.launch_mega_kernel();
+  int participating_groups = cl_comm_disco.number_of_discovered_groups();
+  cl_comm_disco.send_quit_signal();
   err = exec.exec_queue.finish();
   check_ocl(err);
 
   cout << "HUGUES: number of participating wg: " << participating_groups << endl;
 
-  //TODO: reset affected arguments
+  // reset affected arguments
+  for (int i = 0; i < MAX_P_GROUPS; i++) {
+    h_bar.barrier_flags[i] = 0;
+  }
+  h_bar.phase = 0;
+  err = exec.exec_queue.enqueueWriteBuffer(d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
+  check_ocl(err);
+  
+  free_scheduler_ctx(&exec, &s_ctx);
+  mk_init_scheduler_ctx(&exec, &s_ctx);
+  mk_init_discovery_ctx(&d_ctx);
+  err = exec.exec_queue.enqueueWriteBuffer(d_ctx_mem, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx);
+  check_ocl(err);
+
+  CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
 
   //------------------------------------------------------------
 
-  // // Reduce kernel args. 
+  // Reduce kernel args. 
   int graphics_arr_length = 1048576;
   cl_int * h_graphics_buffer = (cl_int *) malloc(sizeof(cl_int) * graphics_arr_length);
   int arr_min = INT_MAX;
@@ -467,6 +479,9 @@ int main(int argc, char *argv[]) {
   exec.exec_queue.finish();
   check_ocl(err);
   err = cl_comm.launch_mega_kernel();
+  check_ocl(err);
+
+  cout << "CANARY" << endl;
   
   if (FLAGS_non_persistent_wgs == -1) {
     workgroups_for_non_persistent = participating_groups - 1;
