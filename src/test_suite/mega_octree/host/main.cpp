@@ -126,6 +126,149 @@ double genrand_real1(void);
 
 /* ------------------------------------------------------------------------- */
 
+// get_num_participating_groups() launch the mega-kernel just to run the
+// discovery protocol and obtain the number of participating
+// groups.
+int get_num_participating_groups(CL_Execution *exec)
+{
+  int err = 0;
+  Discovery_ctx d_ctx;
+  mk_init_discovery_ctx(&d_ctx);
+  cl::Buffer d_ctx_mem (exec->exec_context, CL_MEM_READ_WRITE, sizeof(Discovery_ctx));
+  err = exec->exec_queue.enqueueWriteBuffer(d_ctx_mem, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx);
+  check_ocl(err);
+
+  CL_Scheduler_ctx s_ctx;
+  mk_init_scheduler_ctx(exec, &s_ctx);
+
+  // Set up the communicator
+  int local_size = FLAGS_threads;
+  int wg_size = MAX_P_GROUPS;
+  CL_Communicator cl_comm_disco(*exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
+
+  IW_barrier h_bar;
+  for (int i = 0; i < MAX_P_GROUPS; i++) {
+    h_bar.barrier_flags[i] = 0;
+  }
+  h_bar.phase = 0;
+
+  cl::Buffer d_bar(exec->exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
+  err = exec->exec_queue.enqueueWriteBuffer(d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
+  check_ocl(err);
+
+  cl::Buffer d_graphics_kernel_ctx(exec->exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
+  cl::Buffer d_persistent_kernel_ctx(exec->exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
+
+  // Use a dummy buffer for the tasks args, which will not be started
+  // anyway
+  cl::Buffer dummy(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+
+  int arg_index = 0;
+  
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+
+  
+  // relevant args for a run just to get the number of participating
+  // workgroups
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_ctx_mem);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
+  check_ocl(err);
+  arg_index++;
+  err = set_scheduler_args(&(exec->exec_kernels["mega_kernel"]), &s_ctx, arg_index);
+  check_ocl(err);
+
+  // get number of participating workgroups
+  err = exec->exec_queue.flush();
+  check_ocl(err);
+  err = exec->exec_queue.finish();
+  check_ocl(err);
+  err = cl_comm_disco.launch_mega_kernel();
+  check_ocl(err);
+  int participating_groups = cl_comm_disco.number_of_discovered_groups();
+  cl_comm_disco.send_quit_signal();  
+  err = exec->exec_queue.finish();
+  check_ocl(err);
+
+  // free all buffers from the context
+  // err = clReleaseMemObject(d_ctx_mem);
+  // check_ocl(err);
+  // err = clReleaseMemObject(d_bar);
+  // check_ocl(err);
+  // err = clReleaseMemObject(d_graphics_kernel_ctx);
+  // check_ocl(err);
+  // err = clReleaseMemObject(d_persistent_kernel_ctx);
+  // check_ocl(err);
+  // err = clReleaseMemObject(dummy);
+  // check_ocl(err);
+  // err = exec->exec_queue.finish();
+  // check_ocl(err);
+
+  return participating_groups;
+}
+
+/* ------------------------------------------------------------------------- */
+
 int main(int argc, char *argv[]) {
 
   flags::ParseCommandLineFlags(&argc, &argv, true);
@@ -164,6 +307,10 @@ int main(int argc, char *argv[]) {
 
   get_app_kernels(exec);
 
+  int participating_groups = get_num_participating_groups(&exec);
+
+  cout << "number of participating wg: " << participating_groups << endl;
+
   // set up the discovery protocol
   Discovery_ctx d_ctx;
   mk_init_discovery_ctx(&d_ctx);
@@ -178,7 +325,7 @@ int main(int argc, char *argv[]) {
   // Set up the communicator
   int local_size = FLAGS_threads;
   int wg_size = MAX_P_GROUPS;
-  CL_Communicator cl_comm_disco(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
+  CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
 
   int arg_index = 0;
 
@@ -196,116 +343,6 @@ int main(int argc, char *argv[]) {
   cl::Buffer d_graphics_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
   cl::Buffer d_persistent_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
   
-  // Run the discovery once to get the number of participating
-  // groups. Use a stub buffer just to be able to set arguments for the
-  // tasks, it's ok since the tasks won't be started anyway.
-  cl::Buffer stubbuf(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
-
-  // set args with stubbuf
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-
-  // relevant args for a run just to get the number of participating
-  // workgroups
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_ctx_mem);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
-  check_ocl(err);
-  arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
-  check_ocl(err);
-  arg_index++;
-  err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
-  check_ocl(err);
-
-  // get number of participating workgroups
-  err = exec.exec_queue.flush();
-  check_ocl(err);
-  exec.exec_queue.finish();
-  check_ocl(err);
-
-  err = cl_comm_disco.launch_mega_kernel();
-  int participating_groups = cl_comm_disco.number_of_discovered_groups();
-  cl_comm_disco.send_quit_signal();
-  err = exec.exec_queue.finish();
-  check_ocl(err);
-
-  cout << "HUGUES: number of participating wg: " << participating_groups << endl;
-
-  // reset affected arguments
-  for (int i = 0; i < MAX_P_GROUPS; i++) {
-    h_bar.barrier_flags[i] = 0;
-  }
-  h_bar.phase = 0;
-  err = exec.exec_queue.enqueueWriteBuffer(d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
-  check_ocl(err);
-  
-  free_scheduler_ctx(&exec, &s_ctx);
-  mk_init_scheduler_ctx(&exec, &s_ctx);
-  mk_init_discovery_ctx(&d_ctx);
-  err = exec.exec_queue.enqueueWriteBuffer(d_ctx_mem, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx);
-  check_ocl(err);
-
-  CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
-
-  //------------------------------------------------------------
-
   // Reduce kernel args. 
   int graphics_arr_length = 1048576;
   cl_int * h_graphics_buffer = (cl_int *) malloc(sizeof(cl_int) * graphics_arr_length);
@@ -332,6 +369,8 @@ int main(int argc, char *argv[]) {
   // not available yet. FIXME: get the num of participating groups
   // beforehand
   const int num_pools = 20;
+
+  // TODO: use participating_groups to dimension buffers
 
   cout << "==== persistent kernel args ======" << endl;
   cout << "  numParticles: " << FLAGS_numParticles << endl;
