@@ -7,8 +7,6 @@
 #include <thread>
 #include <chrono>
 
-// For Yield processor
-#include <Windows.h>
 
 typedef uint64_t time_stamp;
 typedef std::pair<time_stamp, time_stamp> time_ret;
@@ -26,6 +24,10 @@ class CL_Communicator {
 		std::atomic_bool waiting_for_async;
 		volatile time_stamp persistent_begin, persistent_end;
 	public:
+
+		void my_yield() {
+			std::this_thread::yield();
+		}
 
 		CL_Communicator(CL_Execution &exec_arg, std::string mk_name, cl::NDRange gs, cl::NDRange ls, CL_Scheduler_ctx s_ctx) {
 			exec = &exec_arg;
@@ -101,7 +103,7 @@ class CL_Communicator {
 
 			response_begin = gettime_chrono();
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_GOT_GROUPS) {
-				YieldProcessor();
+				my_yield();
 			}
 			std::atomic_thread_fence(std::memory_order_acquire);
 			response_end = gettime_chrono();
@@ -113,7 +115,7 @@ class CL_Communicator {
 			
 			execution_begin = gettime_chrono(); //start application timer here
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
-				YieldProcessor();
+				my_yield();
 			}
 			std::atomic_thread_fence(std::memory_order_acquire);
 			execution_end = gettime_chrono(); //end application timer after waiting here.
@@ -128,7 +130,7 @@ class CL_Communicator {
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_PERSISTENT_TASK, std::memory_order_release);
 
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_GOT_GROUPS) {
-				YieldProcessor();
+				my_yield();
 			}
 
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
@@ -136,13 +138,13 @@ class CL_Communicator {
 			persistent_begin = gettime_chrono();
 
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
-				YieldProcessor();
+				my_yield();
 			}
 
 			atomic_store(&waiting_for_async, false);
 
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.persistent_flag), std::memory_order_relaxed) != PERSIST_TASK_DONE) {
-				YieldProcessor();
+				my_yield();
 			}
 
 			persistent_end = gettime_chrono();
@@ -197,5 +199,9 @@ class CL_Communicator {
 
 		double nano_to_milli(time_stamp t) {
 			return double(t) / 1000000.0;
+		}
+
+		void my_sleep(int ms) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 		}
 };

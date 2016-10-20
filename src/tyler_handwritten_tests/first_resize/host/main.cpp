@@ -207,19 +207,18 @@ int main(int argc, char *argv[]) {
 
 	cl_comm.send_persistent_task(participating_groups);
 
-	Sleep(10);
-	time_ret first_time = cl_comm.send_task_synchronous(participating_groups/2, "first");
+	cl_comm.my_sleep(10);
+	time_ret first_time = cl_comm.send_task_synchronous(participating_groups - 1, "first");
 	int first_found = *graphics_result;
 	*graphics_result = INT_MAX;
-	Sleep(10);
-	time_ret second_time = cl_comm.send_task_synchronous(participating_groups / 2, "second");
+	cl_comm.my_sleep(10);
+	time_ret second_time = cl_comm.send_task_synchronous(participating_groups - 1, "second");
 	int second_found = *graphics_result;
 	*graphics_result = INT_MAX;
-	Sleep(10);
-	time_ret third_time = cl_comm.send_task_synchronous(participating_groups / 2, "third");
+	cl_comm.my_sleep(10);
+	time_ret third_time = cl_comm.send_task_synchronous(participating_groups - 1, "third");
 	int third_found = *graphics_result;
 	
-
 	cl_comm.send_quit_signal();
 	err = exec.exec_queue.finish();
 	check_ocl(err);

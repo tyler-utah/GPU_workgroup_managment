@@ -387,7 +387,7 @@ int main(int argc, char *argv[]) {
     if (g_result != 1) {
       error = 1;
     }
-    Sleep(100);
+    cl_comm.my_sleep(100);
   }
 
   cout << "send quit signal" << endl;
