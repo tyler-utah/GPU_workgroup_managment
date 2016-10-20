@@ -172,31 +172,36 @@ int main(int argc, char *argv[]) {
   check_ocl(err);
 
   // // Reduce kernel args. 
-  // int graphics_arr_length = 1048576;
-  // cl_int * h_graphics_buffer = (cl_int *) malloc(sizeof(cl_int) * graphics_arr_length);
-  // int arr_min = INT_MAX;
-  // for (int i = 0; i < graphics_arr_length; i++) {
-  //   int loop_int = rand() + 1;
-  //   if (loop_int < arr_min) {
-  //     arr_min = loop_int;
-  //   }
-  //   h_graphics_buffer[i] = loop_int;
-  // }
+  int graphics_arr_length = 1048576;
+  cl_int * h_graphics_buffer = (cl_int *) malloc(sizeof(cl_int) * graphics_arr_length);
+  int arr_min = INT_MAX;
+  for (int i = 0; i < graphics_arr_length; i++) {
+    int loop_int = rand() + 1;
+    if (loop_int < arr_min) {
+      arr_min = loop_int;
+    }
+    h_graphics_buffer[i] = loop_int;
+  }
 
-  // cl::Buffer d_graphics_buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * graphics_arr_length);
-  // err = exec.exec_queue.enqueueWriteBuffer(d_graphics_buffer, CL_TRUE, 0, sizeof(cl_int) * graphics_arr_length, h_graphics_buffer);
+  cl::Buffer d_graphics_buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * graphics_arr_length);
+  err = exec.exec_queue.enqueueWriteBuffer(d_graphics_buffer, CL_TRUE, 0, sizeof(cl_int) * graphics_arr_length, h_graphics_buffer);
 	
-  // cl_int * graphics_result = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
-  // *graphics_result = INT_MAX;
+  cl_int * graphics_result = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
+  *graphics_result = INT_MAX;
 
   // ----------------------------------------------------------------------
   // persistent kernel args
+
+  cout << "ARGS numParticles: " << FLAGS_numParticles ;
+  cout << " threads: " << FLAGS_threads;
+  cout << " blocks: " << FLAGS_blocks;
+  cout << " maxChildren: " << FLAGS_maxChildren << endl;
 
   // Hugues: this 'maxlength' value is also hardcoded in CUDA version,
   // see the 'dequeuelength' variable in CUDA
   unsigned int maxlength = 256;
   cl::Buffer dwq(context, CL_MEM_READ_WRITE, sizeof(DLBABP));
-  cl::Buffer randdata(context, CL_MEM_READ_WRITE, sizeof(int)*128);
+  cl::Buffer randdata(context, CL_MEM_READ_WRITE, sizeof(int) * 128);
   cl::Buffer maxl(context, CL_MEM_READ_WRITE, sizeof(int));
   cl::Buffer particles(context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
   cl::Buffer newParticles(context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
@@ -271,13 +276,13 @@ int main(int argc, char *argv[]) {
   int arg_index = 0;
 
   // // Set the args for graphics kernel
-  // err = exec.exec_kernels["mega_kernel"].setArg(arg_index, graphics_arr_length);
-  // arg_index++;
-  // err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_buffer);
-  // arg_index++;
-  // err |= clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), arg_index, graphics_result);
-  // arg_index++;
-  // check_ocl(err);
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, graphics_arr_length);
+  arg_index++;
+  err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_buffer);
+  arg_index++;
+  err |= clSetKernelArgSVMPointer(exec.exec_kernels["mega_kernel"](), arg_index, graphics_result);
+  arg_index++;
+  check_ocl(err);
 
   // Set args for persistent kernel
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, dwq);
@@ -372,18 +377,18 @@ int main(int argc, char *argv[]) {
   cout << "send persistent task" << endl;
   cl_comm.send_persistent_task(FLAGS_blocks);
 
-  // while (cl_comm.is_executing_persistent() && !FLAGS_skip_tasks) {
-  //   *graphics_result = INT_MAX;
-  //   time_ret timing_info = cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
-  //   response_time.push_back(timing_info.second);
-  //   execution_time.push_back(timing_info.first);
+  while (cl_comm.is_executing_persistent() && !FLAGS_skip_tasks) {
+    *graphics_result = INT_MAX;
+    time_ret timing_info = cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
+    response_time.push_back(timing_info.second);
+    execution_time.push_back(timing_info.first);
 
-  //   int g_result = *graphics_result;
-  //   if (g_result != 1) {
-  //     error = 1;
-  //   }
-  //   Sleep(100);
-  // }
+    int g_result = *graphics_result;
+    if (g_result != 1) {
+      error = 1;
+    }
+    Sleep(100);
+  }
 
   cout << "send quit signal" << endl;
   cl_comm.send_quit_signal();
@@ -419,31 +424,31 @@ int main(int argc, char *argv[]) {
 
   // ----------------- Hugues: octree: end of stats collecting ---------------
   
-  // cout << "number of participating groups: " << *(s_ctx.participating_groups) << endl;
+  cout << "number of participating groups: " << *(s_ctx.participating_groups) << endl;
 
-  // cout << "executed " << response_time.size() << " non-persistent tasks" << std::endl;
+  cout << "executed " << response_time.size() << " non-persistent tasks" << std::endl;
 
-  // for (int i = 0; i < response_time.size(); i++) {
-  //   cout << "times " << i << ": " << cl_comm.nano_to_milli(response_time[i]) << " " << cl_comm.nano_to_milli(execution_time[i]) << endl;
-  // }
+  for (int i = 0; i < response_time.size(); i++) {
+    cout << "times " << i << ": " << cl_comm.nano_to_milli(response_time[i]) << " " << cl_comm.nano_to_milli(execution_time[i]) << endl;
+  }
 
-  // cout << endl << "error: " << error << endl;
+  cout << endl << "error: " << error << endl;
 
-  // cout << "persistent kernel time: " << cl_comm.nano_to_milli(cl_comm.get_persistent_time()) << endl;
+  cout << "persistent kernel time: " << cl_comm.nano_to_milli(cl_comm.get_persistent_time()) << endl;
 
-  // cout << "non persistent kernels executed with: " << workgroups_for_non_persistent << " workgroups" << endl;
+  cout << "non persistent kernels executed with: " << workgroups_for_non_persistent << " workgroups" << endl;
 
-  // cout << "total response time: " << cl_comm.reduce_times_ms(response_time) << " ms" << endl;
+  cout << "total response time: " << cl_comm.reduce_times_ms(response_time) << " ms" << endl;
 
-  // cout << "average response time: " << cl_comm.get_average_time_ms(response_time) << " ms" << endl;
+  cout << "average response time: " << cl_comm.get_average_time_ms(response_time) << " ms" << endl;
 
-  // cout << "total execution time: " << cl_comm.reduce_times_ms(execution_time) << " ms" << endl;
+  cout << "total execution time: " << cl_comm.reduce_times_ms(execution_time) << " ms" << endl;
 
-  // cout << "average execution time: " << cl_comm.get_average_time_ms(execution_time) << " ms" << endl;
+  cout << "average execution time: " << cl_comm.get_average_time_ms(execution_time) << " ms" << endl;
 
-  // cout << "average end to end: " << cl_comm.get_average_time_ms(execution_time) + cl_comm.get_average_time_ms(response_time)  << " ms" << endl;
+  cout << "average end to end: " << cl_comm.get_average_time_ms(execution_time) + cl_comm.get_average_time_ms(response_time)  << " ms" << endl;
 
-  // cout << "check value is: " << *(s_ctx.check_value) << " ms" << endl;
+  cout << "check value is: " << *(s_ctx.check_value) << " ms" << endl;
 
   // if (strcmp("", FLAGS_output.c_str()) != 0) {
   //   cout << "outputing solution to " << FLAGS_output << endl;
@@ -458,7 +463,7 @@ int main(int argc, char *argv[]) {
 
   // }
 
-  // free_scheduler_ctx(&exec, &s_ctx);
+  free_scheduler_ctx(&exec, &s_ctx);
   // free(color);
   // free(node_value);
 

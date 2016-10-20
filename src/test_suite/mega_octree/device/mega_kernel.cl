@@ -10,43 +10,43 @@
 /*---------------------------------------------------------------------------*/
 
 // This is the "graphics kernel"
-/* void MY_reduce(int length, */
-/*             __global int* buffer, */
-/*             __global atomic_int* result, */
+void MY_reduce(int length,
+            __global int* buffer,
+            __global atomic_int* result,
 			
-/* 			// New arg, the kernel ctx */
-/* 			__global Kernel_ctx *kernel_ctx) { */
+			// New arg, the kernel ctx
+			__global Kernel_ctx *kernel_ctx) {
 				
-/*   __local int scratch[256]; */
-/*   int gid = k_get_global_id(kernel_ctx); */
-/*   int stride = k_get_global_size(kernel_ctx); */
-/*   int local_index = get_local_id(0); */
+  __local int scratch[256];
+  int gid = k_get_global_id(kernel_ctx);
+  int stride = k_get_global_size(kernel_ctx);
+  int local_index = get_local_id(0);
   
-/*   for (int global_index = gid; global_index < length; global_index += stride) { */
+  for (int global_index = gid; global_index < length; global_index += stride) {
     
-/*     if (global_index < length) { */
-/*       scratch[local_index] = buffer[global_index]; */
-/*     } else { */
-/*       scratch[local_index] = INT_MAX; */
-/*     } */
-/*     barrier(CLK_LOCAL_MEM_FENCE); */
-/*     for(int offset = 1; */
-/*         offset < get_local_size(0); */
-/*         offset <<= 1) { */
-/*       int mask = (offset << 1) - 1; */
-/*       if ((local_index & mask) == 0) { */
-/*         int other = scratch[local_index + offset]; */
-/*         int mine = scratch[local_index]; */
-/*         scratch[local_index] = (mine < other) ? mine : other; */
-/*       } */
-/*       barrier(CLK_LOCAL_MEM_FENCE); */
-/*     } */
+    if (global_index < length) {
+      scratch[local_index] = buffer[global_index];
+    } else {
+      scratch[local_index] = INT_MAX;
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for(int offset = 1;
+        offset < get_local_size(0);
+        offset <<= 1) {
+      int mask = (offset << 1) - 1;
+      if ((local_index & mask) == 0) {
+        int other = scratch[local_index + offset];
+        int mine = scratch[local_index];
+        scratch[local_index] = (mine < other) ? mine : other;
+      }
+      barrier(CLK_LOCAL_MEM_FENCE);
+    }
 	
-/*     if (local_index == 0) { */
-/* 	  atomic_fetch_min((result), scratch[0]); */
-/*     } */
-/*   } */
-/* } */
+    if (local_index == 0) {
+	  atomic_fetch_min((result), scratch[0]);
+    }
+  }
+}
 
 /* ========================================================================= */
 // Persistent Kernel
@@ -81,6 +81,8 @@ typedef struct {
 /* rand */
 
 int myrand(__global Kernel_ctx *kernel_ctx, __global int *randdata) {
+  /* Hugues: size of randdata is set in host code, it is considered to
+     be an upper bound to the possible number of groups */
   int id = k_get_group_id(kernel_ctx);
   randdata[id] = randdata[id] * 1103515245 + 12345;
   return((unsigned)(randdata[id] / 65536) % 32768) + id;
@@ -156,6 +158,17 @@ int DLBABP_steal(__global DLBABP *dlbabp, __local Task *val, unsigned int idx) {
   }
 
   return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+
+int emptyPool(__global DLBABP *dlbabp, int group_id) {
+  int localTail;
+  localTail = atomic_load_explicit(&(dlbabp->dh[group_id].tail), memory_order_acquire, memory_scope_device);
+  if(localTail == 0) {
+    return 1;
+  }
+  return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -255,9 +268,56 @@ int whichbox(volatile float4 pos, float4 middle)
 
 /*---------------------------------------------------------------------------*/
 
+void octree_init(
+                 __global Kernel_ctx *kernel_ctx,
+                 __global DLBABP* dlbabp,
+                 __global unsigned int* treeSize,
+                 __global unsigned int* particlesDone,
+                 __global volatile int *maxl,
+                 __global unsigned int *stealAttempts,
+                 const int num_pools,
+                 unsigned int numParticles
+                 )
+{
+  /* reset queues */
+  __local Task t;
+  int i;
+  for (i = 0; i < num_pools; i++) {
+    atomic_store(&(dlbabp->dh[i].head), 0);
+    atomic_store(&(dlbabp->dh[i].tail), 0);
+  }
+
+  /* ---------- initOctree: global init ---------- */
+  *treeSize = 100;
+  *particlesDone = 0;
+  /* In Cuda, maxl is a kernel global initialized to 0 */
+  *maxl = 0;
+  *stealAttempts = 0;
+
+  /* create and enqueue the first task */
+  t.treepos=0;
+  t.middle.x=0;
+  t.middle.y=0;
+  t.middle.z=0;
+  t.middle.w=256;
+
+  t.beg = 0;
+  t.end = numParticles;
+  t.flip = false;
+
+  DLBABP_enqueue(kernel_ctx, dlbabp, &t, maxl);
+  /* ---------- end of initOctree ---------- */
+}
+
+/*---------------------------------------------------------------------------*/
+
 void octree_main (
+                  /* mega-kernel args */
                   __global Kernel_ctx *kernel_ctx,
-                  
+                  CL_Scheduler_ctx scheduler_ctx,
+                  __local int *scratchpad,
+
+                  /* octree args */
                   __global DLBABP* dlbabp,
                   __global int *randdata,
                   __global volatile int *maxl,
@@ -286,18 +346,21 @@ void octree_main (
   __local Task t;
   __local unsigned int check;
 
+  //int NUM_ITERATIONS;
+
   unsigned int local_id = get_local_id(0);
   unsigned int local_size = get_local_size(0);
 
   unsigned int localStealAttempts;
   
   if (k_get_global_id(kernel_ctx) == 0) {
-    
     /* ---------- initDLBABP ----------*/
     dlbabp->deq = deq;
     dlbabp->dh = dh;
     dlbabp->maxlength = maxlength;
     /* ---------- end of initDLBABP ----------*/
+
+    //NUM_ITERATIONS = 2;
 
     /* ---------- initOctree: global init ---------- */
     *treeSize = 100;
@@ -318,7 +381,7 @@ void octree_main (
     t.flip = false;
 
     DLBABP_enqueue(kernel_ctx, dlbabp, &t, maxl);
-    /* ---------- end of initOctree ---------- */
+    /* ---------- end of initOctree ---------- */    
   }
 
   barrier(CLK_GLOBAL_MEM_FENCE);
@@ -326,10 +389,30 @@ void octree_main (
   if (local_id == 0) {
     localStealAttempts = 0;
   }
+  
+  /* /\* Hugues: do the octree partitionning several times to last longer *\/ */
+  /* while (NUM_ITERATIONS > 0) { */
 
+  /* if (k_get_global_id(kernel_ctx) == 0) { */
+  /*   //NUM_ITERATIONS--; */
+  /*   octree_init(kernel_ctx, dlbabp, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles); */
+  /* } */
+  //barrier(CLK_GLOBAL_MEM_FENCE);
+  
   /* main loop */
   while (true) {
     barrier(CLK_LOCAL_MEM_FENCE);
+
+    /* can be killed if pool is empty */
+    int group_id = k_get_global_id(kernel_ctx);
+    if (emptyPool(dlbabp, group_id)) {
+      /* FIXME Hugues: here use __ckill() rather than ckill() since
+         ckill() macro terminates with 'return -1', which is invalid
+         here. I do not change the ckill() macro since this return value
+         is currently used in the implementation of global_barrier_*(),
+         see iw_barrier.cl source file */
+      __ckill(kernel_ctx, scheduler_ctx, scratchpad, group_id);
+    }
 
     // Try to acquire new task
     if (DLBABP_dequeue(kernel_ctx, dlbabp, &t, randdata, &localStealAttempts, num_pools) == 0) {
@@ -420,15 +503,16 @@ void octree_main (
       }
     }
   }
+    //} // while NUM_ITERATIONS
 }
 
 /* ========================================================================= */
 
 __kernel void mega_kernel(
                           // Graphics kernel args
-                          /* int graphics_length, */
-                          /* __global int * graphics_buffer, */
-                          /* __global atomic_int * graphics_result, */
+                          int graphics_length,
+                          __global int * graphics_buffer,
+                          __global atomic_int * graphics_result,
 						  
                           // Persistent kernel args
                           __global DLBABP* dlbabp,
@@ -465,12 +549,12 @@ __kernel void mega_kernel(
 {
 
   // These need to be made by the kernel merge tool. Its the original graphics kernel with the graphics_kernel_ctx as a final arg.						  
-  //#define NON_PERSISTENT_KERNEL MY_reduce(graphics_length, graphics_buffer, graphics_result, non_persistent_kernel_ctx)
-#define NON_PERSISTENT_KERNEL
+  #define NON_PERSISTENT_KERNEL MY_reduce(graphics_length, graphics_buffer, graphics_result, non_persistent_kernel_ctx)
+  //#define NON_PERSISTENT_KERNEL
 
   // This is the original persistent kernel with the bar, persistent_kernel_ctx, s_ctx, scratchpad, and (by pointer) local restoration context.
   //#define PERSISTENT_KERNEL color_persistent(row, col, node_value, color_array, stop1, stop2, max_d, num_nodes, num_edges, bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local);
-#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, dlbabp, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
+#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, dlbabp, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
 
   // Everything else is in here	
 #include "main_device_body.cl"
