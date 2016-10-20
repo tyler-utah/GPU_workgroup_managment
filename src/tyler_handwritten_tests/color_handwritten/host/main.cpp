@@ -5,6 +5,7 @@
 #include <string>
 #include<iostream>
 #include <vector>
+#include "limits.h"
 
 // Should be in a directory somewhere probably. Or defined in CMake.
 #define CL_INT_TYPE cl_int

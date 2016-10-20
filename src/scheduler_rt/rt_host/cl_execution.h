@@ -156,6 +156,7 @@ class CL_Execution {
 	if (is_AMD()) {
 	  options << "-D" << "AMD_MEM_ORDERS" << " ";
 	}
+
   
     //Needed so we know to include Nvidia atomics
     options << check_atomics();

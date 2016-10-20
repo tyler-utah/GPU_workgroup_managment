@@ -7,7 +7,6 @@
 #include <thread>
 #include <chrono>
 
-
 typedef uint64_t time_stamp;
 typedef std::pair<time_stamp, time_stamp> time_ret;
 
@@ -20,8 +19,8 @@ class CL_Communicator {
 		cl::NDRange local_size;
 		CL_Scheduler_ctx scheduler;
 		int participating_groups;
-		std::atomic_bool executing_persistent;
-		std::atomic_bool waiting_for_async;
+		std::atomic<int> executing_persistent;
+		std::atomic<int> waiting_for_async;
 		volatile time_stamp persistent_begin, persistent_end;
 	public:
 
@@ -35,8 +34,8 @@ class CL_Communicator {
 			global_size = gs;
 			local_size = ls;
 			scheduler = s_ctx;
-			executing_persistent = false;
-			waiting_for_async = false;
+			executing_persistent = 0;
+			waiting_for_async = 0;
 			persistent_begin = persistent_end = 0;
             participating_groups = 0;
 		}
@@ -141,7 +140,7 @@ class CL_Communicator {
 				my_yield();
 			}
 
-			atomic_store(&waiting_for_async, false);
+			std::atomic_store(&waiting_for_async, 0);
 
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.persistent_flag), std::memory_order_relaxed) != PERSIST_TASK_DONE) {
 				my_yield();
@@ -149,7 +148,7 @@ class CL_Communicator {
 
 			persistent_end = gettime_chrono();
 
-			std::atomic_store(&executing_persistent, false);
+			std::atomic_store(&executing_persistent, 0);
 		}
 
 		void send_persistent_task(int groups) {
@@ -161,22 +160,22 @@ class CL_Communicator {
 				exit(EXIT_FAILURE);
 			}
 
-			waiting_for_async = true;
+			waiting_for_async = 1;
 
 			std::thread monitor(&CL_Communicator::monitor_persistent_task, this, groups);
 
 			monitor.detach();
 
-			while (atomic_load(&waiting_for_async) != false)
+			while (atomic_load(&waiting_for_async) != 0)
 				;
 		}
 
-		bool is_executing_persistent() {
+		int is_executing_persistent() {
 			return std::atomic_load(&executing_persistent);
 		}
 
 		time_stamp get_persistent_time() {
-			assert(std::atomic_load(&executing_persistent) == false);
+			assert(std::atomic_load(&executing_persistent) == 0);
 			return persistent_end - persistent_begin;
 		}
 
