@@ -117,6 +117,22 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   return true;
 }
 
+static std::string ConvertType(std::string type) {
+  if (type == "char" ||
+      type == "uchar" ||
+      type == "short" ||
+      type == "ushort" ||
+      type == "int" ||
+      type == "uint" ||
+      type == "long" ||
+      type == "ulong") {
+    std::string result = type;
+    std::transform(result.begin(), result.end(), result.begin(), ::toupper);
+    return "CL_" + result + "_TYPE";
+  }
+  return type;
+}
+
 void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   if (GetKI().KernelFunction) {
     errs() << "Multiple kernel functions in source file not supported, stopping.\n";
@@ -229,7 +245,7 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   }
 
   this->RestorationCtx = "typedef struct {\n";
-  this->RestorationCtx += "  uchar target;\n";
+  this->RestorationCtx += "  " + ConvertType("uchar") + " target;\n";
 
   std::string preLoopCode;
   preLoopCode += "if(__restoration_ctx->target != 0) {\n";
@@ -241,7 +257,7 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
         continue;
       }
       preLoopCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
-      this->RestorationCtx += "  " + VD->getType().getAsString() + " " + VD->getNameAsString() + ";\n";
+      this->RestorationCtx += "  " + ConvertType(VD->getType().getAsString()) + " " + VD->getNameAsString() + ";\n";
     }
   }
   preLoopCode += "}\n";

@@ -4,6 +4,7 @@ add_subdirectory(ckill_only)
 add_subdirectory(first_persistent)
 add_subdirectory(first_resize)
 add_subdirectory(single_kernel)
+add_subdirectory(color_handwritten)
 
 
 

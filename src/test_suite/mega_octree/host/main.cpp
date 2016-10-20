@@ -4,6 +4,7 @@
 #include <string>
 #include<iostream>
 #include <vector>
+#include "limits.h"
 
 // Should be in a directory somewhere probably. Or defined in CMake.
 #define CL_INT_TYPE cl_int
@@ -490,7 +491,7 @@ int main(int argc, char *argv[]) {
     if (g_result != 1) {
       error = 1;
     }
-    Sleep(100);
+    cl_comm.my_sleep(100);
   }
 
   cout << "send quit signal" << endl;
