@@ -40,12 +40,21 @@ class CL_Communicator {
 		int launch_mega_kernel() {
 			std::cout << "launching mega kernel..." << std::endl;
 			std::flush(std::cout);
-			Sleep(300);
-			int err = exec->exec_queue.enqueueNDRangeKernel(exec->exec_kernels[mega_kernel_name],
+
+			// Make sure everything is finished. Seems to help with AMD
+			int err = exec->exec_queue.flush();
+			check_ocl(err);
+			err = exec->exec_queue.finish();
+			check_ocl(err);
+
+			err = exec->exec_queue.enqueueNDRangeKernel(exec->exec_kernels[mega_kernel_name],
 			cl::NullRange,
 			global_size,
 			local_size);
+			check_ocl(err);
 
+			// Tyler: required for AMD, otherwise SVM doesn't seem to work.
+			err = exec->exec_queue.flush();
 			check_ocl(err);
 
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_acquire) != DEVICE_WAITING);
