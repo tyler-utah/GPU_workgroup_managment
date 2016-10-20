@@ -22,7 +22,8 @@ class CL_Communicator {
 		cl::NDRange local_size;
 		CL_Scheduler_ctx scheduler;
 		int participating_groups;
-		volatile bool executing_persistent;
+		std::atomic_bool executing_persistent;
+		std::atomic_bool waiting_for_async;
 		volatile time_stamp persistent_begin, persistent_end;
 	public:
 
@@ -33,8 +34,9 @@ class CL_Communicator {
 			local_size = ls;
 			scheduler = s_ctx;
 			executing_persistent = false;
+			waiting_for_async = false;
 			persistent_begin = persistent_end = 0;
-                        participating_groups = 0;
+            participating_groups = 0;
 		}
 
 		int launch_mega_kernel() {
@@ -120,48 +122,59 @@ class CL_Communicator {
 			return ret;
 		}
 
-		void monitor_persistent_task() {
+		void monitor_persistent_task(int groups) {
+
+			*(scheduler.task_size) = groups;
+			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_PERSISTENT_TASK, std::memory_order_release);
+
+			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_GOT_GROUPS) {
+				YieldProcessor();
+			}
+
+			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
+
+			persistent_begin = gettime_chrono();
+
+			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
+				YieldProcessor();
+			}
+
+			atomic_store(&waiting_for_async, false);
+
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.persistent_flag), std::memory_order_relaxed) != PERSIST_TASK_DONE) {
 				YieldProcessor();
 			}
 
 			persistent_end = gettime_chrono();
 
-			// Technically a data-race. should be fixed
-			executing_persistent = false;
+			std::atomic_store(&executing_persistent, false);
 		}
 
 		void send_persistent_task(int groups) {
+
 			if (groups > participating_groups) {
 				send_quit_signal();
 				std::cout << "WARNING CL_Communicator::send_persistent_task(): cannot send persistent task with " << groups << " workgroups since there are only " << participating_groups << " participating groups" << std::endl;
 				std::flush(std::cout);
 				exit(EXIT_FAILURE);
 			}
-			*(scheduler.task_size) = groups;
-			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_PERSISTENT_TASK, std::memory_order_release);
-			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_GOT_GROUPS) {
-				YieldProcessor();
-			}
 
-			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
-			persistent_begin = gettime_chrono();
-			executing_persistent = true;
-			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
-				YieldProcessor();
-			}
+			waiting_for_async = true;
 
-			std::thread monitor(&CL_Communicator::monitor_persistent_task, this);
+			std::thread monitor(&CL_Communicator::monitor_persistent_task, this, groups);
 
 			monitor.detach();
+
+			while (atomic_load(&waiting_for_async) != false)
+				;
 		}
 
 		bool is_executing_persistent() {
-			return executing_persistent;
+			return std::atomic_load(&executing_persistent);
 		}
 
 		time_stamp get_persistent_time() {
-			assert(executing_persistent == false);
+			assert(std::atomic_load(&executing_persistent) == false);
 			return persistent_end - persistent_begin;
 		}
 
