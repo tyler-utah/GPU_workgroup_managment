@@ -23,7 +23,7 @@ int global_barrier(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx, CL
          peer_block += get_local_size(0)) {
 			 
 	  // Wait for the slave
-      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]), memory_order_relaxed, memory_scope_device) == 0);
+      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]), memory_order_special_relax_acquire, memory_scope_device) == 0);
 	  
 	   // Synchronise
       atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire, memory_scope_device);
@@ -49,7 +49,7 @@ int global_barrier(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx, CL
       atomic_store_explicit(&(bar->barrier_flags[id]), 1, memory_order_release, memory_scope_device);
 
       // Wait to be released by the master
-      while (atomic_load_explicit(&(bar->barrier_flags[id]), memory_order_relaxed, memory_scope_device) == 1);
+      while (atomic_load_explicit(&(bar->barrier_flags[id]), memory_order_special_relax_acquire, memory_scope_device) == 1);
 
       // Synchronise
       atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire, memory_scope_device);
@@ -71,7 +71,7 @@ int global_barrier_ckill(__global IW_barrier *bar, __global Kernel_ctx *kernel_c
          peer_block += get_local_size(0)) {
 			 
 	  // Wait for the slave
-      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]), memory_order_relaxed, memory_scope_device) == 0 &&
+      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]), memory_order_special_relax_acquire, memory_scope_device) == 0 &&
 	                              peer_block < k_get_num_groups(kernel_ctx));
 	  
 	   // Synchronise
@@ -101,7 +101,7 @@ int global_barrier_ckill(__global IW_barrier *bar, __global Kernel_ctx *kernel_c
       atomic_store_explicit(&(bar->barrier_flags[id]), 1, memory_order_release, memory_scope_device);
 
       // Wait to be released by the master
-      while (atomic_load_explicit(&(bar->barrier_flags[id]), memory_order_relaxed, memory_scope_device) == 1);
+      while (atomic_load_explicit(&(bar->barrier_flags[id]), memory_order_special_relax_acquire, memory_scope_device) == 1);
 
       // Synchronise
       atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire, memory_scope_device);
@@ -125,7 +125,7 @@ int __global_barrier_resize(__global IW_barrier *bar, __global Kernel_ctx *kerne
          peer_block += get_local_size(0)) {
 			 
 	  // Wait for the slave
-      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]), memory_order_relaxed, memory_scope_device) == 0 &&
+      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]), memory_order_special_relax_acquire, memory_scope_device) == 0 &&
 	                              peer_block < k_get_num_groups(kernel_ctx));
 	  
 	   // Synchronise
@@ -166,7 +166,7 @@ int __global_barrier_resize(__global IW_barrier *bar, __global Kernel_ctx *kerne
       atomic_store_explicit(&(bar->barrier_flags[id]), 1, memory_order_release, memory_scope_device);
 
       // Wait to be released by the master
-      while (atomic_load_explicit(&(bar->barrier_flags[id]), memory_order_relaxed, memory_scope_device) == 1);
+      while (atomic_load_explicit(&(bar->barrier_flags[id]), memory_order_special_relax_acquire, memory_scope_device) == 1);
 
       // Synchronise
       atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire, memory_scope_device);
@@ -189,7 +189,7 @@ int __global_barrier_resize_query(__global IW_barrier *bar, __global Kernel_ctx 
          peer_block += get_local_size(0)) {
 			 
 	  // Wait for the slave
-      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]), memory_order_relaxed, memory_scope_device) == 0 &&
+      while (atomic_load_explicit(&(bar->barrier_flags[peer_block]), memory_order_special_relax_acquire, memory_scope_device) == 0 &&
 	                              peer_block < k_get_num_groups(kernel_ctx));
 	  
 	   // Synchronise
@@ -237,7 +237,7 @@ int __global_barrier_resize_query(__global IW_barrier *bar, __global Kernel_ctx 
       atomic_store_explicit(&(bar->barrier_flags[id]), 1, memory_order_release, memory_scope_device);
 
       // Wait to be released by the master
-      while (atomic_load_explicit(&(bar->barrier_flags[id]), memory_order_relaxed, memory_scope_device) == 1);
+      while (atomic_load_explicit(&(bar->barrier_flags[id]), memory_order_special_relax_acquire, memory_scope_device) == 1);
 
       // Synchronise
       atomic_work_item_fence(CLK_GLOBAL_MEM_FENCE, memory_order_acquire, memory_scope_device);
