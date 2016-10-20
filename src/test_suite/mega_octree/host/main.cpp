@@ -1,4 +1,3 @@
-
 #include <atomic>
 #include <iostream>
 #include <fstream>
@@ -38,7 +37,7 @@ DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipp
 
 DEFINE_int32(numParticles, 1000, "number of particles to treat");
 DEFINE_int32(maxChildren, 50, "maximum number of children");
-DEFINE_int32(blocks, 4, "number of blocks");
+DEFINE_int32(blocks, 12, "number of blocks");
 DEFINE_int32(threads, 32, "number of threads");
 static const unsigned int MAXTREESIZE = 11000000;
 
@@ -171,6 +170,129 @@ int main(int argc, char *argv[]) {
   err = exec.exec_queue.enqueueWriteBuffer(d_ctx_mem, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx);
   check_ocl(err);
 
+  // scheduler context
+  CL_Scheduler_ctx s_ctx;
+  mk_init_scheduler_ctx(&exec, &s_ctx);
+
+  // Set up the communicator
+  int local_size = FLAGS_threads;
+  int wg_size = MAX_P_GROUPS;
+  CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
+
+  int arg_index = 0;
+
+  IW_barrier h_bar;
+  for (int i = 0; i < MAX_P_GROUPS; i++) {
+    h_bar.barrier_flags[i] = 0;
+  }
+  h_bar.phase = 0;
+
+  cl::Buffer d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
+  err = exec.exec_queue.enqueueWriteBuffer(d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
+  check_ocl(err);
+
+  // kernel contexts for the graphics kernel and persistent kernel
+  cl::Buffer d_graphics_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
+  cl::Buffer d_persistent_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
+  
+  // Run the discovery once to get the number of participating
+  // groups. Use a stub buffer just to be able to set arguments for the
+  // tasks, it's ok since the tasks won't be started anyway.
+  cl::Buffer stubbuf(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+
+  // set args with stubbuf
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stubbuf);
+  check_ocl(err);
+  arg_index++;
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, 0);
+  check_ocl(err);
+  arg_index++;
+  
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
+  check_ocl(err);
+  arg_index++;
+
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_ctx_mem);
+  check_ocl(err);
+  arg_index++;
+
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
+  check_ocl(err);
+  arg_index++;
+  
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
+  check_ocl(err);
+  arg_index++;
+
+  err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
+  check_ocl(err);
+
+  // get number of participating workgroups
+  err = exec.exec_queue.flush();
+  check_ocl(err);
+  exec.exec_queue.finish();
+  check_ocl(err);
+
+  err = cl_comm.launch_mega_kernel();
+  int participating_groups = cl_comm.number_of_discovered_groups();
+  cl_comm.send_quit_signal();
+  err = exec.exec_queue.finish();
+  check_ocl(err);
+
+  cout << "HUGUES: number of participating wg: " << participating_groups << endl;
+
+  //TODO: reset affected arguments
+
+  //------------------------------------------------------------
+
   // // Reduce kernel args. 
   int graphics_arr_length = 1048576;
   cl_int * h_graphics_buffer = (cl_int *) malloc(sizeof(cl_int) * graphics_arr_length);
@@ -192,10 +314,19 @@ int main(int argc, char *argv[]) {
   // ----------------------------------------------------------------------
   // persistent kernel args
 
-  cout << "ARGS numParticles: " << FLAGS_numParticles ;
-  cout << " threads: " << FLAGS_threads;
-  cout << " blocks: " << FLAGS_blocks;
-  cout << " maxChildren: " << FLAGS_maxChildren << endl;
+  // The number of pools for work-stealing must be bounded. It would be
+  // nice to bound with the number of participating groups, but it is
+  // not available yet. FIXME: get the num of participating groups
+  // beforehand
+  const int num_pools = 20;
+
+  cout << "==== persistent kernel args ======" << endl;
+  cout << "  numParticles: " << FLAGS_numParticles << endl;
+  cout << "  threads: " << FLAGS_threads << endl;
+  cout << "  arg blocks: " << FLAGS_blocks << endl;
+  cout << "  num_pools: " << num_pools << endl;
+  cout << "  maxChildren: " << FLAGS_maxChildren << endl;
+  cout << "===================" << endl;
 
   // Hugues: this 'maxlength' value is also hardcoded in CUDA version,
   // see the 'dequeuelength' variable in CUDA
@@ -209,12 +340,12 @@ int main(int argc, char *argv[]) {
   cl::Buffer treeSize(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
   cl::Buffer particlesDone(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
   cl::Buffer stealAttempts(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
-  cl::Buffer deq(context, CL_MEM_READ_WRITE, sizeof(Task) * maxlength * FLAGS_blocks);
-  cl::Buffer dh(context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * FLAGS_blocks);
+  cl::Buffer deq(context, CL_MEM_READ_WRITE, sizeof(Task) * maxlength * num_pools);
+  cl::Buffer dh(context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * num_pools);
 
   exec.exec_queue.enqueueFillBuffer(tree, 0, 0, sizeof(unsigned int)*MAXTREESIZE);
-  exec.exec_queue.enqueueFillBuffer(deq, 0, 0, sizeof(Task) * maxlength * FLAGS_blocks);
-  exec.exec_queue.enqueueFillBuffer(dh, 0, 0, sizeof(DequeHeader) * FLAGS_blocks);
+  exec.exec_queue.enqueueFillBuffer(deq, 0, 0, sizeof(Task) * maxlength * num_pools);
+  exec.exec_queue.enqueueFillBuffer(dh, 0, 0, sizeof(DequeHeader) * num_pools);
 
   // ----------------------------------------------------------------------
   // generate particles
@@ -254,26 +385,8 @@ int main(int argc, char *argv[]) {
 
   // ----------------------------------------------------------------------
   
-  IW_barrier h_bar;
-  for (int i = 0; i < MAX_P_GROUPS; i++) {
-    h_bar.barrier_flags[i] = 0;
-  }
-  h_bar.phase = 0;
-
-  cl::Buffer d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
-  err = exec.exec_queue.enqueueWriteBuffer(d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
-  check_ocl(err);
-
-  // kernel contexts for the graphics kernel and persistent kernel
-  cl::Buffer d_graphics_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
-  cl::Buffer d_persistent_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
-
-  // scheduler context
-  CL_Scheduler_ctx s_ctx;
-  mk_init_scheduler_ctx(&exec, &s_ctx);
-
   // Setting the args
-  int arg_index = 0;
+  arg_index = 0;
 
   // // Set the args for graphics kernel
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, graphics_arr_length);
@@ -307,7 +420,7 @@ int main(int argc, char *argv[]) {
   arg_index++;
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stealAttempts);
   arg_index++;
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, FLAGS_blocks);
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, num_pools);
   arg_index++;
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, deq);
   arg_index++;
@@ -338,31 +451,21 @@ int main(int argc, char *argv[]) {
   err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
   //check_ocl(err);
 
-  // Set up the communicator
-  int local_size = FLAGS_threads;
-  int wg_size = MAX_P_GROUPS;
-  CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
-
   // Launch the mega kernel
 
   check_ocl(err);
-
 	
   std::vector<time_stamp> response_time;
   std::vector<time_stamp> execution_time;
   int error = 0;
 
   int workgroups_for_non_persistent = 0;
-
 	
   err = exec.exec_queue.flush();
   check_ocl(err);
   exec.exec_queue.finish();
   check_ocl(err);
   err = cl_comm.launch_mega_kernel();
-
-  // Get the number of found groups
-  int participating_groups = cl_comm.number_of_discovered_groups();
   
   if (FLAGS_non_persistent_wgs == -1) {
     workgroups_for_non_persistent = participating_groups - 1;
@@ -374,7 +477,7 @@ int main(int argc, char *argv[]) {
     workgroups_for_non_persistent = participating_groups / FLAGS_non_persistent_wgs;
   }
 
-  cout << "send persistent task" << endl;
+  cout << "send persistent task with " << FLAGS_blocks << " work groups" << endl;
   cl_comm.send_persistent_task(FLAGS_blocks);
 
   while (cl_comm.is_executing_persistent() && !FLAGS_skip_tasks) {
