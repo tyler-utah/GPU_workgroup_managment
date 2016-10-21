@@ -312,7 +312,7 @@ void global_barrier_sense_reversal(__global IW_barrier *bar, __local int *sense,
       atomic_store(&(bar->sense), *sense);
     } else {
       /* spin on the sense flag */
-      while (sense != atomic_load(&(bar->sense)));
+      while (*sense != atomic_load(&(bar->sense)));
     }
   }
 
@@ -328,6 +328,7 @@ void octree_main (
                   __global Kernel_ctx *kernel_ctx,
                   CL_Scheduler_ctx scheduler_ctx,
                   __local int *scratchpad,
+                  Restoration_ctx *r_ctx,
 
                   /* octree args */
                   __global IW_barrier *octree_bar,
@@ -365,9 +366,21 @@ void octree_main (
   unsigned int localStealAttempts;
 
   __local int num_iter;
+  __local int sense;
 
   Restoration_ctx to_fork;
   int i;
+
+  if (local_id == 0) {
+    if (r_ctx->target == 0) {
+      /* very first time */
+      sense = 0;
+    } else {
+      /* we have been forked */
+      sense = r_ctx->sense;
+    }
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
 
   /* Hugues: do the octree partitionning several times to last longer */
 
@@ -420,6 +433,11 @@ void octree_main (
       /* else. I jus mimick the call to cfork() in */
       /* global_barrier_resize(). But looking at the code of */
       /* global_barrier(), bar->num_groups is not used there. */
+
+      /* flag to indicate we have been forked */
+      to_fork.target = 1;
+      /*  */
+      to_fork.sense = sense;
 
       //cfork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(octree_bar->num_groups));
 
@@ -572,7 +590,7 @@ __kernel void mega_kernel(
 
   // This is the original persistent kernel with the bar, persistent_kernel_ctx, s_ctx, scratchpad, and (by pointer) local restoration context.
   //#define PERSISTENT_KERNEL color_persistent(row, col, node_value, color_array, stop1, stop2, max_d, num_nodes, num_edges, bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local);
-#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, octree_bar, num_iterations, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
+#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local, octree_bar, num_iterations, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
 
   // Everything else is in here
 #include "main_device_body.cl"
