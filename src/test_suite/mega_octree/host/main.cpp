@@ -309,7 +309,7 @@ int main(int argc, char *argv[]) {
 
   int participating_groups = get_num_participating_groups(&exec);
 
-  cout << "number of participating wg: " << participating_groups << endl;
+  cout << "number of participating workgroups: " << participating_groups << endl;
 
   // set up the discovery protocol
   Discovery_ctx d_ctx;
@@ -326,8 +326,6 @@ int main(int argc, char *argv[]) {
   int local_size = FLAGS_threads;
   int wg_size = MAX_P_GROUPS;
   CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
-
-  int arg_index = 0;
 
   IW_barrier h_bar;
   for (int i = 0; i < MAX_P_GROUPS; i++) {
@@ -364,13 +362,11 @@ int main(int argc, char *argv[]) {
   // ----------------------------------------------------------------------
   // persistent kernel args
 
-  // The number of pools for work-stealing must be bounded. It would be
-  // nice to bound with the number of participating groups, but it is
-  // not available yet. FIXME: get the num of participating groups
-  // beforehand
-  const int num_pools = 20;
+  // The number of pools for work-stealing is bounded by the max
+  // possible number of workgroups, i.e., the value in
+  // 'participating_groups'.
 
-  // TODO: use participating_groups to dimension buffers
+  int num_pools = participating_groups;
 
   cout << "==== persistent kernel args ======" << endl;
   cout << "  numParticles: " << FLAGS_numParticles << endl;
@@ -438,7 +434,7 @@ int main(int argc, char *argv[]) {
   // ----------------------------------------------------------------------
   
   // Setting the args
-  arg_index = 0;
+  int arg_index = 0;
 
   // // Set the args for graphics kernel
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, graphics_arr_length);
@@ -520,8 +516,6 @@ int main(int argc, char *argv[]) {
   err = cl_comm.launch_mega_kernel();
   check_ocl(err);
 
-  cout << "CANARY" << endl;
-  
   if (FLAGS_non_persistent_wgs == -1) {
     workgroups_for_non_persistent = participating_groups - 1;
   }
@@ -581,7 +575,7 @@ int main(int argc, char *argv[]) {
   cout << "Steal attempts: " << hstealAttempts << endl;
 
   // ----------------- Hugues: octree: end of stats collecting ---------------
-  
+
   cout << "number of participating groups: " << *(s_ctx.participating_groups) << endl;
 
   cout << "executed " << response_time.size() << " non-persistent tasks" << std::endl;
@@ -592,7 +586,7 @@ int main(int argc, char *argv[]) {
 
   cout << endl << "error: " << error << endl;
 
-  cout << "persistent kernel time: " << cl_comm.nano_to_milli(cl_comm.get_persistent_time()) << endl;
+  cout << "persistent kernel time: " << cl_comm.nano_to_milli(cl_comm.get_persistent_time()) << " ms" << endl;
 
   cout << "non persistent kernels executed with: " << workgroups_for_non_persistent << " workgroups" << endl;
 
@@ -606,7 +600,7 @@ int main(int argc, char *argv[]) {
 
   cout << "average end to end: " << cl_comm.get_average_time_ms(execution_time) + cl_comm.get_average_time_ms(response_time)  << " ms" << endl;
 
-  cout << "check value is: " << *(s_ctx.check_value) << " ms" << endl;
+  cout << "check value is: " << *(s_ctx.check_value) << endl;
 
   // if (strcmp("", FLAGS_output.c_str()) != 0) {
   //   cout << "outputing solution to " << FLAGS_output << endl;
