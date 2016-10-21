@@ -1,4 +1,3 @@
-
 // It is important to include this first because other files use it.
 #include "restoration_ctx.h"
 
@@ -11,19 +10,19 @@
 
 // This is the "graphics kernel"
 void MY_reduce(int length,
-            __global int* buffer,
-            __global atomic_int* result,
-			
-			// New arg, the kernel ctx
-			__global Kernel_ctx *kernel_ctx) {
-				
+               __global int* buffer,
+               __global atomic_int* result,
+
+               // New arg, the kernel ctx
+               __global Kernel_ctx *kernel_ctx)
+{
   __local int scratch[256];
   int gid = k_get_global_id(kernel_ctx);
   int stride = k_get_global_size(kernel_ctx);
   int local_index = get_local_id(0);
-  
+
   for (int global_index = gid; global_index < length; global_index += stride) {
-    
+
     if (global_index < length) {
       scratch[local_index] = buffer[global_index];
     } else {
@@ -41,7 +40,7 @@ void MY_reduce(int length,
       }
       barrier(CLK_LOCAL_MEM_FENCE);
     }
-	
+
     if (local_index == 0) {
 	  atomic_fetch_min((result), scratch[0]);
     }
@@ -155,17 +154,6 @@ int DLBABP_steal(__global Task *deq, __global DequeHeader *dh, unsigned int maxl
 
   return -1;
 }
-
-/*---------------------------------------------------------------------------*/
-
-/* int emptyPool(__global DLBABP *dlbabp, int group_id) { */
-/*   int localTail; */
-/*   localTail = atomic_load_explicit(&(dlbabp->dh[group_id].tail), memory_order_acquire, memory_scope_device); */
-/*   if(localTail == 0) { */
-/*     return 1; */
-/*   } */
-/*   return 0; */
-/* } */
 
 /*---------------------------------------------------------------------------*/
 
@@ -331,7 +319,7 @@ void octree_main (
                   const int num_pools,
                   __global Task *deq,
                   __global DequeHeader *dh,
-                  const unsigned int maxlength        
+                  const unsigned int maxlength
                   )
 {
   /* Hugues: pointers to global memory, but the pointers are stored in
@@ -352,10 +340,12 @@ void octree_main (
 
   __local int num_iter;
 
+  int i;
+
   /* Hugues: do the octree partitionning several times to last longer */
 
   while (true) {
-    
+
     if (local_id == 0) {
       num_iter = atomic_load(num_iterations);
     }
@@ -377,24 +367,16 @@ void octree_main (
       localStealAttempts = 0;
     }
 
-    barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);    
+    barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
     global_barrier(octree_bar, kernel_ctx);
 
     /* main loop */
     while (true) {
       barrier(CLK_LOCAL_MEM_FENCE);
 
-      /* can be killed if pool is empty */
-      /* int group_id = k_get_global_id(kernel_ctx); */
-      /* if (emptyPool(dlbabp, group_id)) { */
-      /*   /\* FIXME Hugues: here use __ckill() rather than ckill() since */
-      /*      ckill() macro terminates with 'return -1', which is invalid */
-      /*      here. I do not change the ckill() macro since this return value */
-      /*      is currently used in the implementation of global_barrier_*(), */
-      /*      see iw_barrier.cl source file *\/ */
-      /*   if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, group_id) == -1) { */
-      /*     return; */
-      /*   } */
+      /* can be killed before handling a task */
+      /* if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, k_get_group_id(kernel_ctx)) == -1) { */
+      /*   return; */
       /* } */
 
       // Try to acquire new task
@@ -408,6 +390,11 @@ void octree_main (
           break;
         }
         continue;
+      }
+
+      // synthetic work
+      for (i = 0; i < 300; i++) {
+        atomic_store(scheduler_ctx.check_value, 0);
       }
 
       if (t.flip) {
@@ -488,7 +475,7 @@ void octree_main (
     } // end of main loop
 
     global_barrier(octree_bar, kernel_ctx);
-    
+
   } // end of num_iterations
 }
 
@@ -499,7 +486,7 @@ __kernel void mega_kernel(
                           int graphics_length,
                           __global int * graphics_buffer,
                           __global atomic_int * graphics_result,
-						  
+
                           // Persistent kernel args
                           __global IW_barrier *octree_bar,
                           __global atomic_int *num_iterations,
@@ -517,25 +504,25 @@ __kernel void mega_kernel(
                           __global Task *deq,
                           __global DequeHeader *dh,
                           unsigned int maxlength,
-						   
+
                           // Barrier object
                           __global IW_barrier *bar,
-						  
+
                           // Discovery context
                           __global Discovery_ctx *d_ctx,
-						  
+
                           // Kernel context for graphics kernel
                           __global Kernel_ctx *non_persistent_kernel_ctx,
-						  
+
                           // Kernel context for persistent kernel
                           __global Kernel_ctx *persistent_kernel_ctx,
-						  
+
                           // Scheduler args need to be passed individually
                           SCHEDULER_ARGS
                           )
 {
 
-  // These need to be made by the kernel merge tool. Its the original graphics kernel with the graphics_kernel_ctx as a final arg.						  
+  // These need to be made by the kernel merge tool. Its the original graphics kernel with the graphics_kernel_ctx as a final arg.
   #define NON_PERSISTENT_KERNEL MY_reduce(graphics_length, graphics_buffer, graphics_result, non_persistent_kernel_ctx)
   //#define NON_PERSISTENT_KERNEL
 
@@ -543,7 +530,7 @@ __kernel void mega_kernel(
   //#define PERSISTENT_KERNEL color_persistent(row, col, node_value, color_array, stop1, stop2, max_d, num_nodes, num_edges, bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local);
 #define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, octree_bar, num_iterations, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
 
-  // Everything else is in here	
+  // Everything else is in here
 #include "main_device_body.cl"
 }
 //

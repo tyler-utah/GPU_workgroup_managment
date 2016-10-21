@@ -227,7 +227,7 @@ int get_num_participating_groups(CL_Execution *exec)
   check_ocl(err);
   arg_index++;
 
-  
+
   // relevant args for a run just to get the number of participating
   // workgroups
   err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
@@ -253,7 +253,7 @@ int get_num_participating_groups(CL_Execution *exec)
   err = cl_comm_disco.launch_mega_kernel();
   check_ocl(err);
   int participating_groups = cl_comm_disco.number_of_discovered_groups();
-  cl_comm_disco.send_quit_signal();  
+  cl_comm_disco.send_quit_signal();
   err = exec->exec_queue.finish();
   check_ocl(err);
 
@@ -297,7 +297,7 @@ int main(int argc, char *argv[]) {
   if (FLAGS_device_id < 0 || FLAGS_device_id >= devices[FLAGS_platform_id].size()) {
     printf("invalid device id. Please use the --list option to view platforms and device ids\n");
   }
-  
+
   exec.exec_device = devices[FLAGS_platform_id][FLAGS_device_id];
 
   printf("Using GPU: %s\n", exec.getExecDeviceName().c_str());
@@ -306,7 +306,7 @@ int main(int argc, char *argv[]) {
   exec.exec_context = context;
   cl::CommandQueue queue(exec.exec_context);
   exec.exec_queue = queue;
-  
+
   // Should be built into the cmake file. Haven't thought of how to do this yet.
   err = exec.compile_kernel(kernel_file, file::Path(FLAGS_scheduler_rt_path), file::Path(FLAGS_restoration_ctx_path));
 
@@ -347,8 +347,8 @@ int main(int argc, char *argv[]) {
   // kernel contexts for the graphics kernel and persistent kernel
   cl::Buffer d_graphics_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
   cl::Buffer d_persistent_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
-  
-  // Reduce kernel args. 
+
+  // Reduce kernel args.
   int graphics_arr_length = 1048576;
   cl_int * h_graphics_buffer = (cl_int *) malloc(sizeof(cl_int) * graphics_arr_length);
   int arr_min = INT_MAX;
@@ -362,7 +362,7 @@ int main(int argc, char *argv[]) {
 
   cl::Buffer d_graphics_buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * graphics_arr_length);
   err = exec.exec_queue.enqueueWriteBuffer(d_graphics_buffer, CL_TRUE, 0, sizeof(cl_int) * graphics_arr_length, h_graphics_buffer);
-	
+
   cl_int * graphics_result = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
   *graphics_result = INT_MAX;
 
@@ -404,11 +404,11 @@ int main(int argc, char *argv[]) {
     octree_h_bar.barrier_flags[i] = 0;
   }
   octree_h_bar.phase = 0;
-  
+
   cl::Buffer octree_d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
   err = exec.exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
   check_ocl(err);
-  
+
   cl_int num_iterations = FLAGS_num_iterations;
   err = exec.exec_queue.enqueueWriteBuffer(d_num_iterations, CL_TRUE, 0, sizeof(cl_int), &(num_iterations));
   check_ocl(err);
@@ -456,7 +456,7 @@ int main(int argc, char *argv[]) {
   }
 
   // ----------------------------------------------------------------------
-  
+
   // Setting the args
   int arg_index = 0;
 
@@ -531,7 +531,7 @@ int main(int argc, char *argv[]) {
 
   // Set arg for kernel contexts
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
-  arg_index++;    
+  arg_index++;
   check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
   arg_index++;
@@ -541,13 +541,13 @@ int main(int argc, char *argv[]) {
   check_ocl(err);
 
   // Launch the mega kernel
-	
+
   std::vector<time_stamp> response_time;
   std::vector<time_stamp> execution_time;
   int error = 0;
 
   int workgroups_for_non_persistent = 0;
-	
+
   err = exec.exec_queue.flush();
   check_ocl(err);
   exec.exec_queue.finish();
@@ -565,11 +565,12 @@ int main(int argc, char *argv[]) {
     workgroups_for_non_persistent = participating_groups / FLAGS_non_persistent_wgs;
   }
 
-  cout << "send persistent task with " << FLAGS_blocks << " work groups" << endl;
-  cl_comm.send_persistent_task(FLAGS_blocks);
+  cout << "send persistent task with " << num_pools << " work groups" << endl;
+  cl_comm.send_persistent_task(num_pools);
 
   while (cl_comm.is_executing_persistent() && !FLAGS_skip_tasks) {
     *graphics_result = INT_MAX;
+    cout << " * start non-persistent task" << endl;
     time_ret timing_info = cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
     response_time.push_back(timing_info.second);
     execution_time.push_back(timing_info.first);
