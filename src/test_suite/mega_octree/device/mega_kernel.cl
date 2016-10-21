@@ -374,10 +374,14 @@ void octree_main (
     while (true) {
       barrier(CLK_LOCAL_MEM_FENCE);
 
-      /* can be killed before handling a task */
-      /* if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, k_get_group_id(kernel_ctx)) == -1) { */
-      /*   return; */
-      /* } */
+      /* can be killed before handling a task, but always keep at least
+         one work-group alive. This is to avoid to call octree_init()
+         after a cfork() */
+      if (k_get_group_id(kernel_ctx) > 0) {
+        if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, k_get_group_id(kernel_ctx)) == -1) {
+          return;
+        }
+      }
 
       // Try to acquire new task
       if (DLBABP_dequeue(kernel_ctx, deq, dh, maxlength, &t, randdata, &localStealAttempts, num_pools) == 0) {
