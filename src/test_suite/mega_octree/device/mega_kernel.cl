@@ -404,17 +404,17 @@ void octree_main (
     barrier(CLK_LOCAL_MEM_FENCE);
 
     /* can be killed if pool is empty */
-    int group_id = k_get_global_id(kernel_ctx);
-    if (emptyPool(dlbabp, group_id)) {
-      /* FIXME Hugues: here use __ckill() rather than ckill() since
-         ckill() macro terminates with 'return -1', which is invalid
-         here. I do not change the ckill() macro since this return value
-         is currently used in the implementation of global_barrier_*(),
-         see iw_barrier.cl source file */
-      if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, group_id) == -1) {
-        return;
-      }
-    }
+    /* int group_id = k_get_global_id(kernel_ctx); */
+    /* if (emptyPool(dlbabp, group_id)) { */
+    /*   /\* FIXME Hugues: here use __ckill() rather than ckill() since */
+    /*      ckill() macro terminates with 'return -1', which is invalid */
+    /*      here. I do not change the ckill() macro since this return value */
+    /*      is currently used in the implementation of global_barrier_*(), */
+    /*      see iw_barrier.cl source file *\/ */
+    /*   if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, group_id) == -1) { */
+    /*     return; */
+    /*   } */
+    /* } */
 
     // Try to acquire new task
     if (DLBABP_dequeue(kernel_ctx, dlbabp, &t, randdata, &localStealAttempts, num_pools) == 0) {
