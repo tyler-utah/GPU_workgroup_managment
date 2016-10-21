@@ -197,10 +197,10 @@ int main(int argc, char *argv[]) {
 	// Set up the communicator
 	int local_size = 256;
 	int wg_size = MAX_P_GROUPS;
-	CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
+	CL_Communicator cl_comm(exec, "mega_kernel", s_ctx, &d_ctx_mem);
 
 	// Launch the mega kernel
-	err = cl_comm.launch_mega_kernel();
+	err = cl_comm.launch_mega_kernel(cl::NDRange(wg_size * local_size), cl::NDRange(local_size));
 	check_ocl(err);
 
 	// Get the number of found groups

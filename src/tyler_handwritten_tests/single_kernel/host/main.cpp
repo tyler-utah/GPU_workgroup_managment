@@ -164,12 +164,12 @@ int main(int argc, char *argv[]) {
 	check_ocl(err);
 	int local_size = 256;
 	int wg_size = MAX_P_GROUPS;
-	CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
+	CL_Communicator cl_comm(exec, "mega_kernel", s_ctx, &d_ctx_mem);
 	
 	err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
 	check_ocl(err);
 
-	err = cl_comm.launch_mega_kernel();
+	err = cl_comm.launch_mega_kernel(cl::NDRange(wg_size * local_size), cl::NDRange(local_size));
 	check_ocl(err);
 	int participating_groups = cl_comm.number_of_discovered_groups();
 

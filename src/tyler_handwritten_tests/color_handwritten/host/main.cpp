@@ -269,11 +269,11 @@ int main(int argc, char *argv[]) {
 	// Set up the communicator
 	int local_size = 256;
 	int wg_size = MAX_P_GROUPS;
-	CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
+	CL_Communicator cl_comm(exec, "mega_kernel", s_ctx, &d_ctx_mem);
 
 	// Launch the mega kernel
 
-	check_ocl(err);
+	int occupancy_bound = cl_comm.get_occupancy_bound(local_size);
 
 	
 	std::vector<time_stamp> response_time;
@@ -287,7 +287,7 @@ int main(int argc, char *argv[]) {
 	check_ocl(err);
 	exec.exec_queue.finish();
 	check_ocl(err);
-	err = cl_comm.launch_mega_kernel();
+	err = cl_comm.launch_mega_kernel(cl::NDRange(local_size * occupancy_bound), cl::NDRange(local_size));
 
 	// Get the number of found groups
 	int participating_groups = cl_comm.number_of_discovered_groups();

@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <thread>
 #include <chrono>
+#include "discovery.h"
 
 typedef uint64_t time_stamp;
 typedef std::pair<time_stamp, time_stamp> time_ret;
@@ -15,32 +16,34 @@ class CL_Communicator {
 	private:
 		CL_Execution *exec;
 		std::string mega_kernel_name;
-		cl::NDRange global_size;
-		cl::NDRange local_size;
 		CL_Scheduler_ctx scheduler;
 		int participating_groups;
 		std::atomic<int> executing_persistent;
 		std::atomic<int> waiting_for_async;
 		volatile time_stamp persistent_begin, persistent_end;
+		Discovery_ctx d_ctx_host;
+		cl::Buffer *d_ctx_device;
 	public:
 
 		void my_yield() {
 			std::this_thread::yield();
 		}
 
-		CL_Communicator(CL_Execution &exec_arg, std::string mk_name, cl::NDRange gs, cl::NDRange ls, CL_Scheduler_ctx s_ctx) {
+		CL_Communicator(CL_Execution &exec_arg, std::string mk_name, CL_Scheduler_ctx s_ctx, cl::Buffer *d_ctx_mem) {
 			exec = &exec_arg;
 			mega_kernel_name = mk_name;
-			global_size = gs;
-			local_size = ls;
 			scheduler = s_ctx;
 			executing_persistent = 0;
 			waiting_for_async = 0;
 			persistent_begin = persistent_end = 0;
             participating_groups = 0;
+			mk_init_discovery_ctx(&d_ctx_host);
+			d_ctx_device = d_ctx_mem;
+			int err = exec->exec_queue.enqueueWriteBuffer(*d_ctx_device, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx_host);
+			check_ocl(err);
 		}
 
-		int launch_mega_kernel() {
+		int launch_mega_kernel(cl::NDRange global_size, cl::NDRange local_size) {
 			std::cout << "launching mega kernel..." << std::endl;
 			std::flush(std::cout);
 
@@ -204,6 +207,26 @@ class CL_Communicator {
 
 		void my_sleep(int ms) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+		}
+
+		int get_occupancy_bound(int local_size) {
+			launch_mega_kernel(cl::NDRange(MAX_P_GROUPS * local_size), cl::NDRange(local_size));
+			int ret = number_of_discovered_groups();
+			send_quit_signal();
+			int err = exec->exec_queue.flush();
+			check_ocl(err);
+			err = exec->exec_queue.finish();
+			check_ocl(err);
+			participating_groups = 0;
+			executing_persistent = 0;
+			waiting_for_async = 0;
+			persistent_begin = persistent_end = 0;
+			participating_groups = 0;
+			restart_scheduler(&scheduler);
+			mk_init_discovery_ctx(&d_ctx_host);
+			err = exec->exec_queue.enqueueWriteBuffer(*d_ctx_device, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx_host);
+			check_ocl(err);
+			return ret;
 		}
 
 };
