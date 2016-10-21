@@ -164,7 +164,8 @@ int get_num_participating_groups(CL_Execution *exec)
   cl::Buffer dummy(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
 
   int arg_index = 0;
-  
+
+  // dummy args for graphics
   err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
   check_ocl(err);
   arg_index++;
@@ -174,9 +175,8 @@ int get_num_participating_groups(CL_Execution *exec)
   err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
   check_ocl(err);
   arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
+
+  // dummy args for octree
   err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
   check_ocl(err);
   arg_index++;
@@ -379,7 +379,6 @@ int main(int argc, char *argv[]) {
   // Hugues: this 'maxlength' value is also hardcoded in CUDA version,
   // see the 'dequeuelength' variable in CUDA
   unsigned int maxlength = 256;
-  cl::Buffer dwq(context, CL_MEM_READ_WRITE, sizeof(DLBABP));
   cl::Buffer randdata(context, CL_MEM_READ_WRITE, sizeof(int) * 128);
   cl::Buffer maxl(context, CL_MEM_READ_WRITE, sizeof(int));
   cl::Buffer particles(context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
@@ -446,37 +445,47 @@ int main(int argc, char *argv[]) {
   check_ocl(err);
 
   // Set args for persistent kernel
-  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, dwq);
-  arg_index++;
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, randdata);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, maxl);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, particles);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, newParticles);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, tree);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, FLAGS_numParticles);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, treeSize);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, particlesDone);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, FLAGS_maxChildren);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stealAttempts);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, num_pools);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, deq);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, dh);
   arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, maxlength);
   arg_index++;
-  
   check_ocl(err);
 
   // Set barrier arg
@@ -491,17 +500,16 @@ int main(int argc, char *argv[]) {
 
   // Set arg for kernel contexts
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
-  arg_index++;
-  err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
+  arg_index++;    
+  check_ocl(err);
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
   arg_index++;
   check_ocl(err);
 
   err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
-  //check_ocl(err);
+  check_ocl(err);
 
   // Launch the mega kernel
-
-  check_ocl(err);
 	
   std::vector<time_stamp> response_time;
   std::vector<time_stamp> execution_time;

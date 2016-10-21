@@ -49,7 +49,14 @@ void MY_reduce(int length,
 }
 
 /* ========================================================================= */
-// Persistent Kernel
+// Persistent Kernel -- octree
+
+/* Note: many names refer to DLBABP, this comes from the CUDA version,
+   and it stands for "Dynamic Load Balancing - Arora Blumofe Plaxton"
+   (authors of work-stealing paper). There used to be a DLBABP
+   class/structure which contained deq, dh and maxlength, but we've got
+   rid of it since its initialisation required to edit pointers on the
+   device side. So now we just pass deq, dh and maxlength around. */
 
 typedef struct {
   float4 middle;
@@ -67,17 +74,6 @@ typedef struct {
 } DequeHeader;
 
 /*---------------------------------------------------------------------------*/
-
-typedef struct {
-  /* Hugues: pointers to other buffers declared at the host side,
-   * therefore __global. Moreover, for the 'dh' variable, __global is
-   * required for atomic_cmpxchg() later on */
-  __global Task *deq;
-  __global DequeHeader* dh;
-  unsigned int maxlength;
-} DLBABP;
-
-/*---------------------------------------------------------------------------*/
 /* rand */
 
 int myrand(__global Kernel_ctx *kernel_ctx, __global int *randdata) {
@@ -91,12 +87,12 @@ int myrand(__global Kernel_ctx *kernel_ctx, __global int *randdata) {
 /*---------------------------------------------------------------------------*/
 /* lbabp: load balance ABP style, aka work-stealing */
 
-void DLBABP_push(__global Kernel_ctx *kernel_ctx, __global DLBABP *dlbabp, __local Task *val, __global volatile int *maxl) {
+void DLBABP_push(__global Kernel_ctx *kernel_ctx, __global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global volatile int *maxl) {
   int id = k_get_group_id(kernel_ctx);
-  int private_tail = atomic_load_explicit(&(dlbabp->dh[id].tail), memory_order_acquire, memory_scope_device);
-  dlbabp->deq[id * dlbabp->maxlength + private_tail] = *val;
+  int private_tail = atomic_load_explicit(&(dh[id].tail), memory_order_acquire, memory_scope_device);
+  deq[id * maxlength + private_tail] = *val;
   private_tail++;
-  atomic_store_explicit(&(dlbabp->dh[id].tail), private_tail, memory_order_release, memory_scope_device);
+  atomic_store_explicit(&(dh[id].tail), private_tail, memory_order_release, memory_scope_device);
 
   if (*maxl < private_tail) {
     atomic_max(maxl, private_tail);
@@ -105,11 +101,11 @@ void DLBABP_push(__global Kernel_ctx *kernel_ctx, __global DLBABP *dlbabp, __loc
 
 /*---------------------------------------------------------------------------*/
 
-void DLBABP_enqueue(__global Kernel_ctx *kernel_ctx, __global DLBABP *dlbabp, __local Task *val, __global volatile int *maxl) {
+void DLBABP_enqueue(__global Kernel_ctx *kernel_ctx, __global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global volatile int *maxl) {
   /* Hugues todo: check calls to DLBABP_enqueue, can any other thread
    * than id0 can call it ? */
   if (get_local_id(0) == 0) {
-    DLBABP_push(kernel_ctx, dlbabp, val, maxl);
+    DLBABP_push(kernel_ctx, deq, dh, maxlength, val, maxl);
   }
 }
 
@@ -138,22 +134,22 @@ int incIndex(int head) {
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_steal(__global DLBABP *dlbabp, __local Task *val, unsigned int idx) {
+int DLBABP_steal(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength,  __local Task *val, unsigned int idx) {
   int remoteTail;
   int oldHead;
   int newHead;
 
-  oldHead = atomic_load_explicit(&(dlbabp->dh[idx].head), memory_order_acquire, memory_scope_device);
-  /* We need to access dlbabp->dh[idx].tail but we do not modify it,
+  oldHead = atomic_load_explicit(&(dh[idx].head), memory_order_acquire, memory_scope_device);
+  /* We need to access dh[idx].tail but we do not modify it,
      therefore a single load-acquire is enough */
-  remoteTail = atomic_load_explicit(&(dlbabp->dh[idx].tail), memory_order_acquire, memory_scope_device);
+  remoteTail = atomic_load_explicit(&(dh[idx].tail), memory_order_acquire, memory_scope_device);
   if(remoteTail <= getIndex(oldHead)) {
     return -1;
   }
 
-  *val = dlbabp->deq[idx * dlbabp->maxlength + getIndex(oldHead)];
+  *val = deq[idx * maxlength + getIndex(oldHead)];
   newHead = incIndex(oldHead);
-  if (atomic_compare_exchange_weak_explicit(&(dlbabp->dh[idx].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
+  if (atomic_compare_exchange_weak_explicit(&(dh[idx].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
     return 1;
   }
 
@@ -162,62 +158,62 @@ int DLBABP_steal(__global DLBABP *dlbabp, __local Task *val, unsigned int idx) {
 
 /*---------------------------------------------------------------------------*/
 
-int emptyPool(__global DLBABP *dlbabp, int group_id) {
-  int localTail;
-  localTail = atomic_load_explicit(&(dlbabp->dh[group_id].tail), memory_order_acquire, memory_scope_device);
-  if(localTail == 0) {
-    return 1;
-  }
-  return 0;
-}
+/* int emptyPool(__global DLBABP *dlbabp, int group_id) { */
+/*   int localTail; */
+/*   localTail = atomic_load_explicit(&(dlbabp->dh[group_id].tail), memory_order_acquire, memory_scope_device); */
+/*   if(localTail == 0) { */
+/*     return 1; */
+/*   } */
+/*   return 0; */
+/* } */
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_pop(__global Kernel_ctx *kernel_ctx, __global DLBABP *dlbabp, __local Task *val) {
+int DLBABP_pop(__global Kernel_ctx *kernel_ctx,  __global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val) {
   int localTail;
   int oldHead;
   int newHead;
   int id = k_get_group_id(kernel_ctx);
 
-  localTail = atomic_load_explicit(&(dlbabp->dh[id].tail), memory_order_acquire, memory_scope_device);
+  localTail = atomic_load_explicit(&(dh[id].tail), memory_order_acquire, memory_scope_device);
   if(localTail == 0) {
     return -1;
   }
 
   localTail--;
 
-  atomic_store_explicit(&(dlbabp->dh[id].tail), localTail, memory_order_release, memory_scope_device);
+  atomic_store_explicit(&(dh[id].tail), localTail, memory_order_release, memory_scope_device);
 
-  *val = dlbabp->deq[id * dlbabp->maxlength + localTail];
+  *val = deq[id * maxlength + localTail];
 
-  oldHead = atomic_load_explicit(&(dlbabp->dh[id].head), memory_order_acquire, memory_scope_device);
+  oldHead = atomic_load_explicit(&(dh[id].head), memory_order_acquire, memory_scope_device);
 
   if (localTail > getIndex(oldHead)) {
     return 1;
   }
 
-  atomic_store_explicit(&(dlbabp->dh[id].tail), 0, memory_order_release, memory_scope_device);
+  atomic_store_explicit(&(dh[id].tail), 0, memory_order_release, memory_scope_device);
   newHead = getZeroIndexIncCtr(oldHead);
   if(localTail == getIndex(oldHead)) {
-    if(atomic_compare_exchange_weak_explicit(&(dlbabp->dh[id].head), &oldHead, newHead, memory_order_acq_rel, memory_order_release, memory_scope_device)) {
+    if(atomic_compare_exchange_weak_explicit(&(dh[id].head), &oldHead, newHead, memory_order_acq_rel, memory_order_release, memory_scope_device)) {
       return 1;
     }
   }
-  atomic_store_explicit(&(dlbabp->dh[id].head), newHead, memory_order_release, memory_scope_device);
+  atomic_store_explicit(&(dh[id].head), newHead, memory_order_release, memory_scope_device);
   return -1;
 }
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue2(__global Kernel_ctx *kernel_ctx, __global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools)
+int DLBABP_dequeue2(__global Kernel_ctx *kernel_ctx, __global Task *deq, __global DequeHeader *dh, unsigned int maxlength,  __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools)
 {
-  if (DLBABP_pop(kernel_ctx, dlbabp, val) == 1) {
+  if (DLBABP_pop(kernel_ctx, deq, dh, maxlength, val) == 1) {
     return 1;
   }
 
   *localStealAttempts += 1;
 
-  if (DLBABP_steal(dlbabp, val, myrand(kernel_ctx, randdata) % num_pools) == 1) {
+  if (DLBABP_steal(deq, dh, maxlength, val, myrand(kernel_ctx, randdata) % num_pools) == 1) {
     return 1;
   } else {
     return 0;
@@ -226,12 +222,12 @@ int DLBABP_dequeue2(__global Kernel_ctx *kernel_ctx, __global DLBABP *dlbabp, __
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue(__global Kernel_ctx *kernel_ctx, __global DLBABP *dlbabp, __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools) {
+int DLBABP_dequeue(__global Kernel_ctx *kernel_ctx, __global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools) {
   __local volatile int rval;
   int dval = 0;
 
   if(get_local_id(0) == 0) {
-    rval = DLBABP_dequeue2(kernel_ctx, dlbabp, val, randdata, localStealAttempts, num_pools);
+    rval = DLBABP_dequeue2(kernel_ctx, deq, dh, maxlength, val, randdata, localStealAttempts, num_pools);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
   dval = rval;
@@ -270,7 +266,9 @@ int whichbox(volatile float4 pos, float4 middle)
 
 void octree_init(
                  __global Kernel_ctx *kernel_ctx,
-                 __global DLBABP* dlbabp,
+                 __global Task *deq,
+                 __global DequeHeader *dh,
+                 unsigned int maxlength,
                  __global unsigned int* treeSize,
                  __global unsigned int* particlesDone,
                  __global volatile int *maxl,
@@ -283,8 +281,8 @@ void octree_init(
   __local Task t;
   int i;
   for (i = 0; i < num_pools; i++) {
-    atomic_store(&(dlbabp->dh[i].head), 0);
-    atomic_store(&(dlbabp->dh[i].tail), 0);
+    atomic_store(&(dh[i].head), 0);
+    atomic_store(&(dh[i].tail), 0);
   }
 
   /* ---------- initOctree: global init ---------- */
@@ -305,7 +303,7 @@ void octree_init(
   t.end = numParticles;
   t.flip = false;
 
-  DLBABP_enqueue(kernel_ctx, dlbabp, &t, maxl);
+  DLBABP_enqueue(kernel_ctx, deq, dh, maxlength, &t, maxl);
   /* ---------- end of initOctree ---------- */
 }
 
@@ -318,7 +316,6 @@ void octree_main (
                   __local int *scratchpad,
 
                   /* octree args */
-                  __global DLBABP* dlbabp,
                   __global int *randdata,
                   __global volatile int *maxl,
                   __global float4* particles,
@@ -346,7 +343,7 @@ void octree_main (
   __local Task t;
   __local unsigned int check;
 
-  //int NUM_ITERATIONS;
+  //int NUM_ITERATIONS = 0;
 
   unsigned int local_id = get_local_id(0);
   unsigned int local_size = get_local_size(0);
@@ -354,38 +351,13 @@ void octree_main (
   unsigned int localStealAttempts;
   
   if (k_get_global_id(kernel_ctx) == 0) {
-    /* ---------- initDLBABP ----------*/
-    dlbabp->deq = deq;
-    dlbabp->dh = dh;
-    dlbabp->maxlength = maxlength;
-    /* ---------- end of initDLBABP ----------*/
-
     //NUM_ITERATIONS = 2;
 
-    /* ---------- initOctree: global init ---------- */
-    *treeSize = 100;
-    *particlesDone = 0;
-    /* In Cuda, maxl is a kernel global initialized to 0 */
-    *maxl = 0;
-    *stealAttempts = 0;
-
-    /* create and enqueue the first task */
-    t.treepos=0;
-    t.middle.x=0;
-    t.middle.y=0;
-    t.middle.z=0;
-    t.middle.w=256;
-
-    t.beg = 0;
-    t.end = numParticles;
-    t.flip = false;
-
-    DLBABP_enqueue(kernel_ctx, dlbabp, &t, maxl);
-    /* ---------- end of initOctree ---------- */    
+    octree_init(kernel_ctx, deq, dh, maxlength, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles);
   }
 
-  barrier(CLK_GLOBAL_MEM_FENCE);
-
+  barrier (CLK_GLOBAL_MEM_FENCE);
+  
   if (local_id == 0) {
     localStealAttempts = 0;
   }
@@ -417,7 +389,7 @@ void octree_main (
     /* } */
 
     // Try to acquire new task
-    if (DLBABP_dequeue(kernel_ctx, dlbabp, &t, randdata, &localStealAttempts, num_pools) == 0) {
+    if (DLBABP_dequeue(kernel_ctx, deq, dh, maxlength, &t, randdata, &localStealAttempts, num_pools) == 0) {
       check = *particlesDone;
       barrier(CLK_LOCAL_MEM_FENCE);
       if (check == numParticles) {
@@ -484,7 +456,7 @@ void octree_main (
 
           tree[t.treepos + i] = atomic_add(treeSize,(unsigned int)8);
           newTask.treepos = tree[t.treepos + i];
-          DLBABP_enqueue(kernel_ctx, dlbabp, &newTask, maxl);
+          DLBABP_enqueue(kernel_ctx, deq, dh, maxlength, &newTask, maxl);
         }
       } else {
         if (!t.flip) {
@@ -517,7 +489,6 @@ __kernel void mega_kernel(
                           __global atomic_int * graphics_result,
 						  
                           // Persistent kernel args
-                          __global DLBABP* dlbabp,
                           __global int *randdata,
                           __global volatile int *maxl,
                           __global float4* particles,
@@ -556,7 +527,7 @@ __kernel void mega_kernel(
 
   // This is the original persistent kernel with the bar, persistent_kernel_ctx, s_ctx, scratchpad, and (by pointer) local restoration context.
   //#define PERSISTENT_KERNEL color_persistent(row, col, node_value, color_array, stop1, stop2, max_d, num_nodes, num_edges, bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local);
-#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, dlbabp, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
+#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
 
   // Everything else is in here	
 #include "main_device_body.cl"
