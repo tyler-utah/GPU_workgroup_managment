@@ -316,20 +316,22 @@ void octree_main (
                   __local int *scratchpad,
 
                   /* octree args */
+                  __global IW_barrier *octree_bar,
+                  __global atomic_int *num_iterations,
                   __global int *randdata,
                   __global volatile int *maxl,
                   __global float4* particles,
                   __global float4* newparticles,
                   __global unsigned int* tree,
-                  unsigned int numParticles,
+                  const unsigned int numParticles,
                   __global unsigned int* treeSize,
                   __global unsigned int* particlesDone,
-                  unsigned int maxchilds,
+                  const unsigned int maxchilds,
                   __global unsigned int *stealAttempts,
                   const int num_pools,
                   __global Task *deq,
                   __global DequeHeader *dh,
-                  unsigned int maxlength        
+                  const unsigned int maxlength        
                   )
 {
   /* Hugues: pointers to global memory, but the pointers are stored in
@@ -343,141 +345,151 @@ void octree_main (
   __local Task t;
   __local unsigned int check;
 
-  //int NUM_ITERATIONS = 0;
-
   unsigned int local_id = get_local_id(0);
   unsigned int local_size = get_local_size(0);
 
   unsigned int localStealAttempts;
-  
-  if (k_get_global_id(kernel_ctx) == 0) {
-    //NUM_ITERATIONS = 2;
 
-    octree_init(kernel_ctx, deq, dh, maxlength, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles);
-  }
+  __local int num_iter;
 
-  barrier (CLK_GLOBAL_MEM_FENCE);
-  
-  if (local_id == 0) {
-    localStealAttempts = 0;
-  }
-  
-  /* /\* Hugues: do the octree partitionning several times to last longer *\/ */
-  /* while (NUM_ITERATIONS > 0) { */
+  /* Hugues: do the octree partitionning several times to last longer */
 
-  /* if (k_get_global_id(kernel_ctx) == 0) { */
-  /*   //NUM_ITERATIONS--; */
-  /*   octree_init(kernel_ctx, dlbabp, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles); */
-  /* } */
-  //barrier(CLK_GLOBAL_MEM_FENCE);
-  
-  /* main loop */
   while (true) {
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    /* can be killed if pool is empty */
-    /* int group_id = k_get_global_id(kernel_ctx); */
-    /* if (emptyPool(dlbabp, group_id)) { */
-    /*   /\* FIXME Hugues: here use __ckill() rather than ckill() since */
-    /*      ckill() macro terminates with 'return -1', which is invalid */
-    /*      here. I do not change the ckill() macro since this return value */
-    /*      is currently used in the implementation of global_barrier_*(), */
-    /*      see iw_barrier.cl source file *\/ */
-    /*   if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, group_id) == -1) { */
-    /*     return; */
-    /*   } */
-    /* } */
-
-    // Try to acquire new task
-    if (DLBABP_dequeue(kernel_ctx, deq, dh, maxlength, &t, randdata, &localStealAttempts, num_pools) == 0) {
-      check = *particlesDone;
-      barrier(CLK_LOCAL_MEM_FENCE);
-      if (check == numParticles) {
-        if (local_id == 0) {
-          atomic_add(stealAttempts, localStealAttempts);
-        }
-        return;
-      }
-      continue;
-    }
-
-    if (t.flip) {
-      frompart = newparticles;
-      topart = particles;
-    } else {
-      frompart = particles;
-      topart = newparticles;
+    
+    if (local_id == 0) {
+      num_iter = atomic_load(num_iterations);
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
+    global_barrier(octree_bar, kernel_ctx);
 
-    for(int i = local_id; i < 8; i += local_size) {
-      count[i] = 0;
+    if (num_iter == 0) {
+      return;
     }
 
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    for(int i = t.beg + local_id; i < t.end; i += local_size) {
-      /* Hugues todo: use atomic_inc() here ? */
-      atomic_add(&count[whichbox(frompart[i],t.middle)], 1);
+    if (k_get_global_id(kernel_ctx) == 0) {
+      num_iter--;
+      octree_init(kernel_ctx, deq, dh, maxlength, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles);
+      atomic_store(num_iterations, num_iter);
     }
-    barrier(CLK_LOCAL_MEM_FENCE);
 
     if (local_id == 0) {
-      sum[0] = count[0];
-      for (int x = 1; x < 8; x++)
-        sum[x] = sum[x-1] + count[x];
+      localStealAttempts = 0;
     }
 
-    barrier(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);    
+    global_barrier(octree_bar, kernel_ctx);
 
-    for (unsigned int i = t.beg + local_id; i < t.end; i += local_size) {
-      /* Hugues: use atomic_dec() here ? */
-      int toidx = t.beg + atomic_add(&sum[whichbox(frompart[i],t.middle)], -1) - 1;
-      topart[toidx] = frompart[i];
-    }
-    barrier(CLK_LOCAL_MEM_FENCE);
+    /* main loop */
+    while (true) {
+      barrier(CLK_LOCAL_MEM_FENCE);
 
-    /* Hugues: todo: i+= 1 ---> i++ */
-    for(int i = 0; i < 8; i += 1) {
-      __local Task newTask;
+      /* can be killed if pool is empty */
+      /* int group_id = k_get_global_id(kernel_ctx); */
+      /* if (emptyPool(dlbabp, group_id)) { */
+      /*   /\* FIXME Hugues: here use __ckill() rather than ckill() since */
+      /*      ckill() macro terminates with 'return -1', which is invalid */
+      /*      here. I do not change the ckill() macro since this return value */
+      /*      is currently used in the implementation of global_barrier_*(), */
+      /*      see iw_barrier.cl source file *\/ */
+      /*   if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, group_id) == -1) { */
+      /*     return; */
+      /*   } */
+      /* } */
 
-      // Create new work or move to correct side
-      if (count[i] > maxchilds) {
-        if (local_id == 0) {
-          newTask.middle.x = t.middle.x + t.middle.w * mc[i][0];
-          newTask.middle.y = t.middle.y + t.middle.w * mc[i][1];
-          newTask.middle.z = t.middle.z + t.middle.w * mc[i][2];
-          newTask.middle.w = t.middle.w / 2.0;
-
-          newTask.flip = !t.flip;
-          newTask.beg = t.beg + sum[i];
-          newTask.end = newTask.beg + count[i];
-
-          tree[t.treepos + i] = atomic_add(treeSize,(unsigned int)8);
-          newTask.treepos = tree[t.treepos + i];
-          DLBABP_enqueue(kernel_ctx, deq, dh, maxlength, &newTask, maxl);
-        }
-      } else {
-        if (!t.flip) {
-          for (
-               int j = t.beg + sum[i] + local_id;
-               j < t.beg + sum[i] + count[i];
-               j += local_size)
-            {
-              particles[j] = topart[j];
-            }
-        }
+      // Try to acquire new task
+      if (DLBABP_dequeue(kernel_ctx, deq, dh, maxlength, &t, randdata, &localStealAttempts, num_pools) == 0) {
+        check = *particlesDone;
         barrier(CLK_LOCAL_MEM_FENCE);
-        if (local_id == 0) {
-          atomic_add(particlesDone, count[i]);
-          unsigned int val = count[i];
-          tree[t.treepos + i] = 0x80000000 | val;
+        if (check == numParticles) {
+          if (local_id == 0) {
+            atomic_add(stealAttempts, localStealAttempts);
+          }
+          break;
+        }
+        continue;
+      }
+
+      if (t.flip) {
+        frompart = newparticles;
+        topart = particles;
+      } else {
+        frompart = particles;
+        topart = newparticles;
+      }
+
+      barrier(CLK_LOCAL_MEM_FENCE);
+
+      for(int i = local_id; i < 8; i += local_size) {
+        count[i] = 0;
+      }
+
+      barrier(CLK_LOCAL_MEM_FENCE);
+
+      for(int i = t.beg + local_id; i < t.end; i += local_size) {
+        /* Hugues todo: use atomic_inc() here ? */
+        atomic_add(&count[whichbox(frompart[i],t.middle)], 1);
+      }
+      barrier(CLK_LOCAL_MEM_FENCE);
+
+      if (local_id == 0) {
+        sum[0] = count[0];
+        for (int x = 1; x < 8; x++)
+          sum[x] = sum[x-1] + count[x];
+      }
+
+      barrier(CLK_LOCAL_MEM_FENCE);
+
+      for (unsigned int i = t.beg + local_id; i < t.end; i += local_size) {
+        /* Hugues: use atomic_dec() here ? */
+        int toidx = t.beg + atomic_add(&sum[whichbox(frompart[i],t.middle)], -1) - 1;
+        topart[toidx] = frompart[i];
+      }
+      barrier(CLK_LOCAL_MEM_FENCE);
+
+      /* Hugues: todo: i+= 1 ---> i++ */
+      for(int i = 0; i < 8; i += 1) {
+        __local Task newTask;
+
+        // Create new work or move to correct side
+        if (count[i] > maxchilds) {
+          if (local_id == 0) {
+            newTask.middle.x = t.middle.x + t.middle.w * mc[i][0];
+            newTask.middle.y = t.middle.y + t.middle.w * mc[i][1];
+            newTask.middle.z = t.middle.z + t.middle.w * mc[i][2];
+            newTask.middle.w = t.middle.w / 2.0;
+
+            newTask.flip = !t.flip;
+            newTask.beg = t.beg + sum[i];
+            newTask.end = newTask.beg + count[i];
+
+            tree[t.treepos + i] = atomic_add(treeSize,(unsigned int)8);
+            newTask.treepos = tree[t.treepos + i];
+            DLBABP_enqueue(kernel_ctx, deq, dh, maxlength, &newTask, maxl);
+          }
+        } else {
+          if (!t.flip) {
+            for (
+                 int j = t.beg + sum[i] + local_id;
+                 j < t.beg + sum[i] + count[i];
+                 j += local_size)
+              {
+                particles[j] = topart[j];
+              }
+          }
+          barrier(CLK_LOCAL_MEM_FENCE);
+          if (local_id == 0) {
+            atomic_add(particlesDone, count[i]);
+            unsigned int val = count[i];
+            tree[t.treepos + i] = 0x80000000 | val;
+          }
         }
       }
-    }
-  }
-    //} // while NUM_ITERATIONS
+    } // end of main loop
+
+    global_barrier(octree_bar, kernel_ctx);
+    
+  } // end of num_iterations
 }
 
 /* ========================================================================= */
@@ -489,6 +501,8 @@ __kernel void mega_kernel(
                           __global atomic_int * graphics_result,
 						  
                           // Persistent kernel args
+                          __global IW_barrier *octree_bar,
+                          __global atomic_int *num_iterations,
                           __global int *randdata,
                           __global volatile int *maxl,
                           __global float4* particles,
@@ -527,7 +541,7 @@ __kernel void mega_kernel(
 
   // This is the original persistent kernel with the bar, persistent_kernel_ctx, s_ctx, scratchpad, and (by pointer) local restoration context.
   //#define PERSISTENT_KERNEL color_persistent(row, col, node_value, color_array, stop1, stop2, max_d, num_nodes, num_edges, bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local);
-#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
+#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, octree_bar, num_iterations, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
 
   // Everything else is in here	
 #include "main_device_body.cl"

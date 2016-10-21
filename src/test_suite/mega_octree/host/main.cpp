@@ -36,27 +36,28 @@ DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipp
 /*===========================================================================*/
 // specific to octree
 
-DEFINE_int32(numParticles, 1000, "number of particles to treat");
+DEFINE_int32(numParticles, 10000, "number of particles to treat");
 DEFINE_int32(maxChildren, 50, "maximum number of children");
 DEFINE_int32(blocks, 12, "number of blocks");
 DEFINE_int32(threads, 32, "number of threads");
+DEFINE_int32(num_iterations, 1, "number of iterations");
 static const unsigned int MAXTREESIZE = 11000000;
 
 /*---------------------------------------------------------------------------*/
 
 typedef struct {
   cl_float4 middle;
-  bool flip;
-  unsigned int end;
-  unsigned int beg;
-  unsigned int treepos;
+  cl_bool flip;
+  cl_uint end;
+  cl_uint beg;
+  cl_uint treepos;
 } Task;
 
 /*---------------------------------------------------------------------------*/
 
 typedef struct {
-  volatile int tail;
-  volatile int head;
+  cl_int tail;
+  cl_int head;
 } DequeHeader;
 
 /*---------------------------------------------------------------------------*/
@@ -177,6 +178,12 @@ int get_num_participating_groups(CL_Execution *exec)
   arg_index++;
 
   // dummy args for octree
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
+  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
+  check_ocl(err);
+  arg_index++;
   err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
   check_ocl(err);
   arg_index++;
@@ -374,25 +381,43 @@ int main(int argc, char *argv[]) {
   cout << "  arg blocks: " << FLAGS_blocks << endl;
   cout << "  num_pools: " << num_pools << endl;
   cout << "  maxChildren: " << FLAGS_maxChildren << endl;
+  cout << "  num_iterations: " << FLAGS_num_iterations << endl;
   cout << "===================" << endl;
 
   // Hugues: this 'maxlength' value is also hardcoded in CUDA version,
   // see the 'dequeuelength' variable in CUDA
   unsigned int maxlength = 256;
-  cl::Buffer randdata(context, CL_MEM_READ_WRITE, sizeof(int) * 128);
-  cl::Buffer maxl(context, CL_MEM_READ_WRITE, sizeof(int));
-  cl::Buffer particles(context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
-  cl::Buffer newParticles(context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
-  cl::Buffer tree(context, CL_MEM_READ_WRITE, sizeof(unsigned int)*MAXTREESIZE);
-  cl::Buffer treeSize(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
-  cl::Buffer particlesDone(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
-  cl::Buffer stealAttempts(context, CL_MEM_READ_WRITE, sizeof(unsigned int));
-  cl::Buffer deq(context, CL_MEM_READ_WRITE, sizeof(Task) * maxlength * num_pools);
-  cl::Buffer dh(context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * num_pools);
+  cl::Buffer d_num_iterations(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+  cl::Buffer randdata(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * 128);
+  cl::Buffer maxl(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+  cl::Buffer particles(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
+  cl::Buffer newParticles(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
+  cl::Buffer tree(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint)*MAXTREESIZE);
+  cl::Buffer treeSize(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint));
+  cl::Buffer particlesDone(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint));
+  cl::Buffer stealAttempts(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint));
+  cl::Buffer deq(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Task) * maxlength * num_pools);
+  cl::Buffer dh(exec.exec_context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * num_pools);
 
-  exec.exec_queue.enqueueFillBuffer(tree, 0, 0, sizeof(unsigned int)*MAXTREESIZE);
-  exec.exec_queue.enqueueFillBuffer(deq, 0, 0, sizeof(Task) * maxlength * num_pools);
-  exec.exec_queue.enqueueFillBuffer(dh, 0, 0, sizeof(DequeHeader) * num_pools);
+  IW_barrier octree_h_bar;
+  for (int i = 0; i < MAX_P_GROUPS; i++) {
+    octree_h_bar.barrier_flags[i] = 0;
+  }
+  octree_h_bar.phase = 0;
+  
+  cl::Buffer octree_d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
+  err = exec.exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
+  check_ocl(err);
+  
+  cl_int num_iterations = FLAGS_num_iterations;
+  err = exec.exec_queue.enqueueWriteBuffer(d_num_iterations, CL_TRUE, 0, sizeof(cl_int), &(num_iterations));
+  check_ocl(err);
+  err = exec.exec_queue.enqueueFillBuffer(tree, 0, 0, sizeof(cl_uint)*MAXTREESIZE);
+  check_ocl(err);
+  err = exec.exec_queue.enqueueFillBuffer(deq, 0, 0, sizeof(Task) * maxlength * num_pools);
+  check_ocl(err);
+  err = exec.exec_queue.enqueueFillBuffer(dh, 0, 0, sizeof(DequeHeader) * num_pools);
+  check_ocl(err);
 
   // ----------------------------------------------------------------------
   // generate particles
@@ -445,6 +470,12 @@ int main(int argc, char *argv[]) {
   check_ocl(err);
 
   // Set args for persistent kernel
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, octree_d_bar);
+  arg_index++;
+  check_ocl(err);
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_num_iterations);
+  arg_index++;
+  check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, randdata);
   arg_index++;
   check_ocl(err);
@@ -563,12 +594,19 @@ int main(int argc, char *argv[]) {
   unsigned int hparticlesDone;
   unsigned int hstealAttempts;
 
-  exec.exec_queue.enqueueReadBuffer(maxl, CL_TRUE, 0, sizeof(int), &maxMem);
-  exec.exec_queue.enqueueReadBuffer(particlesDone, CL_TRUE, 0, sizeof(unsigned int), &hparticlesDone);
-  exec.exec_queue.enqueueReadBuffer(treeSize, CL_TRUE, 0, sizeof(unsigned int), &htreeSize);
+  err = exec.exec_queue.enqueueReadBuffer(maxl, CL_TRUE, 0, sizeof(cl_int), &maxMem);
+  check_ocl(err);
+  err = exec.exec_queue.enqueueReadBuffer(particlesDone, CL_TRUE, 0, sizeof(cl_uint), &hparticlesDone);
+  check_ocl(err);
+  err = exec.exec_queue.enqueueReadBuffer(treeSize, CL_TRUE, 0, sizeof(cl_uint), &htreeSize);
+  check_ocl(err);
   htree = new unsigned int[MAXTREESIZE];
-  exec.exec_queue.enqueueReadBuffer(tree, CL_TRUE, 0, sizeof(unsigned int) * MAXTREESIZE, htree);
-  exec.exec_queue.enqueueReadBuffer(stealAttempts, CL_TRUE, 0, sizeof(unsigned int), &hstealAttempts);
+  err = exec.exec_queue.enqueueReadBuffer(tree, CL_TRUE, 0, sizeof(cl_uint) * MAXTREESIZE, htree);
+  check_ocl(err);
+  err = exec.exec_queue.enqueueReadBuffer(stealAttempts, CL_TRUE, 0, sizeof(cl_uint), &hstealAttempts);
+  check_ocl(err);
+  err = exec.exec_queue.enqueueReadBuffer(d_num_iterations, CL_TRUE, 0, sizeof(cl_uint), &num_iterations);
+  check_ocl(err);
 
   // ---------- print the stats
   unsigned int sum = 0;
@@ -578,9 +616,12 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  cout << "Tree size: " << htreeSize << endl;
-  cout << "Particles in tree: " << sum << " (" << FLAGS_numParticles << ") [" << hparticlesDone << "]" << endl;
-  cout << "Steal attempts: " << hstealAttempts << endl;
+  cout << "========== results for octree ==========" << endl;
+  cout << "  Tree size: " << htreeSize << endl;
+  cout << "  Particles in tree: " << sum << " (" << FLAGS_numParticles << ") [" << hparticlesDone << "]" << endl;
+  cout << "  Steal attempts: " << hstealAttempts << endl;
+  cout << "  num_iterations value after the run (should be 0): " << num_iterations << endl;
+  cout << "====================" << endl;
 
   // ----------------- Hugues: octree: end of stats collecting ---------------
 
