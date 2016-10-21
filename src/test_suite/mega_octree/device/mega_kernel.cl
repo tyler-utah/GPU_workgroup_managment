@@ -297,6 +297,32 @@ void octree_init(
 
 /*---------------------------------------------------------------------------*/
 
+void global_barrier_sense_reversal(__global IW_barrier *bar, __local int *sense, __global Kernel_ctx *k_ctx)
+{
+  if (get_local_id(0) == 0) {
+    *sense = !(*sense);
+    if (atomic_fetch_add(&(bar->counter), 1) == 0) {
+      /* only the first to hit the barrier enters here. it spins waiting
+         for the other workgroups to arrive. The number of workgroups is
+         dynamic, so it should be checked from kernel_ctx everytime */
+      while (k_get_num_groups(k_ctx) != atomic_load(&(bar->counter)));
+      /* everyone is here, first reset the counter */
+      atomic_store(&(bar->counter), 0);
+      /* then release everybody */
+      atomic_store(&(bar->sense), *sense);
+    } else {
+      /* spin on the sense flag */
+      while (sense != atomic_load(&(bar->sense)));
+    }
+  }
+
+  /* Here a local barrier to stop all threads of the group. Maybe we
+     need to use the value of 'sense' to make this barrier effective? */
+  barrier(CLK_LOCAL_MEM_FENCE);
+}
+
+/*---------------------------------------------------------------------------*/
+
 void octree_main (
                   /* mega-kernel args */
                   __global Kernel_ctx *kernel_ctx,
@@ -340,6 +366,7 @@ void octree_main (
 
   __local int num_iter;
 
+  Restoration_ctx to_fork;
   int i;
 
   /* Hugues: do the octree partitionning several times to last longer */
@@ -382,6 +409,19 @@ void octree_main (
           return;
         }
       }
+
+      // always suggest to fork
+
+      /* Hugues: variable 'i' is just used to give a valid argument, we */
+      /* do not use the returned value. */
+
+      /* Hugues: the octree_bar->num_groups arg is here to put something */
+      /* valid as argument, I don't think this value is used anywhere */
+      /* else. I jus mimick the call to cfork() in */
+      /* global_barrier_resize(). But looking at the code of */
+      /* global_barrier(), bar->num_groups is not used there. */
+
+      //cfork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(octree_bar->num_groups));
 
       // Try to acquire new task
       if (DLBABP_dequeue(kernel_ctx, deq, dh, maxlength, &t, randdata, &localStealAttempts, num_pools) == 0) {
