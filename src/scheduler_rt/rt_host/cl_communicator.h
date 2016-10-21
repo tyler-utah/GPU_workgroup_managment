@@ -134,6 +134,8 @@ class CL_Communicator {
 
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
 
+			std::atomic_store(&executing_persistent, 1);
+
 			persistent_begin = gettime_chrono();
 
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
@@ -203,4 +205,5 @@ class CL_Communicator {
 		void my_sleep(int ms) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 		}
+
 };
