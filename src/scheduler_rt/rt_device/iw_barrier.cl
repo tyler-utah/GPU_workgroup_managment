@@ -12,7 +12,7 @@ int b_get_global_size(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx)
 	return bar->num_groups  * get_local_size(0); 
 }
 
-int global_barrier(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx, CL_Scheduler_ctx s_ctx, __local int * scratchpad) {
+int global_barrier(__global IW_barrier *bar, __global Kernel_ctx *kernel_ctx) {
   
   int id = k_get_group_id(kernel_ctx);
 	
