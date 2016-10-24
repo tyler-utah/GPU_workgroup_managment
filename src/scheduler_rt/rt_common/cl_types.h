@@ -11,6 +11,7 @@
 
 #define MY_CL_GLOBAL __global
 
+#define CL_BOOL_TYPE bool
 #define CL_CHAR_TYPE char
 #define CL_UCHAR_TYPE unsigned char
 #define CL_SHORT_TYPE short
@@ -20,6 +21,7 @@
 #define CL_LONG_TYPE long
 #define CL_ULONG_TYPE unsigned long
 #define CL_FLOAT_TYPE float
+#define CL_FLOAT4_TYPE float4
 #define CL_DOUBLE_TYPE double
 #define CL_HALF_TYPE half
 
@@ -31,6 +33,7 @@
 
 #define MY_CL_GLOBAL
 
+#define CL_BOOL_TYPE cl_bool
 #define CL_CHAR_TYPE cl_char
 #define CL_UCHAR_TYPE cl_uchar
 #define CL_SHORT_TYPE cl_short
@@ -40,6 +43,7 @@
 #define CL_LONG_TYPE cl_long
 #define CL_ULONG_TYPE cl_ulong
 #define CL_FLOAT_TYPE cl_float
+#define CL_FLOAT4_TYPE cl_float4
 #define CL_DOUBLE_TYPE cl_double
 #define CL_HALF_TYPE cl_half
 
