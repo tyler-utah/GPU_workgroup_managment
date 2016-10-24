@@ -54,7 +54,7 @@ class CL_Communicator {
 			int err = exec->exec_queue.enqueueWriteBuffer(*d_ctx_device, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx_host);
 			check_ocl(err);
 			global_start = 0;
-			record_time_groups_data = false;
+			record_time_groups_data = true;
 			redlines = 0;
 		}
 
@@ -331,8 +331,8 @@ class CL_Communicator {
 		std::string summary_str() {
 			std::stringstream summ;
 			summ << "Persistent task execution time: " << nano_to_milli(get_persistent_time()) << " ms\n";
-			summ << "Number of discovered groups: " << number_of_discovered_groups() << " ms\n";
-			summ << "Number of non persistent tasks: " << response_times.size() << " ms\n";
+			summ << "Number of discovered groups: " << number_of_discovered_groups();
+			summ << "Number of non persistent tasks: " << response_times.size();
 			if (response_times.size() > 0) {
 				summ << "\nNon persistent reponse times:\n";
 				summ << "-----------------------\n";
