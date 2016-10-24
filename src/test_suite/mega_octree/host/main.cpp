@@ -382,7 +382,7 @@ int main(int argc, char *argv[]) {
   octree_h_bar.sense = 0;
 
   cl::Buffer octree_d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
-  err = exec.exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
+  err = exec.exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(IW_barrier), &octree_h_bar);
   check_ocl(err);
 
   cl_int num_iterations = FLAGS_num_iterations;
