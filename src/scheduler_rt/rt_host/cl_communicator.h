@@ -17,7 +17,7 @@ typedef std::tuple<time_stamp, time_stamp, time_stamp> triple_time;
 
 
 class CL_Communicator {
-	
+
 	private:
 		CL_Execution *exec;
 		std::string mega_kernel_name;
@@ -32,7 +32,7 @@ class CL_Communicator {
 		std::vector<time_groups> time_groups_data;
 		std::vector<triple_time> response_exec_data;
 		std::vector<time_stamp> response_times;
-	    std::vector<time_stamp> execution_times;	
+	    std::vector<time_stamp> execution_times;
 		bool record_time_groups_data;
 		int redlines;
 	public:
@@ -84,10 +84,10 @@ class CL_Communicator {
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_acquire) != DEVICE_WAITING);
 			std::atomic_thread_fence(std::memory_order_acquire);
 			participating_groups = *(scheduler.participating_groups);
-			
+
 			return err;
 		}
-		
+
 		int number_of_discovered_groups() {
 			return participating_groups;
 		}
@@ -101,6 +101,21 @@ class CL_Communicator {
 			return std::chrono::duration_cast<std::chrono::nanoseconds>(
 				std::chrono::high_resolution_clock::now().time_since_epoch())
 				.count();
+		}
+
+		void spinwait_microsec(uint64_t duration_microsec) {
+			uint64_t start = gettime_chrono();
+			while (true) {
+				uint64_t elapsed_nanosec = gettime_chrono() - start;
+				if (elapsed_nanosec >= (duration_microsec * 1000)) {
+					return;
+				}
+				/* loop for a while to avoid spinning directly
+				 * on the gettime_chrono(). The value is
+				 * arbitrary, feel free to reduce it if it is
+				 * too much */
+				for (volatile int i = 0; i < 500; ++i);
+			}
 		}
 
 		// Should possibly check groups here again to make sure we don't ask for too many (compare to participating groups)
@@ -132,7 +147,7 @@ class CL_Communicator {
 			buf.append("_execution");
 
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
-			
+
 			execution_begin = gettime_chrono(); //start application timer here
 			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.scheduler_flag), std::memory_order_relaxed) != DEVICE_WAITING) {
 				my_yield();
@@ -177,7 +192,7 @@ class CL_Communicator {
 				if (groups == 0) {
 					break;
 				}
-				my_sleep(1);
+				spinwait_microsec(200);
 			}
 
 			persistent_end = gettime_chrono();
@@ -266,7 +281,7 @@ class CL_Communicator {
 				return 0.0;
 			}
 			double total = reduce_times_ms(v);
-		
+
 			return (total / double(v.size()));
 		}
 
