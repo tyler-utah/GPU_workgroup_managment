@@ -384,35 +384,13 @@ void octree_main (
   }
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
-
-  /* Hugues: do the octree partitionning several times to last longer */
-
-  /* while (true) { */
-
-  /*   if (local_id == 0) { */
-  /*     num_iter = atomic_load(num_iterations); */
-  /*   } */
-
-  /*   barrier(CLK_LOCAL_MEM_FENCE); */
-  /*   global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx); */
-
-  /*   if (num_iter == 0) { */
-  /*     return; */
-  /*   } */
+  while (true) {
+    /* iteration loop */
 
     if (k_get_global_id(kernel_ctx) == 0) {
-      //num_iter--;
       octree_init(kernel_ctx, deq, dh, maxlength, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles);
-      //atomic_store(num_iterations, num_iter);
     }
-
-    /* if (local_id == 0) { */
-    /*   localStealAttempts = 0; */
-    /* } */
-
-    barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
-    //global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
     /* main loop */
     while (true) {
@@ -444,7 +422,7 @@ void octree_main (
       /*  */
       to_fork.sense = sense;
 
-      //cfork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(octree_bar->num_groups));
+      cfork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(octree_bar->num_groups));
 
       // Try to acquire new task
       if (DLBABP_dequeue(kernel_ctx, deq, dh, maxlength, &t, randdata, &localStealAttempts, num_pools) == 0) {
@@ -457,11 +435,6 @@ void octree_main (
           break;
         }
         continue;
-      }
-
-      //synthetic work
-      for (i = 0; i < 5000; i++) {
-        atomic_store(scheduler_ctx.check_value, 0);
       }
 
       if (t.flip) {
@@ -541,9 +514,26 @@ void octree_main (
       }
     } // end of main loop
 
-    //global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
+    // consume one iteration
+    if (k_get_global_id(kernel_ctx) == 0) {
+      atomic_fetch_sub(num_iterations, 1);
+    }
+    barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
 
-    //} // end of num_iterations
+    // global barrier to propagate the modification of num_iterations to
+    // all workgroups
+    global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
+
+    if (local_id == 0) {
+      num_iter = atomic_load(num_iterations);
+    }
+    barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
+
+    if (num_iter == 0) {
+      break;
+    }
+
+  } // end of iterations loop
 }
 
 /* ========================================================================= */
