@@ -568,12 +568,10 @@ int main(int argc, char *argv[]) {
     workgroups_for_non_persistent = participating_groups / FLAGS_non_persistent_wgs;
   }
 
-  cout << "send persistent task with " << num_pools << " work groups" << endl;
   cl_comm.send_persistent_task(num_pools);
 
   while (cl_comm.is_executing_persistent() && !FLAGS_skip_tasks) {
     *graphics_result = INT_MAX;
-    cout << " * start non-persistent task" << endl;
     time_ret timing_info = cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
     response_time.push_back(timing_info.second);
     execution_time.push_back(timing_info.first);
@@ -585,9 +583,7 @@ int main(int argc, char *argv[]) {
     cl_comm.my_sleep(100);
   }
 
-  cout << "send quit signal" << endl;
   cl_comm.send_quit_signal();
-  cout << "ask queue to finish" << endl;
   err = exec.exec_queue.finish();
   check_ocl(err);
 
