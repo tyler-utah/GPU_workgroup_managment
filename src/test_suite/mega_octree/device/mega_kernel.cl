@@ -305,11 +305,24 @@ void global_barrier_sense_reversal(__global IW_barrier *bar, __local int *sense,
       /* only the first to hit the barrier enters here. it spins waiting
          for the other workgroups to arrive. The number of workgroups is
          dynamic, so it should be checked from kernel_ctx everytime */
-      while (k_get_num_groups(k_ctx) != atomic_load(&(bar->counter)));
-      /* everyone is here, first reset the counter */
-      atomic_store(&(bar->counter), 0);
-      /* then release everybody */
-      atomic_store(&(bar->sense), *sense);
+      while (true) {
+        /* Here we MUST first load the barrier counter. If not, the
+           following can happen: load the number of groups, say it's
+           equal to n. Then, concurrently, the scheduler allocates a new
+           group, so now the number of groups is (n+1), and n groups
+           enter the barrier. Now the barrier count is loaded: it is
+           equal to n, therefore the barrier will release everybody,
+           although it must have waited for (n+1) groups ! */
+        int bar_counter = atomic_load(&(bar->counter));
+        int num_groups = k_get_num_groups(k_ctx);
+        if (bar_counter == num_groups) {
+          /* everyone is here, first reset the counter */
+          atomic_store(&(bar->counter), 0);
+          /* then release everybody */
+          atomic_store(&(bar->sense), *sense);
+          break;
+        }
+      }
     } else {
       /* spin on the sense flag */
       while (*sense != atomic_load(&(bar->sense)));
@@ -391,7 +404,7 @@ void octree_main (
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
-    global_barrier(octree_bar, kernel_ctx);
+    global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
 
     if (num_iter == 0) {
       return;
@@ -408,7 +421,7 @@ void octree_main (
     }
 
     barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
-    global_barrier(octree_bar, kernel_ctx);
+    global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
 
     /* main loop */
     while (true) {
@@ -417,11 +430,11 @@ void octree_main (
       /* can be killed before handling a task, but always keep at least
          one work-group alive. This is to avoid to call octree_init()
          after a cfork() */
-      if (k_get_group_id(kernel_ctx) > 0) {
-        if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, k_get_group_id(kernel_ctx)) == -1) {
-          return;
-        }
-      }
+      /* if (k_get_group_id(kernel_ctx) > 0) { */
+      /*   if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, k_get_group_id(kernel_ctx)) == -1) { */
+      /*     return; */
+      /*   } */
+      /* } */
 
       // always suggest to fork
 
@@ -536,7 +549,7 @@ void octree_main (
       }
     } // end of main loop
 
-    global_barrier(octree_bar, kernel_ctx);
+    global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
 
   } // end of num_iterations
 }
