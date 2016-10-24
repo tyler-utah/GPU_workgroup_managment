@@ -110,11 +110,6 @@ class CL_Communicator {
 				if (elapsed_nanosec >= (duration_microsec * 1000)) {
 					return;
 				}
-				/* loop for a while to avoid spinning directly
-				 * on the gettime_chrono(). The value is
-				 * arbitrary, feel free to reduce it if it is
-				 * too much */
-				for (volatile int i = 0; i < 500; ++i);
 			}
 		}
 
@@ -192,7 +187,7 @@ class CL_Communicator {
 				if (groups == 0) {
 					break;
 				}
-				spinwait_microsec(200);
+				spinwait_microsec(1);
 			}
 
 			persistent_end = gettime_chrono();
