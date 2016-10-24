@@ -1,5 +1,7 @@
 // It is important to include this first because other files use it.
+#include "../rt_common/cl_types.h"
 #include "restoration_ctx.h"
+#include "octree.h"
 
 #include "discovery.cl"
 #include "kernel_ctx.cl"
@@ -57,20 +59,7 @@ void MY_reduce(int length,
    rid of it since its initialisation required to edit pointers on the
    device side. So now we just pass deq, dh and maxlength around. */
 
-typedef struct {
-  float4 middle;
-  bool flip;
-  unsigned int end;
-  unsigned int beg;
-  unsigned int treepos;
-} Task;
-
-/*---------------------------------------------------------------------------*/
-
-typedef struct {
-  atomic_int tail;
-  atomic_int head;
-} DequeHeader;
+/* see definitions in common/octree.h */
 
 /*---------------------------------------------------------------------------*/
 /* rand */
@@ -297,11 +286,64 @@ void octree_init(
 
 /*---------------------------------------------------------------------------*/
 
+void global_barrier_sense_reversal(__global IW_barrier *bar, __local int *sense, __global Kernel_ctx *k_ctx)
+{
+  if (get_local_id(0) == 0) {
+    *sense = !(*sense);
+    while (true) {
+      int bar_counter = atomic_load(&(bar->counter));
+      int num_groups = k_get_num_groups(k_ctx);
+      if (bar_counter == num_groups) {
+        break;
+      }
+    }
+  }
+
+  /* if (get_local_id(0) == 0) { */
+  /*   *sense = !(*sense); */
+  /*   if (atomic_fetch_add(&(bar->counter), 1) == 0) { */
+  /*     /\* only the first to hit the barrier enters here. it spins waiting */
+  /*        for the other workgroups to arrive. The number of workgroups is */
+  /*        dynamic, so it should be checked from kernel_ctx everytime *\/ */
+  /*     //while (true) { */
+  /*       /\* Here we MUST first load the barrier counter. If not, the */
+  /*          following can happen: load the number of groups, say it's */
+  /*          equal to n. Then, concurrently, the scheduler allocates a new */
+  /*          group, so now the number of groups is (n+1), and n groups */
+  /*          enter the barrier. Now the barrier count is loaded: it is */
+  /*          equal to n, therefore the barrier will release everybody, */
+  /*          although it must have waited for (n+1) groups ! *\/ */
+  /*       //int bar_counter = atomic_load(&(bar->counter)); */
+  /*       //int num_groups = k_get_num_groups(k_ctx); */
+  /*       //if (bar_counter == num_groups) { */
+  /*         /\* everyone is here, first reset the counter *\/ */
+  /*         //atomic_store(&(bar->counter), 0); */
+  /*         /\* then release everybody *\/ */
+  /*         atomic_store(&(bar->sense), *sense); */
+  /*         //return; */
+  /*         // } */
+  /*         //} */
+  /*   } else { */
+  /*     /\* spin on the sense flag *\/ */
+  /*     while (*sense != atomic_load(&(bar->sense))) { */
+
+  /*     } */
+  /*   } */
+  /* } */
+
+  /* Here a local barrier to stop all threads of the group. Maybe we
+     need to use the value of 'sense' to make this barrier effective? */
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+}
+
+/*---------------------------------------------------------------------------*/
+
 void octree_main (
                   /* mega-kernel args */
                   __global Kernel_ctx *kernel_ctx,
                   CL_Scheduler_ctx scheduler_ctx,
                   __local int *scratchpad,
+                  Restoration_ctx *r_ctx,
 
                   /* octree args */
                   __global IW_barrier *octree_bar,
@@ -339,39 +381,55 @@ void octree_main (
   unsigned int localStealAttempts;
 
   __local int num_iter;
+  __local int sense;
 
+  Restoration_ctx to_fork;
   int i;
+
+  if (local_id == 0) {
+    if (r_ctx->target == 0) {
+      /* very first time */
+      sense = 0;
+    } else {
+      /* we have been forked */
+      sense = r_ctx->sense;
+    }
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  // global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
 
   /* Hugues: do the octree partitionning several times to last longer */
 
-  while (true) {
+  /* while (true) { */
 
-    if (local_id == 0) {
-      num_iter = atomic_load(num_iterations);
-    }
+  /*   if (local_id == 0) { */
+  /*     num_iter = atomic_load(num_iterations); */
+  /*   } */
 
-    barrier(CLK_LOCAL_MEM_FENCE);
-    global_barrier(octree_bar, kernel_ctx);
+  /*   barrier(CLK_LOCAL_MEM_FENCE); */
+  /*   global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx); */
 
-    if (num_iter == 0) {
-      return;
-    }
+  /*   if (num_iter == 0) { */
+  /*     return; */
+  /*   } */
 
     if (k_get_global_id(kernel_ctx) == 0) {
-      num_iter--;
+      //num_iter--;
       octree_init(kernel_ctx, deq, dh, maxlength, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles);
-      atomic_store(num_iterations, num_iter);
+      //atomic_store(num_iterations, num_iter);
     }
 
-    if (local_id == 0) {
-      localStealAttempts = 0;
-    }
+    /* if (local_id == 0) { */
+    /*   localStealAttempts = 0; */
+    /* } */
 
     barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
-    global_barrier(octree_bar, kernel_ctx);
+    //global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
 
     /* main loop */
     while (true) {
+
       barrier(CLK_LOCAL_MEM_FENCE);
 
       /* can be killed before handling a task, but always keep at least
@@ -382,6 +440,24 @@ void octree_main (
           return;
         }
       }
+
+      // always suggest to fork
+
+      /* Hugues: variable 'i' is just used to give a valid argument, we */
+      /* do not use the returned value. */
+
+      /* Hugues: the octree_bar->num_groups arg is here to put something */
+      /* valid as argument, I don't think this value is used anywhere */
+      /* else. I jus mimick the call to cfork() in */
+      /* global_barrier_resize(). But looking at the code of */
+      /* global_barrier(), bar->num_groups is not used there. */
+
+      /* flag to indicate we have been forked */
+      to_fork.target = 1;
+      /*  */
+      to_fork.sense = sense;
+
+      cfork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(octree_bar->num_groups));
 
       // Try to acquire new task
       if (DLBABP_dequeue(kernel_ctx, deq, dh, maxlength, &t, randdata, &localStealAttempts, num_pools) == 0) {
@@ -397,7 +473,7 @@ void octree_main (
       }
 
       // synthetic work
-      for (i = 0; i < 300; i++) {
+      for (i = 0; i < 5000; i++) {
         atomic_store(scheduler_ctx.check_value, 0);
       }
 
@@ -478,9 +554,9 @@ void octree_main (
       }
     } // end of main loop
 
-    global_barrier(octree_bar, kernel_ctx);
+    //global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
 
-  } // end of num_iterations
+    //} // end of num_iterations
 }
 
 /* ========================================================================= */
@@ -532,7 +608,7 @@ __kernel void mega_kernel(
 
   // This is the original persistent kernel with the bar, persistent_kernel_ctx, s_ctx, scratchpad, and (by pointer) local restoration context.
   //#define PERSISTENT_KERNEL color_persistent(row, col, node_value, color_array, stop1, stop2, max_d, num_nodes, num_edges, bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local);
-#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, octree_bar, num_iterations, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
+#define PERSISTENT_KERNEL octree_main(persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local, octree_bar, num_iterations, randdata, maxl, particles, newparticles, tree, numParticles, treeSize, particlesDone, maxchilds, stealAttempts, num_pools, deq, dh, maxlength);
 
   // Everything else is in here
 #include "main_device_body.cl"

@@ -4,13 +4,10 @@
 #include <string>
 #include<iostream>
 #include <vector>
-#include "limits.h"
+#include <limits.h>
 
-// Should be in a directory somewhere probably. Or defined in CMake.
-#define CL_INT_TYPE cl_int
-#define ATOMIC_CL_INT_TYPE cl_int
-#define CL_UCHAR_TYPE cl_uchar
-#define MY_CL_GLOBAL
+// Must be loaded early because it defines CL_XXX_TYPE
+#include "scheduler_rt/rt_common/cl_types.h"
 
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
@@ -18,6 +15,7 @@
 #include "discovery.h"
 #include "cl_communicator.h"
 #include "../common/restoration_ctx.h"
+#include "../common/octree.h"
 #include "cl_scheduler.h"
 #include "kernel_ctx.h"
 #include "iw_barrier.h"
@@ -27,9 +25,7 @@ DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
 DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_bool(list, false, "List OpenCL platforms and devices");
 DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Path to scheduler runtime includes");
-DEFINE_string(restoration_ctx_path, "tyler_handwritten_tests/color_handwritten/common/", "Path to restoration context");
-//DEFINE_string(graph_file, "", "Path to the graph_file");
-//DEFINE_string(output, "", "Path to output the result");
+DEFINE_string(restoration_ctx_path, "test_suite/mega_octree/common/", "Path to restoration context");
 DEFINE_int32(non_persistent_wgs, 2, "ratio of workgroups to send to non-persistent task. Special values are (-1) to send all but one workgroup and (-2) to send one workgroup");
 DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipped: 0 - don't skip, 1 - skip");
 
@@ -43,30 +39,7 @@ DEFINE_int32(threads, 32, "number of threads");
 DEFINE_int32(num_iterations, 1, "number of iterations");
 static const unsigned int MAXTREESIZE = 11000000;
 
-/*---------------------------------------------------------------------------*/
-
-typedef struct {
-  cl_float4 middle;
-  cl_bool flip;
-  cl_uint end;
-  cl_uint beg;
-  cl_uint treepos;
-} Task;
-
-/*---------------------------------------------------------------------------*/
-
-typedef struct {
-  cl_int tail;
-  cl_int head;
-} DequeHeader;
-
-/*---------------------------------------------------------------------------*/
-
-typedef struct {
-  Task *deq;
-  DequeHeader* dh;
-  unsigned int maxlength;
-} DLBABP;
+// see some octree types definitions in common/octree.h
 
 /*===========================================================================*/
 
@@ -404,6 +377,9 @@ int main(int argc, char *argv[]) {
     octree_h_bar.barrier_flags[i] = 0;
   }
   octree_h_bar.phase = 0;
+  // for sense reversal barrier
+  octree_h_bar.counter = 0;
+  octree_h_bar.sense = 0;
 
   cl::Buffer octree_d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
   err = exec.exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
@@ -565,12 +541,10 @@ int main(int argc, char *argv[]) {
     workgroups_for_non_persistent = participating_groups / FLAGS_non_persistent_wgs;
   }
 
-  cout << "send persistent task with " << num_pools << " work groups" << endl;
   cl_comm.send_persistent_task(num_pools);
 
   while (cl_comm.is_executing_persistent() && !FLAGS_skip_tasks) {
     *graphics_result = INT_MAX;
-    cout << " * start non-persistent task" << endl;
     time_ret timing_info = cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
     response_time.push_back(timing_info.second);
     execution_time.push_back(timing_info.first);
@@ -582,9 +556,7 @@ int main(int argc, char *argv[]) {
     cl_comm.my_sleep(100);
   }
 
-  cout << "send quit signal" << endl;
   cl_comm.send_quit_signal();
-  cout << "ask queue to finish" << endl;
   err = exec.exec_queue.finish();
   check_ocl(err);
 

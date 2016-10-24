@@ -9,7 +9,9 @@ add_executable(mega_octree
   host/main.cpp
   host/rand.cc
   common/restoration_ctx.h
+  common/octree.h
 )
+
 target_link_libraries(mega_octree
   base_commandlineflags
   opencl_opencl
