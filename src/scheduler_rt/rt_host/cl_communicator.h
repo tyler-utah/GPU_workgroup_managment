@@ -331,8 +331,8 @@ class CL_Communicator {
 		std::string summary_str() {
 			std::stringstream summ;
 			summ << "Persistent task execution time: " << nano_to_milli(get_persistent_time()) << " ms\n";
-			summ << "Number of discovered groups: " << number_of_discovered_groups();
-			summ << "Number of non persistent tasks: " << response_times.size();
+			summ << "Number of discovered groups: " << number_of_discovered_groups() << "\n";
+			summ << "Number of non persistent tasks: " << response_times.size() << "\n";
 			if (response_times.size() > 0) {
 				summ << "\nNon persistent reponse times:\n";
 				summ << "-----------------------\n";
