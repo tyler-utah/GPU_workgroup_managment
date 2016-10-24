@@ -442,10 +442,6 @@ void octree_main (
         continue;
       }
 
-      /* for (i = 0; i < 400; i++) { */
-      /*   atomic_store(scheduler_ctx.check_value, 0); */
-      /* } */
-
       if (t.flip) {
         frompart = newparticles;
         topart = particles;
