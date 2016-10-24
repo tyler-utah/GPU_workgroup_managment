@@ -31,6 +31,8 @@ DEFINE_string(output, "", "Path to output the result");
 DEFINE_int32(non_persistent_wgs, 2, "ratio of workgroups to send to non-persistent task. Special values are (-1) to send all but one workgroup and (-2) to send one workgroup");
 DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipped: 0 - don't skip, 1 - skip");
 DEFINE_string(kernel_file, "tyler_handwritten_tests/color_handwritten/device/mega_kernel.cl", "the path the mega kernel file");
+DEFINE_int32(non_persistent_frequency, 100, "frequency in milliseconds to launch non_persistent tasks");
+
 
 using namespace std;
 
@@ -329,46 +331,57 @@ int main(int argc, char *argv[]) {
 
 	cl_comm.send_persistent_task(participating_groups);
 
-	while (cl_comm.is_executing_persistent() && !FLAGS_skip_tasks) {
-		*graphics_result = INT_MAX;
-		time_ret timing_info = cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
-		response_time.push_back(timing_info.second);
-		execution_time.push_back(timing_info.first);
+	// Only do these tasks if specified by a flag
+	if (FLAGS_skip_tasks == 0) {
+		time_stamp begin = cl_comm.gettime_chrono();
+		time_stamp end;
+		while (true) {
 
-		int g_result = *graphics_result;
-		if (g_result != 1) {
-			error = 1;
+			// Break if the persistent task isn't executing
+			if (!cl_comm.is_executing_persistent()) {
+				break;
+			}
+			end = cl_comm.gettime_chrono();
+			
+			// Did we redline?
+			if (cl_comm.nano_to_milli(end - begin) >= FLAGS_non_persistent_frequency) {
+				cl_comm.add_redline();
+			}
+
+			// no we didn't redline
+			else {
+
+				// Spin until its time to launch the task
+				while (true) {
+					end = cl_comm.gettime_chrono();
+
+					// Could sleep here if the difference is large!
+					if (cl_comm.nano_to_milli(end - begin) >= FLAGS_non_persistent_frequency) {
+						break;
+					}
+				}
+			}
+
+			// Reset non-persistent task
+			*graphics_result = INT_MAX;
+
+			// Launch the task
+			time_ret timing_info = cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
+
+			// check the result
+			int g_result = *graphics_result;
+			if (g_result != 1) {
+				error = 1;
+			}
+			begin = end;
 		}
-		cl_comm.my_sleep(100);
 	}
 
 	cl_comm.send_quit_signal();
 	err = exec.exec_queue.finish();
 	check_ocl(err);
 
-	cout << "number of participating groups: " << *(s_ctx.participating_groups) << endl;
-
-	cout << "executed " << response_time.size() << " non-persistent tasks" << std::endl;
-
-	for (int i = 0; i < response_time.size(); i++) {
-		cout << "times " << i << ": " << cl_comm.nano_to_milli(response_time[i]) << " " << cl_comm.nano_to_milli(execution_time[i]) << endl;
-	}
-
 	cout << endl << "error: " << error << endl;
-
-	cout << "persistent kernel time: " << cl_comm.nano_to_milli(cl_comm.get_persistent_time()) << endl;
-
-	cout << "non persistent kernels executed with: " << workgroups_for_non_persistent << " workgroups" << endl;
-
-	cout << "total response time: " << cl_comm.reduce_times_ms(response_time) << " ms" << endl;
-
-	cout << "average response time: " << cl_comm.get_average_time_ms(response_time) << " ms" << endl;
-
-	cout << "total execution time: " << cl_comm.reduce_times_ms(execution_time) << " ms" << endl;
-
-	cout << "average execution time: " << cl_comm.get_average_time_ms(execution_time) << " ms" << endl;
-
-	cout << "average end to end: " << cl_comm.get_average_time_ms(execution_time) + cl_comm.get_average_time_ms(response_time)  << " ms" << endl;
 
 	cout << "check value is: " << *(s_ctx.check_value) << " ms" << endl;
 
@@ -381,6 +394,12 @@ int main(int argc, char *argv[]) {
 	cl_comm.print_groups_time_data("tmp.txt");
 
 	cl_comm.print_response_exec_data("tmp2.txt");
+
+	cl_comm.print_response_and_execution_times("tmp3.txt");
+
+	cl_comm.print_summary_file("tmp4.txt");
+
+	cl_comm.print_summary();
 
 	free_scheduler_ctx(&exec, &s_ctx);
 	graph_app_cleanup();

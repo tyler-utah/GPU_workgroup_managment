@@ -8,6 +8,7 @@
 #include <chrono>
 #include "discovery.h"
 #include <vector>
+#include <cmath>
 
 typedef uint64_t time_stamp;
 typedef std::pair<time_stamp, time_stamp> time_ret;
@@ -30,7 +31,10 @@ class CL_Communicator {
 		cl::Buffer *d_ctx_device;
 		std::vector<time_groups> time_groups_data;
 		std::vector<triple_time> response_exec_data;
+		std::vector<time_stamp> response_times;
+	    std::vector<time_stamp> execution_times;	
 		bool record_time_groups_data;
+		int redlines;
 	public:
 
 		void my_yield() {
@@ -51,6 +55,11 @@ class CL_Communicator {
 			check_ocl(err);
 			global_start = 0;
 			record_time_groups_data = false;
+			redlines = 0;
+		}
+
+		void add_redline() {
+			redlines++;
 		}
 
 		int launch_mega_kernel(cl::NDRange global_size, cl::NDRange local_size) {
@@ -130,7 +139,8 @@ class CL_Communicator {
 			}
 			std::atomic_thread_fence(std::memory_order_acquire);
 			execution_end = gettime_chrono(); //end application timer after waiting here.
-
+			execution_times.push_back(execution_end - execution_begin);
+			response_times.push_back(response_end - response_begin);
 			time_ret ret = std::make_pair(execution_end - execution_begin, response_end - response_begin);
 			triple_time record = std::make_tuple(response_begin, response_end, execution_end);
 			response_exec_data.push_back(record);
@@ -161,8 +171,8 @@ class CL_Communicator {
 			while (true) {
 				int groups = std::atomic_load_explicit((std::atomic<int> *)(scheduler.persistent_flag), std::memory_order_relaxed);
 				if (record_time_groups_data) {
-					time_stamp ts = gettime_chrono();
-					time_groups_data.push_back(std::make_pair(ts, groups));
+				  time_stamp ts = gettime_chrono();
+				  time_groups_data.push_back(std::make_pair(ts, groups));
 				}
 				if (groups == 0) {
 					break;
@@ -211,6 +221,46 @@ class CL_Communicator {
 			return total / 1000000.0;
 		}
 
+		double max_times_ms(std::vector<time_stamp> v) {
+			double ret = 0.0;
+			for (int i = 0; i < v.size(); i++) {
+				if (i == 0) {
+					ret = v[i];
+				}
+				else {
+					if (v[i] > ret) {
+						ret = v[i];
+					}
+				}
+			}
+			return ret / 1000000.0;
+		}
+
+		double min_times_ms(std::vector<time_stamp> v) {
+			double ret = 0.0;
+			for (int i = 0; i < v.size(); i++) {
+				if (i == 0) {
+					ret = v[i];
+				}
+				else {
+					if (v[i] < ret) {
+						ret = v[i];
+					}
+				}
+			}
+			return ret / 1000000.0;
+		}
+
+		double std_dev_times_ms(std::vector<time_stamp> v) {
+			double average = get_average_time_ms(v);
+			double std_dev = 0.0;
+			for (int i = 0; i < v.size(); i++) {
+				std_dev += pow(nano_to_milli(v[i]) - average, 2);
+			}
+			return sqrt(std_dev/ v.size());
+		}
+
+
 		double get_average_time_ms(std::vector<time_stamp> v) {
 			if (v.size() == 0) {
 				return 0.0;
@@ -255,6 +305,77 @@ class CL_Communicator {
 				fprintf(fp, "%f, %f, %f\n", normalize_ms(std::get<0>(response_exec_data[i])),
 					                       normalize_ms(std::get<1>(response_exec_data[i])),
 					                       normalize_ms(std::get<2>(response_exec_data[i])));
+
+			fclose(fp);
+		}
+
+		void print_response_and_execution_times(const char * fname) {
+			FILE * fp = fopen(fname, "w");
+			if (!fp) { printf("ERROR: unable to open file %s\n", fname); }
+			fprintf(fp, "response_time, execution_time\n");
+			for (int i = 0; i < response_times.size(); i++)
+				fprintf(fp, "%f, %f\n", nano_to_milli(response_times[i]), nano_to_milli(execution_times[i]));
+
+			fclose(fp);
+		}
+
+		double get_average_exeucuting_workgroups() {
+			int total = 0;
+			for (int i = 0; i < time_groups_data.size(); i++) {
+				total += time_groups_data[i].second;
+			}
+
+			return total / (double)(time_groups_data.size());
+		}
+
+		std::string summary_str() {
+			std::stringstream summ;
+			summ << "Persistent task execution time: " << nano_to_milli(get_persistent_time()) << " ms\n";
+			summ << "Number of discovered groups: " << number_of_discovered_groups() << " ms\n";
+			summ << "Number of non persistent tasks: " << response_times.size() << " ms\n";
+			if (response_times.size() > 0) {
+				summ << "\nNon persistent reponse times:\n";
+				summ << "-----------------------\n";
+				summ << "Mean non persistent response time: " << get_average_time_ms(response_times) << " ms\n";
+				summ << "Total non persistent response time: " << reduce_times_ms(response_times) << " ms\n";
+				summ << "Max non persistent response time: " << max_times_ms(response_times) << " ms\n";
+				summ << "Min non persistent response time: " << min_times_ms(response_times) << " ms\n";
+				summ << "Standard deviation non persistent response time: " << std_dev_times_ms(response_times) << " ms\n";
+				summ << "\nNon persistent exeuction times:\n";
+				summ << "-----------------------\n";
+				summ << "Mean non persistent execution time: " << get_average_time_ms(execution_times) << " ms\n";
+				summ << "Total non persistent execution time: " << reduce_times_ms(execution_times) << " ms\n";
+				summ << "Max non persistent execution time: " << max_times_ms(execution_times) << " ms\n";
+				summ << "Min non persistent execution time: " << min_times_ms(execution_times) << " ms\n";
+				summ << "Standard deviation non persistent execution time: " << std_dev_times_ms(execution_times) << " ms\n";
+				summ << "\nBack-to-back:\n";
+				summ << "-----------------------\n";
+				std::vector<time_stamp> combined;
+				for (int i = 0; i < execution_times.size(); i++) {
+					combined.push_back(execution_times[i] + response_times[i]);
+				}
+				summ << "Mean back-to-back time: " << get_average_time_ms(combined) << " ms\n";
+				summ << "Total back-to-back time: " << reduce_times_ms(combined) << " ms\n";
+				summ << "Max back-to-back time: " << max_times_ms(combined) << " ms\n";
+				summ << "Min back-to-back time: " << min_times_ms(combined) << " ms\n";
+				summ << "Standard deviation back-to-back time: " << std_dev_times_ms(combined) << " ms\n";
+
+				summ << "-----------------------\n";
+				summ << "Average observed workgroups executing persistent task: " << get_average_exeucuting_workgroups() << "\n";
+				summ << "Number of redlines: " << redlines << "\n";
+
+			}
+			return summ.str();
+		}
+
+		void print_summary() {
+			std::cout << summary_str() << std::endl;
+		}
+
+		void print_summary_file(const char * fname) {
+			FILE * fp = fopen(fname, "w");
+			if (!fp) { printf("ERROR: unable to open file %s\n", fname); }
+			fprintf(fp, "%s\n", summary_str());
 
 			fclose(fp);
 		}
