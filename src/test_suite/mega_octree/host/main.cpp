@@ -4,13 +4,10 @@
 #include <string>
 #include<iostream>
 #include <vector>
-#include "limits.h"
+#include <limits.h>
 
-// Should be in a directory somewhere probably. Or defined in CMake.
-#define CL_INT_TYPE cl_int
-#define ATOMIC_CL_INT_TYPE cl_int
-#define CL_UCHAR_TYPE cl_uchar
-#define MY_CL_GLOBAL
+// Must be loaded early because it defines CL_XXX_TYPE
+#include "scheduler_rt/rt_common/cl_types.h"
 
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
@@ -18,6 +15,7 @@
 #include "discovery.h"
 #include "cl_communicator.h"
 #include "../common/restoration_ctx.h"
+#include "../common/octree.h"
 #include "cl_scheduler.h"
 #include "kernel_ctx.h"
 #include "iw_barrier.h"
@@ -28,8 +26,6 @@ DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_bool(list, false, "List OpenCL platforms and devices");
 DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Path to scheduler runtime includes");
 DEFINE_string(restoration_ctx_path, "test_suite/mega_octree/common/", "Path to restoration context");
-//DEFINE_string(graph_file, "", "Path to the graph_file");
-//DEFINE_string(output, "", "Path to output the result");
 DEFINE_int32(non_persistent_wgs, 2, "ratio of workgroups to send to non-persistent task. Special values are (-1) to send all but one workgroup and (-2) to send one workgroup");
 DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipped: 0 - don't skip, 1 - skip");
 
@@ -43,30 +39,7 @@ DEFINE_int32(threads, 32, "number of threads");
 DEFINE_int32(num_iterations, 1, "number of iterations");
 static const unsigned int MAXTREESIZE = 11000000;
 
-/*---------------------------------------------------------------------------*/
-
-typedef struct {
-  cl_float4 middle;
-  cl_bool flip;
-  cl_uint end;
-  cl_uint beg;
-  cl_uint treepos;
-} Task;
-
-/*---------------------------------------------------------------------------*/
-
-typedef struct {
-  cl_int tail;
-  cl_int head;
-} DequeHeader;
-
-/*---------------------------------------------------------------------------*/
-
-typedef struct {
-  Task *deq;
-  DequeHeader* dh;
-  unsigned int maxlength;
-} DLBABP;
+// see some octree types definitions in common/octree.h
 
 /*===========================================================================*/
 

@@ -1,5 +1,7 @@
 // It is important to include this first because other files use it.
+#include "../rt_common/cl_types.h"
 #include "restoration_ctx.h"
+#include "octree.h"
 
 #include "discovery.cl"
 #include "kernel_ctx.cl"
@@ -57,20 +59,7 @@ void MY_reduce(int length,
    rid of it since its initialisation required to edit pointers on the
    device side. So now we just pass deq, dh and maxlength around. */
 
-typedef struct {
-  float4 middle;
-  bool flip;
-  unsigned int end;
-  unsigned int beg;
-  unsigned int treepos;
-} Task;
-
-/*---------------------------------------------------------------------------*/
-
-typedef struct {
-  atomic_int tail;
-  atomic_int head;
-} DequeHeader;
+/* see definitions in common/octree.h */
 
 /*---------------------------------------------------------------------------*/
 /* rand */
