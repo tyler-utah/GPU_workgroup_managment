@@ -100,155 +100,6 @@ double genrand_real1(void);
 
 /* ------------------------------------------------------------------------- */
 
-// get_num_participating_groups() launch the mega-kernel just to run the
-// discovery protocol and obtain the number of participating
-// groups.
-int get_num_participating_groups(CL_Execution *exec)
-{
-  int err = 0;
-  Discovery_ctx d_ctx;
-  mk_init_discovery_ctx(&d_ctx);
-  cl::Buffer d_ctx_mem (exec->exec_context, CL_MEM_READ_WRITE, sizeof(Discovery_ctx));
-  err = exec->exec_queue.enqueueWriteBuffer(d_ctx_mem, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx);
-  check_ocl(err);
-
-  CL_Scheduler_ctx s_ctx;
-  mk_init_scheduler_ctx(exec, &s_ctx);
-
-  // Set up the communicator
-  int local_size = FLAGS_threads;
-  int wg_size = MAX_P_GROUPS;
-  CL_Communicator cl_comm_disco(*exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
-
-  IW_barrier h_bar;
-  for (int i = 0; i < MAX_P_GROUPS; i++) {
-    h_bar.barrier_flags[i] = 0;
-  }
-  h_bar.phase = 0;
-
-  cl::Buffer d_bar(exec->exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
-  err = exec->exec_queue.enqueueWriteBuffer(d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
-  check_ocl(err);
-
-  cl::Buffer d_graphics_kernel_ctx(exec->exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
-  cl::Buffer d_persistent_kernel_ctx(exec->exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
-
-  // Use a dummy buffer for the tasks args, which will not be started
-  // anyway
-  cl::Buffer dummy(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
-
-  int arg_index = 0;
-
-  // dummy args for graphics
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-
-  // dummy args for octree
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, dummy);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, 0);
-  check_ocl(err);
-  arg_index++;
-
-
-  // relevant args for a run just to get the number of participating
-  // workgroups
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_ctx_mem);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
-  check_ocl(err);
-  arg_index++;
-  err = exec->exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
-  check_ocl(err);
-  arg_index++;
-  err = set_scheduler_args(&(exec->exec_kernels["mega_kernel"]), &s_ctx, arg_index);
-  check_ocl(err);
-
-  // get number of participating workgroups
-  err = exec->exec_queue.flush();
-  check_ocl(err);
-  err = exec->exec_queue.finish();
-  check_ocl(err);
-  err = cl_comm_disco.launch_mega_kernel();
-  check_ocl(err);
-  int participating_groups = cl_comm_disco.number_of_discovered_groups();
-  cl_comm_disco.send_quit_signal();
-  err = exec->exec_queue.finish();
-  check_ocl(err);
-
-  // free all buffers from the context
-  // err = clReleaseMemObject(d_ctx_mem);
-  // check_ocl(err);
-  // err = clReleaseMemObject(d_bar);
-  // check_ocl(err);
-  // err = clReleaseMemObject(d_graphics_kernel_ctx);
-  // check_ocl(err);
-  // err = clReleaseMemObject(d_persistent_kernel_ctx);
-  // check_ocl(err);
-  // err = clReleaseMemObject(dummy);
-  // check_ocl(err);
-  // err = exec->exec_queue.finish();
-  // check_ocl(err);
-
-  return participating_groups;
-}
-
-/* ------------------------------------------------------------------------- */
-
 int main(int argc, char *argv[]) {
 
   flags::ParseCommandLineFlags(&argc, &argv, true);
@@ -287,10 +138,6 @@ int main(int argc, char *argv[]) {
 
   get_app_kernels(exec);
 
-  int participating_groups = get_num_participating_groups(&exec);
-
-  cout << "number of participating workgroups: " << participating_groups << endl;
-
   // set up the discovery protocol
   Discovery_ctx d_ctx;
   mk_init_discovery_ctx(&d_ctx);
@@ -301,11 +148,6 @@ int main(int argc, char *argv[]) {
   // scheduler context
   CL_Scheduler_ctx s_ctx;
   mk_init_scheduler_ctx(&exec, &s_ctx);
-
-  // Set up the communicator
-  int local_size = FLAGS_threads;
-  int wg_size = MAX_P_GROUPS;
-  CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
 
   IW_barrier h_bar;
   for (int i = 0; i < MAX_P_GROUPS; i++) {
@@ -320,6 +162,38 @@ int main(int argc, char *argv[]) {
   // kernel contexts for the graphics kernel and persistent kernel
   cl::Buffer d_graphics_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
   cl::Buffer d_persistent_kernel_ctx(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Kernel_ctx));
+
+  // set dummy args to enable discovery protoclol
+  int arg_index = 0;
+  int total_args_for_both_tasks = 3 /* graphics */ + 16 /* persistent */;
+  for (arg_index = 0; arg_index < total_args_for_both_tasks; arg_index++) {
+    err = exec.exec_kernels["mega_kernel"].setArg(arg_index, NULL);
+    check_ocl(err);
+  }
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
+  arg_index++;
+  check_ocl(err);
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_ctx_mem);
+  arg_index++;
+  check_ocl(err);
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_graphics_kernel_ctx);
+  arg_index++;
+  check_ocl(err);
+  err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_persistent_kernel_ctx);
+  arg_index++;
+  check_ocl(err);
+  err = set_scheduler_args(&exec.exec_kernels["mega_kernel"], &s_ctx, arg_index);
+  check_ocl(err);
+
+  // Set up the communicator
+  CL_Communicator cl_comm(exec, "mega_kernel", s_ctx, &d_ctx_mem);
+
+  int occupancy_bound = cl_comm.get_occupancy_bound(FLAGS_threads);
+  int max_workgroups = occupancy_bound - 1;
+  printf("occupancy_bound %d\n", occupancy_bound);
+  fflush(stdout);
+  cl::NDRange global_size(occupancy_bound * FLAGS_threads);
+  cl::NDRange local_size(FLAGS_threads);
 
   // Reduce kernel args.
   int graphics_arr_length = 1048576;
@@ -339,6 +213,7 @@ int main(int argc, char *argv[]) {
   cl_int * graphics_result = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
   *graphics_result = INT_MAX;
 
+
   // ----------------------------------------------------------------------
   // persistent kernel args
 
@@ -346,7 +221,7 @@ int main(int argc, char *argv[]) {
   // possible number of workgroups, i.e., the value in
   // 'participating_groups'.
 
-  int num_pools = participating_groups;
+  int num_pools = max_workgroups;
 
   cout << "==== persistent kernel args ======" << endl;
   cout << "  numParticles: " << FLAGS_numParticles << endl;
@@ -434,7 +309,7 @@ int main(int argc, char *argv[]) {
   // ----------------------------------------------------------------------
 
   // Setting the args
-  int arg_index = 0;
+  arg_index = 0;
 
   // // Set the args for graphics kernel
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, graphics_arr_length);
@@ -528,17 +403,17 @@ int main(int argc, char *argv[]) {
   check_ocl(err);
   exec.exec_queue.finish();
   check_ocl(err);
-  err = cl_comm.launch_mega_kernel();
+  err = cl_comm.launch_mega_kernel(global_size, local_size);
   check_ocl(err);
 
   if (FLAGS_non_persistent_wgs == -1) {
-    workgroups_for_non_persistent = participating_groups - 1;
+    workgroups_for_non_persistent = max_workgroups - 1;
   }
   else if (FLAGS_non_persistent_wgs == -2) {
     workgroups_for_non_persistent = 1;
   }
   else {
-    workgroups_for_non_persistent = participating_groups / FLAGS_non_persistent_wgs;
+    workgroups_for_non_persistent = max_workgroups / FLAGS_non_persistent_wgs;
   }
 
   cl_comm.send_persistent_task(num_pools);
