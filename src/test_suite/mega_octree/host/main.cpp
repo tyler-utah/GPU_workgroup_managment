@@ -417,6 +417,7 @@ int main(int argc, char *argv[]) {
   }
 
   cl_comm.send_persistent_task(num_pools);
+  cl_comm.my_sleep(50);
 
   while (cl_comm.is_executing_persistent() && !FLAGS_skip_tasks) {
     *graphics_result = INT_MAX;
@@ -473,48 +474,17 @@ int main(int argc, char *argv[]) {
 
   // ----------------- Hugues: octree: end of stats collecting ---------------
 
-  cout << "number of participating groups: " << *(s_ctx.participating_groups) << endl;
+  cl_comm.print_groups_time_data("tmp.txt");
 
-  cout << "executed " << response_time.size() << " non-persistent tasks" << std::endl;
+  cl_comm.print_response_exec_data("tmp2.txt");
 
-  for (int i = 0; i < response_time.size(); i++) {
-    cout << "times " << i << ": " << cl_comm.nano_to_milli(response_time[i]) << " " << cl_comm.nano_to_milli(execution_time[i]) << endl;
-  }
+  cl_comm.print_response_and_execution_times("tmp3.txt");
 
-  cout << endl << "error: " << error << endl;
+  cl_comm.print_summary_file("tmp4.txt");
 
-  cout << "persistent kernel time: " << cl_comm.nano_to_milli(cl_comm.get_persistent_time()) << " ms" << endl;
-
-  cout << "non persistent kernels executed with: " << workgroups_for_non_persistent << " workgroups" << endl;
-
-  cout << "total response time: " << cl_comm.reduce_times_ms(response_time) << " ms" << endl;
-
-  cout << "average response time: " << cl_comm.get_average_time_ms(response_time) << " ms" << endl;
-
-  cout << "total execution time: " << cl_comm.reduce_times_ms(execution_time) << " ms" << endl;
-
-  cout << "average execution time: " << cl_comm.get_average_time_ms(execution_time) << " ms" << endl;
-
-  cout << "average end to end: " << cl_comm.get_average_time_ms(execution_time) + cl_comm.get_average_time_ms(response_time)  << " ms" << endl;
-
-  cout << "check value is: " << *(s_ctx.check_value) << endl;
-
-  // if (strcmp("", FLAGS_output.c_str()) != 0) {
-  //   cout << "outputing solution to " << FLAGS_output << endl;
-  //   exec.exec_queue.enqueueReadBuffer(color_d, CL_TRUE, 0, sizeof(cl_int) * num_nodes, color);
-  //   FILE * fp = fopen(FLAGS_output.c_str(), "w");
-  //   if (!fp) { printf("ERROR: unable to open file %s\n", FLAGS_output.c_str()); }
-
-  //   for (int i = 0; i < num_nodes; i++)
-  //     fprintf(fp, "%d: %d\n", i + 1, color[i]);
-
-  //   fclose(fp);
-
-  // }
+  cl_comm.print_summary();
 
   free_scheduler_ctx(&exec, &s_ctx);
-  // free(color);
-  // free(node_value);
 
   return 0;
 }

@@ -387,10 +387,14 @@ void octree_main (
   while (true) {
     /* iteration loop */
 
-    if (k_get_global_id(kernel_ctx) == 0) {
-      octree_init(kernel_ctx, deq, dh, maxlength, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles);
+    if (r_ctx->target == 0) {
+      if (k_get_global_id(kernel_ctx) == 0) {
+        octree_init(kernel_ctx, deq, dh, maxlength, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles);
+      }
+      barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+      global_barrier_sense_reversal(octree_bar, &sense, kernel_ctx);
     }
-    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+    r_ctx->target = 0;
 
     /* main loop */
     while (true) {
@@ -417,12 +421,13 @@ void octree_main (
       /* global_barrier_resize(). But looking at the code of */
       /* global_barrier(), bar->num_groups is not used there. */
 
-      /* flag to indicate we have been forked */
-      to_fork.target = 1;
-      /*  */
-      to_fork.sense = sense;
-
-      cfork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(octree_bar->num_groups));
+      if (k_get_group_id(kernel_ctx) == 0) {
+        /* flag to indicate we have been forked */
+        to_fork.target = 1;
+        /* pass the sense */
+        to_fork.sense = sense;
+        cfork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(octree_bar->num_groups));
+      }
 
       // Try to acquire new task
       if (DLBABP_dequeue(kernel_ctx, deq, dh, maxlength, &t, randdata, &localStealAttempts, num_pools) == 0) {
@@ -436,6 +441,10 @@ void octree_main (
         }
         continue;
       }
+
+      /* for (i = 0; i < 400; i++) { */
+      /*   atomic_store(scheduler_ctx.check_value, 0); */
+      /* } */
 
       if (t.flip) {
         frompart = newparticles;
