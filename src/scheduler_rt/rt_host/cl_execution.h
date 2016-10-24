@@ -144,15 +144,6 @@ class CL_Execution {
 		options << "-I" << extra_include << " ";
 	}
 
-	//Define the int and atomic int type
-	options << "-D" << "CL_INT_TYPE=int" << " ";
-
-	options << "-D" << "CL_UCHAR_TYPE=uchar" << " ";
-
-	options << "-D" << "ATOMIC_CL_INT_TYPE=atomic_int" << " ";
-
-	options << "-D" << "MY_CL_GLOBAL=__global" << " ";
-
 	if (is_AMD()) {
 	  options << "-D" << "AMD_MEM_ORDERS" << " ";
 	}

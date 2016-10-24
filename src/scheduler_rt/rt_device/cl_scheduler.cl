@@ -59,6 +59,8 @@ void scheduler_init(CL_Scheduler_ctx s_ctx, __global Discovery_ctx *d_ctx, __glo
 	 atomic_store_explicit(&(graphics_kernel_ctx->executing_groups), 0, memory_order_release, memory_scope_device);
 	 atomic_store_explicit(&(persistent_kernel_ctx->executing_groups), 0, memory_order_release, memory_scope_device);
      atomic_store_explicit(s_ctx.scheduler_flag, DEVICE_WAITING, memory_order_release, memory_scope_all_svm_devices);
+     atomic_store_explicit(s_ctx.persistent_flag, 0, memory_order_release, memory_scope_all_svm_devices);
+
 }
 
 void scheduler_loop(CL_Scheduler_ctx s_ctx,
@@ -143,6 +145,8 @@ void scheduler_loop(CL_Scheduler_ctx s_ctx,
 	  //persistent_kernel_ctx->num_groups = local_task_size;
 	  
 	  atomic_store_explicit(&(persistent_kernel_ctx->executing_groups), local_task_size, memory_order_relaxed, memory_scope_device);
+	  atomic_store_explicit(s_ctx.persistent_flag, local_task_size, memory_order_release, memory_scope_all_svm_devices);
+
 	  
 	  int lpg = *(s_ctx.participating_groups);
 	  

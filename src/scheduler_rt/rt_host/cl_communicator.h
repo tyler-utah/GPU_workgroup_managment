@@ -7,9 +7,13 @@
 #include <thread>
 #include <chrono>
 #include "discovery.h"
+#include <vector>
 
 typedef uint64_t time_stamp;
 typedef std::pair<time_stamp, time_stamp> time_ret;
+typedef std::pair<time_stamp, int> time_groups;
+typedef std::tuple<time_stamp, time_stamp, time_stamp> triple_time;
+
 
 class CL_Communicator {
 	
@@ -20,9 +24,13 @@ class CL_Communicator {
 		int participating_groups;
 		std::atomic<int> executing_persistent;
 		std::atomic<int> waiting_for_async;
-		volatile time_stamp persistent_begin, persistent_end;
+		time_stamp persistent_begin, persistent_end;
+		time_stamp global_start;
 		Discovery_ctx d_ctx_host;
 		cl::Buffer *d_ctx_device;
+		std::vector<time_groups> time_groups_data;
+		std::vector<triple_time> response_exec_data;
+		bool record_time_groups_data;
 	public:
 
 		void my_yield() {
@@ -41,10 +49,11 @@ class CL_Communicator {
 			d_ctx_device = d_ctx_mem;
 			int err = exec->exec_queue.enqueueWriteBuffer(*d_ctx_device, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx_host);
 			check_ocl(err);
+			global_start = 0;
+			record_time_groups_data = false;
 		}
 
 		int launch_mega_kernel(cl::NDRange global_size, cl::NDRange local_size) {
-			std::cout << "launching mega kernel..." << std::endl;
 			std::flush(std::cout);
 
 			// Make sure everything is finished. Seems to help with AMD
@@ -123,6 +132,8 @@ class CL_Communicator {
 			execution_end = gettime_chrono(); //end application timer after waiting here.
 
 			time_ret ret = std::make_pair(execution_end - execution_begin, response_end - response_begin);
+			triple_time record = std::make_tuple(response_begin, response_end, execution_end);
+			response_exec_data.push_back(record);
 			return ret;
 		}
 
@@ -136,7 +147,7 @@ class CL_Communicator {
 			}
 
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
-
+			global_start = gettime_chrono();
 			std::atomic_store(&executing_persistent, 1);
 
 			persistent_begin = gettime_chrono();
@@ -147,8 +158,16 @@ class CL_Communicator {
 
 			std::atomic_store(&waiting_for_async, 0);
 
-			while (std::atomic_load_explicit((std::atomic<int> *)(scheduler.persistent_flag), std::memory_order_relaxed) != PERSIST_TASK_DONE) {
-				my_yield();
+			while (true) {
+				int groups = std::atomic_load_explicit((std::atomic<int> *)(scheduler.persistent_flag), std::memory_order_relaxed);
+				if (record_time_groups_data) {
+					time_stamp ts = gettime_chrono();
+					time_groups_data.push_back(std::make_pair(ts, groups));
+				}
+				if (groups == 0) {
+					break;
+				}
+				my_sleep(1);
 			}
 
 			persistent_end = gettime_chrono();
@@ -209,6 +228,37 @@ class CL_Communicator {
 			std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 		}
 
+		float normalize_ms(time_stamp t) {
+			t = t - global_start;
+			return nano_to_milli(t);
+		}
+
+		void set_record_groups_time_data() {
+			record_time_groups_data = true;
+		}
+
+		void print_groups_time_data(const char * fname) {
+			FILE * fp = fopen(fname, "w");
+			if (!fp) { printf("ERROR: unable to open file %s\n", fname); }
+			fprintf(fp, "time(ms), groups\n");
+			for (int i = 0; i < time_groups_data.size(); i++)
+				fprintf(fp, "%f, %d\n", normalize_ms(time_groups_data[i].first), time_groups_data[i].second);
+
+			fclose(fp);
+		}
+
+		void print_response_exec_data(const char * fname) {
+			FILE * fp = fopen(fname, "w");
+			if (!fp) { printf("ERROR: unable to open file %s\n", fname); }
+			fprintf(fp, "response_begin, execution_begin, execution_end\n");
+			for (int i = 0; i < response_exec_data.size(); i++)
+				fprintf(fp, "%f, %f, %f\n", normalize_ms(std::get<0>(response_exec_data[i])),
+					                       normalize_ms(std::get<1>(response_exec_data[i])),
+					                       normalize_ms(std::get<2>(response_exec_data[i])));
+
+			fclose(fp);
+		}
+
 		int get_occupancy_bound(int local_size) {
 			launch_mega_kernel(cl::NDRange(MAX_P_GROUPS * local_size), cl::NDRange(local_size));
 			int ret = number_of_discovered_groups();
@@ -226,6 +276,7 @@ class CL_Communicator {
 			mk_init_discovery_ctx(&d_ctx_host);
 			err = exec->exec_queue.enqueueWriteBuffer(*d_ctx_device, CL_TRUE, 0, sizeof(Discovery_ctx), &d_ctx_host);
 			check_ocl(err);
+			global_start = 0;
 			return ret;
 		}
 

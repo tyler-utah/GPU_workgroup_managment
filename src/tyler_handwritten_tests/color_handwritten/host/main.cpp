@@ -7,12 +7,7 @@
 #include <vector>
 #include "limits.h"
 
-// Should be in a directory somewhere probably. Or defined in CMake.
-#define CL_INT_TYPE cl_int
-#define ATOMIC_CL_INT_TYPE cl_int
-#define CL_UCHAR_TYPE cl_uchar
-#define MY_CL_GLOBAL
-
+#include "../rt_common/cl_types.h"
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
 #include "cl_execution.h"
@@ -35,14 +30,96 @@ DEFINE_string(graph_file, "", "Path to the graph_file");
 DEFINE_string(output, "", "Path to output the result");
 DEFINE_int32(non_persistent_wgs, 2, "ratio of workgroups to send to non-persistent task. Special values are (-1) to send all but one workgroup and (-2) to send one workgroup");
 DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipped: 0 - don't skip, 1 - skip");
-
-
-// Will compile this seperately when we get to real experiments
-#include "parse.cpp"
+DEFINE_string(kernel_file, "tyler_handwritten_tests/color_handwritten/device/mega_kernel.cl", "the path the mega kernel file");
 
 using namespace std;
 
-const char *kernel_file = XSTR(KERNEL_FILE);
+int num_nodes = 0, num_edges = 0;
+csr_array *csr;
+cl_int *color;
+cl_float *node_value;
+cl::Buffer row_d, col_d, stop_d1, stop_d2, color_d, node_value_d, max_d;
+CL_Execution exec;
+
+const char* graph_app_name() {
+	return "color";
+}
+
+void init_graph_app() {
+
+	csr = parseMetis(FLAGS_graph_file.c_str(), &num_nodes, &num_edges, 0);
+
+	color = (cl_int *)malloc(num_nodes * sizeof(cl_int));
+	node_value = (cl_float *)malloc(num_nodes * sizeof(cl_float));
+	srand(6);
+	for (int i = 0; i < num_nodes; i++) {
+		color[i] = -1;
+
+		// Original application: Node_value[i] =  rand()/(float)RAND_MAX;
+		node_value[i] = i / (float)(num_nodes + 1);
+		//node_value[i] = rand() / (float)RAND_MAX;
+	}
+
+	//cl_mem row_d, col_d, max_d, color_d, node_value_d, stop_d1, stop_d2;
+	row_d = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, num_nodes * sizeof(cl_int));
+	col_d = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, num_edges * sizeof(cl_int));
+	stop_d1 = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+	stop_d2 = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+	color_d = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, num_nodes * sizeof(cl_int));
+	node_value_d = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, num_nodes * sizeof(cl_float));
+	max_d = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, num_nodes * sizeof(cl_float));
+
+	cl_int zero = 0;
+	exec.exec_queue.enqueueWriteBuffer(color_d, CL_TRUE, 0, num_nodes * sizeof(cl_int), color);
+	exec.exec_queue.enqueueWriteBuffer(max_d, CL_TRUE, 0, num_nodes * sizeof(cl_int), color);
+	exec.exec_queue.enqueueWriteBuffer(node_value_d, CL_TRUE, 0, num_nodes * sizeof(cl_float), node_value);
+	exec.exec_queue.enqueueWriteBuffer(stop_d1, CL_TRUE, 0, sizeof(cl_int), &zero);
+	exec.exec_queue.enqueueWriteBuffer(stop_d2, CL_TRUE, 0, sizeof(cl_int), &zero);
+	exec.exec_queue.enqueueWriteBuffer(row_d, CL_TRUE, 0, num_nodes * sizeof(cl_int), csr->row_array);
+	exec.exec_queue.enqueueWriteBuffer(col_d, CL_TRUE, 0, num_edges * sizeof(cl_int), csr->col_array);
+}
+
+int set_graph_app_args(int arg_index) {
+	// Set args for persistent kernel
+	int err = exec.exec_kernels["mega_kernel"].setArg(arg_index, row_d);
+	arg_index++;
+	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, col_d);
+	arg_index++;
+	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, node_value_d);
+	arg_index++;
+	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, color_d);
+	arg_index++;
+	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stop_d1);
+	arg_index++;
+	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, stop_d2);
+	arg_index++;
+	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, max_d);
+	arg_index++;
+	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, num_nodes);
+	arg_index++;
+	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, num_edges);
+	arg_index++;
+	check_ocl(err);
+
+	return arg_index;
+}
+
+void output_graph_solution(const char *fname) {
+
+	exec.exec_queue.enqueueReadBuffer(color_d, CL_TRUE, 0, sizeof(cl_int) * num_nodes, color);
+	FILE * fp = fopen(fname, "w");
+	if (!fp) { printf("ERROR: unable to open file %s\n", FLAGS_output.c_str()); }
+
+	for (int i = 0; i < num_nodes; i++)
+		fprintf(fp, "%d: %d\n", i + 1, color[i]);
+
+	fclose(fp);
+}
+
+void graph_app_cleanup() {
+	free(color);
+	free(node_value);
+}
 
 //From IWOCL tutorial (needs attribution)
 unsigned getDeviceList(std::vector<std::vector<cl::Device> >& devices)
@@ -94,7 +171,6 @@ int main(int argc, char *argv[]) {
 
 	flags::ParseCommandLineFlags(&argc, &argv, true);
 
-	CL_Execution exec;
 	int err = 0;
 
 	if (FLAGS_list) {
@@ -116,13 +192,16 @@ int main(int argc, char *argv[]) {
 
 	printf("Using GPU: %s\n", exec.getExecDeviceName().c_str());
 
+	printf("Executing appliction: %s\n", graph_app_name());
+
+
 	cl::Context context(exec.exec_device);
 	exec.exec_context = context;
 	cl::CommandQueue queue(exec.exec_context);
 	exec.exec_queue = queue;
 
 	// Should be built into the cmake file. Haven't thought of how to do this yet.
-	err = exec.compile_kernel(kernel_file, file::Path(FLAGS_scheduler_rt_path), file::Path(FLAGS_restoration_ctx_path));
+	err = exec.compile_kernel(file::Path(FLAGS_kernel_file.c_str()), file::Path(FLAGS_scheduler_rt_path), file::Path(FLAGS_restoration_ctx_path));
 
 	check_ocl(err);
 
@@ -153,45 +232,8 @@ int main(int argc, char *argv[]) {
 	cl_int * graphics_result = (cl_int*) clSVMAlloc(exec.exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
 	*graphics_result = INT_MAX;
 
-	// persistent kernel args
 
-
-
-	int num_nodes = 0, num_edges = 0;
-	csr_array *csr = parseMetis(FLAGS_graph_file.c_str(), &num_nodes, &num_edges, 0);
-
-	cl_int *color = (cl_int *) malloc(num_nodes * sizeof(cl_int));
-	cl_float *node_value = (cl_float *) malloc(num_nodes * sizeof(cl_float));
-	srand(6);
-	for (int i = 0; i < num_nodes; i++) {
-		color[i] = -1;
-
-		// Original application: Node_value[i] =  rand()/(float)RAND_MAX;
-		node_value[i] = i / (float)(num_nodes + 1);
-		//node_value[i] = rand() / (float)RAND_MAX;
-	}
-
-	//cl_mem row_d, col_d, max_d, color_d, node_value_d, stop_d1, stop_d2;
-	cl::Buffer row_d(exec.exec_context, CL_MEM_READ_WRITE, num_nodes * sizeof(cl_int));
-	cl::Buffer col_d(exec.exec_context, CL_MEM_READ_WRITE, num_edges * sizeof(cl_int));
-	cl::Buffer stop_d1(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
-	cl::Buffer stop_d2(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
-	cl::Buffer color_d(exec.exec_context, CL_MEM_READ_WRITE, num_nodes * sizeof(cl_int));
-	cl::Buffer node_value_d(exec.exec_context, CL_MEM_READ_WRITE, num_nodes * sizeof(cl_float));
-	cl::Buffer max_d(exec.exec_context, CL_MEM_READ_WRITE, num_nodes * sizeof(cl_float));
-
-
-
-	cl_int zero = 0;
-	exec.exec_queue.enqueueWriteBuffer(color_d, CL_TRUE, 0, num_nodes * sizeof(cl_int), color);
-	exec.exec_queue.enqueueWriteBuffer(max_d, CL_TRUE, 0, num_nodes * sizeof(cl_int), color);
-	exec.exec_queue.enqueueWriteBuffer(node_value_d, CL_TRUE, 0, num_nodes * sizeof(cl_float), node_value);
-	exec.exec_queue.enqueueWriteBuffer(stop_d1, CL_TRUE, 0, sizeof(cl_int), &zero);
-	exec.exec_queue.enqueueWriteBuffer(stop_d2, CL_TRUE, 0, sizeof(cl_int), &zero);
-	exec.exec_queue.enqueueWriteBuffer(row_d, CL_TRUE, 0, num_nodes * sizeof(cl_int), csr->row_array);
-	exec.exec_queue.enqueueWriteBuffer(col_d, CL_TRUE, 0, num_edges * sizeof(cl_int), csr->col_array);
-
-
+	init_graph_app();
 
 	IW_barrier h_bar;
 	for (int i = 0; i < MAX_P_GROUPS; i++) {
@@ -211,8 +253,6 @@ int main(int argc, char *argv[]) {
 	CL_Scheduler_ctx s_ctx;
 	mk_init_scheduler_ctx(&exec, &s_ctx);
 
-
-
 	// Setting the args
 	int arg_index = 0;
 
@@ -225,26 +265,7 @@ int main(int argc, char *argv[]) {
 	arg_index++;
 	check_ocl(err);
 
-	// Set args for persistent kernel
-	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, row_d);
-	arg_index++;
-	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, col_d);
-	arg_index++;
-	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, node_value_d);
-	arg_index++;
-	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, color_d);
-	arg_index++;
-	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, stop_d1);
-	arg_index++;
-	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, stop_d2);
-	arg_index++;
-	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, max_d);
-	arg_index++;
-	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, num_nodes);
-	arg_index++;
-	err |= exec.exec_kernels["mega_kernel"].setArg(arg_index, num_edges);
-	arg_index++;
-	check_ocl(err);
+	arg_index = set_graph_app_args(arg_index);
 
 	// Set barrier arg
 	err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_bar);
@@ -275,6 +296,8 @@ int main(int argc, char *argv[]) {
 
 	int occupancy_bound = cl_comm.get_occupancy_bound(local_size);
 
+	cl_comm.set_record_groups_time_data();
+
 	
 	std::vector<time_stamp> response_time;
 	std::vector<time_stamp> execution_time;
@@ -287,6 +310,7 @@ int main(int argc, char *argv[]) {
 	check_ocl(err);
 	exec.exec_queue.finish();
 	check_ocl(err);
+	std::cout << "launching mega kernel..." << std::endl;
 	err = cl_comm.launch_mega_kernel(cl::NDRange(local_size * occupancy_bound), cl::NDRange(local_size));
 
 	// Get the number of found groups
@@ -349,25 +373,17 @@ int main(int argc, char *argv[]) {
 	cout << "check value is: " << *(s_ctx.check_value) << " ms" << endl;
 
 
-
-
-
 	if (strcmp("", FLAGS_output.c_str()) != 0) {
 		cout << "outputing solution to " << FLAGS_output << endl;
-		exec.exec_queue.enqueueReadBuffer(color_d, CL_TRUE, 0, sizeof(cl_int) * num_nodes, color);
-		FILE * fp = fopen(FLAGS_output.c_str(), "w");
-		if (!fp) { printf("ERROR: unable to open file %s\n", FLAGS_output.c_str()); }
-
-		for (int i = 0; i < num_nodes; i++)
-			fprintf(fp, "%d: %d\n", i + 1, color[i]);
-
-		fclose(fp);
-
+		output_graph_solution(FLAGS_output.c_str());
 	}
 
+	cl_comm.print_groups_time_data("tmp.txt");
+
+	cl_comm.print_response_exec_data("tmp2.txt");
+
 	free_scheduler_ctx(&exec, &s_ctx);
-	free(color);
-	free(node_value);
+	graph_app_cleanup();
 
 	return 0;
 }

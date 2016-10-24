@@ -1,5 +1,6 @@
 
 // It is important to include this first because other files use it.
+#include "../rt_common/cl_types.h"
 #include "restoration_ctx.h"
 
 #include "discovery.cl"

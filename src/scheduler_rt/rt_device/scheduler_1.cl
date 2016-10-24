@@ -40,6 +40,7 @@ int cfork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scra
 
 		atomic_fetch_add_explicit(&(k_ctx->num_groups), snapshot, memory_order_relaxed, memory_scope_device);
 		atomic_fetch_add_explicit(&(k_ctx->executing_groups), snapshot, memory_order_relaxed, memory_scope_device);
+		atomic_fetch_add_explicit(s_ctx.persistent_flag, snapshot, memory_order_release, memory_scope_all_svm_devices);
 
 		atomic_fetch_sub_explicit(s_ctx.available_workgroups, snapshot, memory_order_relaxed, memory_scope_device);
 
