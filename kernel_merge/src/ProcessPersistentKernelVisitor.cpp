@@ -92,8 +92,8 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     name == "get_global_size") {
     assert(CE->getNumArgs() == 1);
     // TODO: Abort unless the argument has the literal value 0
-    RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__k_ctx");
-    RW.InsertTextBefore(CE->getSourceRange().getBegin(), "k_");
+    RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__bar, __k_ctx");
+    RW.InsertTextBefore(CE->getSourceRange().getBegin(), "b_");
   }
   if (name == "resizing_global_barrier") {
     ForkPointCounter++;
