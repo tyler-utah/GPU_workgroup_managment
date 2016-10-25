@@ -30,6 +30,7 @@ public:
 private:
 
   void ProcessWhileStmt(WhileStmt *S);
+  std::string ConvertType(QualType type);
 
   std::vector<DeclStmt*> DeclsToRestore;
   std::string RestorationCtx;

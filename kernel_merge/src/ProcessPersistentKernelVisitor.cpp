@@ -117,7 +117,7 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   return true;
 }
 
-static std::string ConvertType(std::string type) {
+static std::string ConvertTypeString(std::string type) {
   if (type == "char" ||
       type == "uchar" ||
       type == "short" ||
@@ -131,6 +131,27 @@ static std::string ConvertType(std::string type) {
     return "CL_" + result + "_TYPE";
   }
   return type;
+}
+
+std::string ConvertAddressSpace(int as) {
+  if(as == LangAS::opencl_global) {
+    return "MY_CL_GLOBAL";
+  }
+  return "/* unknown address space */";
+}
+
+std::string ProcessPersistentKernelVisitor::ConvertType(QualType type) {
+  std::string result = "";
+  if (type.getQualifiers().hasAddressSpace()) {
+    result += ConvertAddressSpace(type.getAddressSpace()) + " ";
+  }
+  if (type->isPointerType()) {
+    return result + ConvertType(dyn_cast<PointerType>(type)->getPointeeType()) + " *";
+  }
+  if (type->isBuiltinType()) {
+    return result + ConvertTypeString(dyn_cast<BuiltinType>(type)->getName(PrintingPolicy(AU->getLangOpts())).str());
+  }
+  return result + ConvertTypeString(type.getAsString());
 }
 
 void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
@@ -245,7 +266,7 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   }
 
   this->RestorationCtx = "typedef struct {\n";
-  this->RestorationCtx += "  " + ConvertType("uchar") + " target;\n";
+  this->RestorationCtx += "  " + ConvertTypeString("uchar") + " target;\n";
 
   std::string preLoopCode;
   preLoopCode += "if(__restoration_ctx->target != 0) {\n";
@@ -257,7 +278,7 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
         continue;
       }
       preLoopCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
-      this->RestorationCtx += "  " + ConvertType(VD->getType().getAsString()) + " " + VD->getNameAsString() + ";\n";
+      this->RestorationCtx += "  " + ConvertType(VD->getType()) + " " + VD->getNameAsString() + ";\n";
     }
   }
   preLoopCode += "}\n";
