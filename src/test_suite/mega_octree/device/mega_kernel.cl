@@ -137,7 +137,7 @@ int DLBABP_steal(__global Task *deq, __global DequeHeader *dh, unsigned int maxl
 
   *val = deq[idx * maxlength + getIndex(oldHead)];
   newHead = incIndex(oldHead);
-  if (atomic_compare_exchange_weak_explicit(&(dh[idx].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
+  if (atomic_compare_exchange_strong_explicit(&(dh[idx].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
     return 1;
   }
 
@@ -172,7 +172,7 @@ int DLBABP_pop(__global Kernel_ctx *kernel_ctx,  __global Task *deq, __global De
   atomic_store_explicit(&(dh[id].tail), 0, memory_order_release, memory_scope_device);
   newHead = getZeroIndexIncCtr(oldHead);
   if(localTail == getIndex(oldHead)) {
-    if(atomic_compare_exchange_weak_explicit(&(dh[id].head), &oldHead, newHead, memory_order_acq_rel, memory_order_release, memory_scope_device)) {
+    if(atomic_compare_exchange_strong_explicit(&(dh[id].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
       return 1;
     }
   }

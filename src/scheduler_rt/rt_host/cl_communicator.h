@@ -385,7 +385,7 @@ class CL_Communicator {
 		void print_summary_file(const char * fname) {
 			FILE * fp = fopen(fname, "w");
 			if (!fp) { printf("ERROR: unable to open file %s\n", fname); }
-			fprintf(fp, "%s\n", summary_str());
+			fprintf(fp, "%s\n", summary_str().c_str());
 
 			fclose(fp);
 		}
