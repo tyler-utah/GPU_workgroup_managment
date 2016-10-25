@@ -288,7 +288,7 @@ void global_barrier_sense_reversal(__global IW_barrier *bar, __local int *sense,
           atomic_store(&(bar->counter), 0);
           /* then assign the sense to release others */
           atomic_store(&(bar->sense), *sense);
-          return;
+          break;
         }
       }
     } else {
