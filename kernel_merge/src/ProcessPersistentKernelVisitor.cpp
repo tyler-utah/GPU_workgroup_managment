@@ -76,7 +76,7 @@ void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
   }
 
   auto condition = RW.getRewrittenText(S->getCond()->getSourceRange());
-  RW.ReplaceText(S->getCond()->getSourceRange(), "true");
+  RW.ReplaceText(S->getCond()->getSourceRange(), "__restoration_ctx->target != UCHAR_MAX /* substitute for 'true', which can cause compiler hangs */");
   RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(__restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { return; }\n");
   RW.InsertTextBefore(CS->getRBracLoc(), "}");
 
