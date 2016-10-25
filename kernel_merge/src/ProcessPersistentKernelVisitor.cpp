@@ -76,7 +76,7 @@ void ProcessPersistentKernelVisitor::ProcessWhileStmt(WhileStmt *S) {
   }
 
   auto condition = RW.getRewrittenText(S->getCond()->getSourceRange());
-  RW.ReplaceText(S->getCond()->getSourceRange(), "true");
+  RW.ReplaceText(S->getCond()->getSourceRange(), "__restoration_ctx->target != UCHAR_MAX /* substitute for 'true', which can cause compiler hangs */");
   RW.InsertTextAfterToken(CS->getLBracLoc(), "\nswitch(__restoration_ctx->target) {\ncase 0:\nif(!(" + condition + ")) { return; }\n");
   RW.InsertTextBefore(CS->getRBracLoc(), "}");
 
@@ -92,10 +92,15 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     name == "get_global_size") {
     assert(CE->getNumArgs() == 1);
     // TODO: Abort unless the argument has the literal value 0
-    RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__bar, __k_ctx");
-    RW.InsertTextBefore(CE->getSourceRange().getBegin(), "b_");
+    if(UsesOfferFunctions) {
+      RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__k_ctx");
+      RW.InsertTextBefore(CE->getSourceRange().getBegin(), "k_");
+    } else {
+      RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__bar, __k_ctx");
+      RW.InsertTextBefore(CE->getSourceRange().getBegin(), "b_");
+    }
   }
-  if (name == "resizing_global_barrier") {
+  if (name == "resizing_global_barrier" || name == "offer_fork") {
     ForkPointCounter++;
     assert(CE->getNumArgs() == 1);
     std::stringstream sstr;
@@ -110,14 +115,23 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
         sstr << "__to_fork." << VD->getNameAsString() << " = " << VD->getNameAsString() << "; ";
       }
     }
-    sstr << "global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad, &__to_fork); } ";
+    if(name == "resizing_global_barrier") {
+      sstr << "global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad, &__to_fork)";
+    } else {
+      sstr << "int __junk_private; ";
+      sstr << "offer_fork(__k_ctx, __s_ctx, __scratchpad, &__to_fork, &__junk_private, &__junk_global)";
+    }
+    sstr << "; } ";
     sstr << "case " << ForkPointCounter << ": __restoration_ctx->target = 0";
     RW.ReplaceText(CE->getSourceRange(), sstr.str());
+  }
+  if (name == "offer_kill") {
+    RW.ReplaceText(CE->getSourceRange(), "offer_kill(__k_ctx, __s_ctx, __scratchpad, k_get_group_id(__k_ctx))");
   }
   return true;
 }
 
-static std::string ConvertType(std::string type) {
+static std::string ConvertTypeString(std::string type) {
   if (type == "char" ||
       type == "uchar" ||
       type == "short" ||
@@ -131,6 +145,27 @@ static std::string ConvertType(std::string type) {
     return "CL_" + result + "_TYPE";
   }
   return type;
+}
+
+std::string ConvertAddressSpace(int as) {
+  if(as == LangAS::opencl_global) {
+    return "MY_CL_GLOBAL";
+  }
+  return "/* unknown address space */";
+}
+
+std::string ProcessPersistentKernelVisitor::ConvertType(QualType type) {
+  std::string result = "";
+  if (type.getQualifiers().hasAddressSpace()) {
+    result += ConvertAddressSpace(type.getAddressSpace()) + " ";
+  }
+  if (type->isPointerType()) {
+    return result + ConvertType(dyn_cast<PointerType>(type)->getPointeeType()) + " *";
+  }
+  if (type->isBuiltinType()) {
+    return result + ConvertTypeString(dyn_cast<BuiltinType>(type)->getName(PrintingPolicy(AU->getLangOpts())).str());
+  }
+  return result + ConvertTypeString(type.getAsString());
 }
 
 void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
@@ -204,24 +239,49 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   // <Decl to be restored>
   // ...
   // <Decl to be restored>
-  // while(c) {
+  // [ if(c) { <init code> } global_barrier(); ]
+  // while(d) {
   //    ...
   // }
   //
   // We reject anything else
 
   WhileStmt *WhileLoop = 0;
+  IfStmt *InitBlock = 0;
+  CallExpr *GlobalBarrier = 0;
+  bool doneWithDecls = false;
+  bool doneWithInit = false;
+  bool doneWithBarrier = false;
 
   for (auto S : CS->body()) {
-
     if (dyn_cast<DeclStmt>(S)) {
-      if (WhileLoop) {
-        errs() << "Declaration found after while loop, stopping.\n";
+      if (doneWithDecls) {
+        errs() << "Declaration found after non-decl statement, stopping.\n";
         exit(1);
       }
       DeclsToRestore.push_back(dyn_cast<DeclStmt>(S));
       continue;
     }
+    doneWithDecls = true;
+    if(dyn_cast<IfStmt>(S)) {
+      if(doneWithInit) {
+        errs() << "if statement appears in wrong place to be init block, stopping.\n";
+        exit(1);
+      }
+      InitBlock = dyn_cast<IfStmt>(S);
+      continue;
+    }
+    doneWithInit = true;
+    if (dyn_cast<CallExpr>(S)) {
+      auto name = dyn_cast<CallExpr>(S)->getCalleeDecl()->getAsFunction()->getNameAsString();
+      if (doneWithBarrier || name != "global_barrier") {
+        errs() << "Unexpected call expression, stopping.\n";
+        exit(1);
+      }
+      GlobalBarrier = dyn_cast<CallExpr>(S);
+      continue;
+    }
+    doneWithBarrier = true;
     if (dyn_cast<WhileStmt>(S)) {
       if (WhileLoop) {
         errs() << "Multiple loops found, stopping.\n";
@@ -231,6 +291,7 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
       continue;
     }
     errs() << "Non declaration or loop statement found, stopping.\n";
+    S->dump();
     exit(1);
   }
 
@@ -245,7 +306,7 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   }
 
   this->RestorationCtx = "typedef struct {\n";
-  this->RestorationCtx += "  " + ConvertType("uchar") + " target;\n";
+  this->RestorationCtx += "  " + ConvertTypeString("uchar") + " target;\n";
 
   std::string preLoopCode;
   preLoopCode += "if(__restoration_ctx->target != 0) {\n";
@@ -257,14 +318,52 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
         continue;
       }
       preLoopCode += VD->getNameAsString() + " = __restoration_ctx->" + VD->getNameAsString() + ";\n";
-      this->RestorationCtx += "  " + ConvertType(VD->getType().getAsString()) + " " + VD->getNameAsString() + ";\n";
+      this->RestorationCtx += "  " + ConvertType(VD->getType()) + " " + VD->getNameAsString() + ";\n";
     }
   }
   preLoopCode += "}\n";
   this->RestorationCtx += "} Restoration_ctx;\n\n";
 
-  RW.InsertTextBefore(WhileLoop->getLocStart(), preLoopCode);
+  if (InitBlock) {
+    preLoopCode += " else {\n";
+    RW.InsertTextBefore(InitBlock->getLocStart(), preLoopCode);
+    RW.InsertTextBefore(WhileLoop->getLocStart(), "}\n");
+    RW.ReplaceText(GlobalBarrier->getSourceRange(), "global_barrier(__bar, __k_ctx)");
+  } else {
+    RW.InsertTextBefore(WhileLoop->getLocStart(), preLoopCode);
+  }
+
 
   ProcessWhileStmt(WhileLoop);
 
+}
+
+
+class UsesOfferFunctionsVisitor : public RecursiveASTVisitor<UsesOfferFunctionsVisitor> {
+
+public:
+  UsesOfferFunctionsVisitor() {
+    this->Found = false;
+  }
+
+  bool UsesOfferFunctions() {
+    return Found;
+  }
+
+  bool VisitCallExpr(CallExpr *CE) {
+    auto name = CE->getCalleeDecl()->getAsFunction()->getNameAsString();
+    if (name == "offer_fork" || name == "offer_kill") {
+      Found = true;
+    }
+    return true;
+  }
+
+private:
+  bool Found;
+};
+
+bool ASTUsesOfferFunctions(ASTUnit * AU) {
+  UsesOfferFunctionsVisitor V;
+  V.TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
+  return V.UsesOfferFunctions();
 }

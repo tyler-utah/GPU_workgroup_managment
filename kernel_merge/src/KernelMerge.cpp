@@ -103,6 +103,7 @@ int main(int argc, const char **argv) {
   MegaKernel << "//";
 
 
+  Merged << "#include \"../rt_common/cl_types.h\"\n";
   Merged << "#include \"restoration_ctx.h\"\n";
   Merged << "#include \"discovery.cl\"\n";
   Merged << "#include \"kernel_ctx.cl\"\n";

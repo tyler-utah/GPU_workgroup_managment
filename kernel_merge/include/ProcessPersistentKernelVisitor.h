@@ -6,10 +6,12 @@
 using namespace clang;
 using namespace llvm;
 
+bool ASTUsesOfferFunctions(ASTUnit * AU);
+
 class ProcessPersistentKernelVisitor
   : public ProcessKernelVisitor<ProcessPersistentKernelVisitor> {
 public:
-  ProcessPersistentKernelVisitor(ASTUnit * AU) : ProcessKernelVisitor(AU) {
+  ProcessPersistentKernelVisitor(ASTUnit * AU) : ProcessKernelVisitor(AU), UsesOfferFunctions(ASTUsesOfferFunctions(AU)) {
     this->RestorationCtx = "";
     this->ForkPointCounter = 0;
     TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
@@ -28,8 +30,9 @@ public:
   virtual void ProcessKernelFunction(FunctionDecl *D);
 
 private:
-
+  const bool UsesOfferFunctions;
   void ProcessWhileStmt(WhileStmt *S);
+  std::string ConvertType(QualType type);
 
   std::vector<DeclStmt*> DeclsToRestore;
   std::string RestorationCtx;
