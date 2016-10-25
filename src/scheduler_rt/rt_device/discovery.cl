@@ -11,6 +11,18 @@ int p_get_group_id(__global Discovery_ctx *d_ctx) {
   return d_ctx->p_group_ids[get_group_id(0)];
 }
 
+int p_get_global_id(__global Discovery_ctx *d_ctx) {
+	return p_get_group_id(d_ctx) * get_local_size(0) + get_local_id(0);
+}
+
+int p_get_num_groups(__global Discovery_ctx *d_ctx) {
+	return d_ctx->count;
+}
+
+int p_get_global_size(__global Discovery_ctx *d_ctx) {
+	return get_local_size(0) * p_get_num_groups(d_ctx);
+}
+
 int discovery_protocol_rep(__global Discovery_ctx *d_ctx) {
 
   //polling phase
@@ -27,7 +39,7 @@ int discovery_protocol_rep(__global Discovery_ctx *d_ctx) {
     return NON_PARTICIPATING_FLAG;
   }
 
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 5; i++) {
     TL_lock(&(d_ctx->m));
     TL_unlock(&(d_ctx->m));
   }

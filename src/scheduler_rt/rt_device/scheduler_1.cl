@@ -7,7 +7,7 @@ int query_workgroups_to_kill(CL_Scheduler_ctx s_ctx) {
 	return atomic_load_explicit(s_ctx.groups_to_kill, memory_order_special_relax_acquire, memory_scope_device);
 }
 
-int cfork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scratchpad, Restoration_ctx *r_ctx, int *former_groups, __global int *update) {
+int offer_fork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scratchpad, Restoration_ctx *r_ctx, int *former_groups, __global int *update) {
 	
   if (get_local_id(0) == 0) {
 	int h = *scratchpad;
@@ -56,7 +56,7 @@ int cfork(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scra
   return scratchpad[0];
 }
 
-int __ckill(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scratchpad, const int group_id) {
+int __offer_kill(__global Kernel_ctx * k_ctx, CL_Scheduler_ctx s_ctx, __local int *scratchpad, const int group_id) {
 
   if (get_local_id(0) == 0) {
     *scratchpad = 0;
@@ -134,4 +134,5 @@ void scheduler_assign_tasks_persistent(CL_Scheduler_ctx s_ctx, __global Kernel_c
   }
 }
 
-#define ckill(kernel_ctx, s_ctx, scratchpad, id) if (__ckill(kernel_ctx, s_ctx, scratchpad, id) == -1) {return -1;}
+#define offer_kill_barrier(kernel_ctx, s_ctx, scratchpad, id) if (__offer_kill(kernel_ctx, s_ctx, scratchpad, id) == -1) {return -1;}
+#define offer_kill(kernel_ctx, s_ctx, scratchpad, id) if (__offer_kill(kernel_ctx, s_ctx, scratchpad, id) == -1) {return;}
