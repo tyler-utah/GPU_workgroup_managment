@@ -21,6 +21,8 @@ public:
 
   virtual void ProcessKernelFunction(FunctionDecl *D);
 
+  virtual void AddArgumentsForIdCalls(FunctionDecl *D, SourceLocation endOfParams);
+
 };
 
 #endif

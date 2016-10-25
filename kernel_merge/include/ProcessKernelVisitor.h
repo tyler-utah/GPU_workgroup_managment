@@ -4,6 +4,7 @@
 #include "clang/Frontend/ASTUnit.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Rewrite/Core/Rewriter.h"
+#include "clang/Lex/Lexer.h"
 
 #include "KernelInfo.h"
 #include "LocalStorageDetector.h"
@@ -17,9 +18,12 @@ class ProcessKernelVisitor
 public:
   ProcessKernelVisitor(ASTUnit * AU) {
     this->AU = AU;
+    this->VisitedFunctionCallsIdFunction = false;
     this->RW = Rewriter(AU->getSourceManager(),
       AU->getLangOpts());
   }
+
+  virtual ~ProcessKernelVisitor() { }
 
   KernelInfo& GetKI() {
     return this->KI;
@@ -42,6 +46,8 @@ public:
 
   virtual void ProcessKernelFunction(FunctionDecl *D) = 0;
 
+  virtual void AddArgumentsForIdCalls(FunctionDecl *D, SourceLocation StartOfParams) = 0;
+
   void DetectLocalStorage(Stmt *S) {
     LocalStorageDetector LSD(S);
     LocalArrays = LSD.GetLocalArrays();
@@ -51,13 +57,25 @@ public:
     return LocalArrays;
   }
 
-  bool VisitFunctionDecl(FunctionDecl *D)
+  bool TraverseFunctionDecl(FunctionDecl *D)
   {
 
     if (D->hasAttr<OpenCLKernelAttr>() && D->hasBody()) {
       ProcessKernelFunction(D);
     }
-    return RecursiveASTVisitor::VisitFunctionDecl(D);
+    assert(!VisitedFunctionCallsIdFunction);
+    bool result = RecursiveASTVisitor::TraverseFunctionDecl(D);
+    if (!D->hasAttr<OpenCLKernelAttr>() && VisitedFunctionCallsIdFunction) {
+      FunctionsThatCallIdFunctions.insert(D->getNameAsString());
+      SourceLocation StartOfParams = Lexer::findLocationAfterToken(D->getLocation(),
+        tok::l_paren,
+        AU->getSourceManager(),
+        AU->getLangOpts(),
+        /*SkipTrailingWhitespaceAndNewLine=*/true);
+      this->AddArgumentsForIdCalls(D, StartOfParams);
+    }
+    VisitedFunctionCallsIdFunction = false;
+    return result;
   }
 
 private:
@@ -65,6 +83,8 @@ private:
   KernelInfo KI;
 
 protected:
+  bool VisitedFunctionCallsIdFunction;
+  std::set<std::string> FunctionsThatCallIdFunctions;
   ASTUnit *AU;
   Rewriter RW;
   std::vector<VarDecl*> LocalArrays;

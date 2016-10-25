@@ -91,6 +91,7 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     name == "get_num_groups" ||
     name == "get_global_size") {
     assert(CE->getNumArgs() == 1);
+    VisitedFunctionCallsIdFunction = true;
     // TODO: Abort unless the argument has the literal value 0
     if(UsesOfferFunctions) {
       RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__k_ctx");
@@ -128,6 +129,22 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   if (name == "offer_kill") {
     RW.ReplaceText(CE->getSourceRange(), "offer_kill(__k_ctx, __s_ctx, __scratchpad, k_get_group_id(__k_ctx))");
   }
+  if (FunctionsThatCallIdFunctions.find(name) != FunctionsThatCallIdFunctions.end()) {
+    VisitedFunctionCallsIdFunction = true;
+    SourceLocation StartOfParams = Lexer::findLocationAfterToken(CE->getCallee()->getSourceRange().getEnd(),
+      tok::l_paren,
+      AU->getSourceManager(),
+      AU->getLangOpts(),
+      /*SkipTrailingWhitespaceAndNewLine=*/true);
+    if (!UsesOfferFunctions) {
+      RW.InsertTextAfter(StartOfParams, "__bar, ");
+    }
+    RW.InsertTextAfter(StartOfParams, "__k_ctx");
+    if (CE->getNumArgs() > 0) {
+      RW.InsertTextAfter(StartOfParams, ", ");
+    }
+  }
+
   return true;
 }
 
@@ -166,6 +183,16 @@ std::string ProcessPersistentKernelVisitor::ConvertType(QualType type) {
     return result + ConvertTypeString(dyn_cast<BuiltinType>(type)->getName(PrintingPolicy(AU->getLangOpts())).str());
   }
   return result + ConvertTypeString(type.getAsString());
+}
+
+void ProcessPersistentKernelVisitor::AddArgumentsForIdCalls(FunctionDecl *D, SourceLocation StartOfParams) {
+  if (!UsesOfferFunctions) {
+    RW.InsertTextAfter(StartOfParams, "__global IW_barrier *__bar, ");
+  }
+  RW.InsertTextAfter(StartOfParams, "__global Kernel_ctx *__k_ctx");
+  if (D->getNumParams() > 0) {
+    RW.InsertTextAfter(StartOfParams, ", ");
+  }
 }
 
 void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
@@ -337,6 +364,7 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   ProcessWhileStmt(WhileLoop);
 
 }
+
 
 
 class UsesOfferFunctionsVisitor : public RecursiveASTVisitor<UsesOfferFunctionsVisitor> {

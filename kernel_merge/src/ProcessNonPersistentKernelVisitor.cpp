@@ -22,6 +22,10 @@ bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   return true;
 }
 
+void ProcessNonPersistentKernelVisitor::AddArgumentsForIdCalls(FunctionDecl *D, SourceLocation endOfParams) {
+
+}
+
 void ProcessNonPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   if (GetKI().KernelFunction) {
     errs() << "Multiple kernel functions in source file not supported, stopping.\n";

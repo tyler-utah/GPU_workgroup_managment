@@ -29,6 +29,8 @@ public:
 
   virtual void ProcessKernelFunction(FunctionDecl *D);
 
+  virtual void AddArgumentsForIdCalls(FunctionDecl *D, SourceLocation endOfParams);
+
 private:
   const bool UsesOfferFunctions;
   void ProcessWhileStmt(WhileStmt *S);
