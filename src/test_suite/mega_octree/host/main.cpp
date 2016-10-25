@@ -32,11 +32,10 @@ DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipp
 /*===========================================================================*/
 // specific to octree
 
-DEFINE_int32(numParticles, 10000, "number of particles to treat");
-DEFINE_int32(maxChildren, 50, "maximum number of children");
-DEFINE_int32(blocks, 12, "number of blocks");
-DEFINE_int32(threads, 32, "number of threads");
-DEFINE_int32(num_iterations, 1, "number of iterations");
+DEFINE_int32(numParticles, 100000, "number of particles to treat");
+DEFINE_int32(maxChildren, 20, "maximum number of children");
+DEFINE_int32(threads, 64, "number of threads");
+DEFINE_int32(num_iterations, 300, "number of iterations");
 static const unsigned int MAXTREESIZE = 11000000;
 
 // see some octree types definitions in common/octree.h
@@ -223,10 +222,9 @@ int main(int argc, char *argv[]) {
 
   int num_pools = max_workgroups;
 
-  cout << "==== persistent kernel args ======" << endl;
+  cout << "==== octree persistent kernel args ======" << endl;
   cout << "  numParticles: " << FLAGS_numParticles << endl;
   cout << "  threads: " << FLAGS_threads << endl;
-  cout << "  arg blocks: " << FLAGS_blocks << endl;
   cout << "  num_pools: " << num_pools << endl;
   cout << "  maxChildren: " << FLAGS_maxChildren << endl;
   cout << "  num_iterations: " << FLAGS_num_iterations << endl;
@@ -474,6 +472,10 @@ int main(int argc, char *argv[]) {
 
   // ----------------- Hugues: octree: end of stats collecting ---------------
 
+  cl_comm.print_summary();
+
+  cout << "Generate stats files..." << endl;
+
   cl_comm.print_groups_time_data("tmp.txt");
 
   cl_comm.print_response_exec_data("tmp2.txt");
@@ -481,8 +483,6 @@ int main(int argc, char *argv[]) {
   cl_comm.print_response_and_execution_times("tmp3.txt");
 
   cl_comm.print_summary_file("tmp4.txt");
-
-  cl_comm.print_summary();
 
   free_scheduler_ctx(&exec, &s_ctx);
 
