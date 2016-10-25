@@ -4,6 +4,7 @@
 #include <fstream>
 #include <string>
 #include<iostream>
+#include "limits.h"
 
 // Should be in a directory somewhere probably. Or defined in CMake.
 #define CL_INT_TYPE cl_int
@@ -196,10 +197,10 @@ int main(int argc, char *argv[]) {
 	// Set up the communicator
 	int local_size = 256;
 	int wg_size = MAX_P_GROUPS;
-	CL_Communicator cl_comm(exec, "mega_kernel", cl::NDRange(wg_size * local_size), cl::NDRange(local_size), s_ctx);
+	CL_Communicator cl_comm(exec, "mega_kernel", s_ctx, &d_ctx_mem);
 
 	// Launch the mega kernel
-	err = cl_comm.launch_mega_kernel();
+	err = cl_comm.launch_mega_kernel(cl::NDRange(wg_size * local_size), cl::NDRange(local_size));
 	check_ocl(err);
 
 	// Get the number of found groups
@@ -207,19 +208,18 @@ int main(int argc, char *argv[]) {
 
 	cl_comm.send_persistent_task(participating_groups);
 
-	Sleep(10);
-	time_ret first_time = cl_comm.send_task_synchronous(participating_groups/2, "first");
+	cl_comm.my_sleep(10);
+	time_ret first_time = cl_comm.send_task_synchronous(participating_groups - 1, "first");
 	int first_found = *graphics_result;
 	*graphics_result = INT_MAX;
-	Sleep(10);
-	time_ret second_time = cl_comm.send_task_synchronous(participating_groups / 2, "second");
+	cl_comm.my_sleep(10);
+	time_ret second_time = cl_comm.send_task_synchronous(participating_groups - 1, "second");
 	int second_found = *graphics_result;
 	*graphics_result = INT_MAX;
-	Sleep(10);
-	time_ret third_time = cl_comm.send_task_synchronous(participating_groups / 2, "third");
+	cl_comm.my_sleep(10);
+	time_ret third_time = cl_comm.send_task_synchronous(participating_groups - 1, "third");
 	int third_found = *graphics_result;
 	
-
 	cl_comm.send_quit_signal();
 	err = exec.exec_queue.finish();
 	check_ocl(err);

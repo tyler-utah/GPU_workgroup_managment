@@ -26,6 +26,11 @@ int discovery_protocol_rep(__global Discovery_ctx *d_ctx) {
     TL_unlock(&(d_ctx->m));
     return NON_PARTICIPATING_FLAG;
   }
+
+  for (int i = 0; i < 10; i++) {
+    TL_lock(&(d_ctx->m));
+    TL_unlock(&(d_ctx->m));
+  }
   
   //Closing phase
   TL_lock(&(d_ctx->m));

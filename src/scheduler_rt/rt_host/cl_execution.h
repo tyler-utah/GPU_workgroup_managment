@@ -67,6 +67,18 @@ class CL_Execution {
     }
     return true;
   }
+
+  bool is_AMD() {
+	  std::string buffer;
+	  cl_device_info info = CL_DEVICE_VENDOR;
+	  int err = 0;
+	  err = exec_device.getInfo(info, &buffer);
+	  check_ocl(err);
+	  if (buffer.find("Advanced Micro Devices") == std::string::npos) {
+		  return false;
+	  }
+	  return true;
+  }
   
   bool is_ocl2() {
     std::string buffer;   
@@ -132,14 +144,10 @@ class CL_Execution {
 		options << "-I" << extra_include << " ";
 	}
 
-	//Define the int and atomic int type
-	options << "-D" << "CL_INT_TYPE=int" << " ";
+	if (is_AMD()) {
+	  options << "-D" << "AMD_MEM_ORDERS" << " ";
+	}
 
-	options << "-D" << "CL_UCHAR_TYPE=uchar" << " ";
-
-	options << "-D" << "ATOMIC_CL_INT_TYPE=atomic_int" << " ";
-
-	options << "-D" << "MY_CL_GLOBAL=__global" << " ";
   
     //Needed so we know to include Nvidia atomics
     options << check_atomics();

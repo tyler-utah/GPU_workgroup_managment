@@ -32,6 +32,23 @@ void mk_init_scheduler_ctx(CL_Execution *exec, CL_Scheduler_ctx *s_ctx) {
   *(s_ctx->available_workgroups) = 0;
 }
 
+void restart_scheduler(CL_Scheduler_ctx *s_ctx) {
+
+	*(s_ctx->persistent_flag) = PERSIST_TASK_UNDEF;
+	*(s_ctx->groups_to_kill) = 0;
+	*(s_ctx->pool_lock) = 0;
+	*(s_ctx->check_value) = -1;
+
+	for (int i = 0; i < MAX_P_GROUPS; i++) {
+		s_ctx->task_array[i] = TASK_UNINIT;
+		s_ctx->r_ctx_arr[i].target = 0;
+	}
+
+
+	*(s_ctx->scheduler_flag) = DEVICE_SCHEDULER_INIT;
+	*(s_ctx->available_workgroups) = 0;
+}
+
 void free_scheduler_ctx(CL_Execution *exec, CL_Scheduler_ctx *s_ctx) {
   clSVMFree(exec->exec_context(), s_ctx->participating_groups);
   clSVMFree(exec->exec_context(), s_ctx->scheduler_flag);
