@@ -92,8 +92,13 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     name == "get_global_size") {
     assert(CE->getNumArgs() == 1);
     // TODO: Abort unless the argument has the literal value 0
-    RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__bar, __k_ctx");
-    RW.InsertTextBefore(CE->getSourceRange().getBegin(), "b_");
+    if(UsesOfferFunctions) {
+      RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__k_ctx");
+      RW.InsertTextBefore(CE->getSourceRange().getBegin(), "k_");
+    } else {
+      RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__bar, __k_ctx");
+      RW.InsertTextBefore(CE->getSourceRange().getBegin(), "b_");
+    }
   }
   if (name == "resizing_global_barrier" || name == "offer_fork") {
     ForkPointCounter++;
@@ -331,4 +336,34 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
 
   ProcessWhileStmt(WhileLoop);
 
+}
+
+
+class UsesOfferFunctionsVisitor : public RecursiveASTVisitor<UsesOfferFunctionsVisitor> {
+
+public:
+  UsesOfferFunctionsVisitor() {
+    this->Found = false;
+  }
+
+  bool UsesOfferFunctions() {
+    return Found;
+  }
+
+  bool VisitCallExpr(CallExpr *CE) {
+    auto name = CE->getCalleeDecl()->getAsFunction()->getNameAsString();
+    if (name == "offer_fork" || name == "offer_kill") {
+      Found = true;
+    }
+    return true;
+  }
+
+private:
+  bool Found;
+};
+
+bool ASTUsesOfferFunctions(ASTUnit * AU) {
+  UsesOfferFunctionsVisitor V;
+  V.TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
+  return V.UsesOfferFunctions();
 }
