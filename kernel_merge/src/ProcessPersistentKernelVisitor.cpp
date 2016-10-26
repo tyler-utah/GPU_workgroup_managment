@@ -180,7 +180,7 @@ std::string ProcessPersistentKernelVisitor::ConvertType(QualType type) {
     return result + ConvertType(dyn_cast<PointerType>(type)->getPointeeType()) + " *";
   }
   if (type->isBuiltinType()) {
-    return result + ConvertTypeString(dyn_cast<BuiltinType>(type)->getName(PrintingPolicy(AU->getLangOpts())).str());
+    return result + ConvertTypeString(dyn_cast<BuiltinType>(type->getCanonicalTypeInternal())->getName(PrintingPolicy(AU->getLangOpts())).str());
   }
   return result + ConvertTypeString(type.getAsString());
 }
