@@ -322,6 +322,11 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
     exit(1);
   }
 
+  if ((InitBlock || GlobalBarrier) && !(InitBlock && GlobalBarrier)) {
+    errs() << "Initialisation block and global barrier must either both be present, or both be absent, stopping.\n";
+    exit(1);
+  }
+
   for (auto DS : DeclsToRestore) {
     for (auto D = DS->decl_rbegin(); D != DS->decl_rend(); D++) {
       auto VD = dyn_cast<VarDecl>(*D);
