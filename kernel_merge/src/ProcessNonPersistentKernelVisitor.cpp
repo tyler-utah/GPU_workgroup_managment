@@ -11,19 +11,35 @@ bool ProcessNonPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
      name == "get_num_groups" || 
      name == "get_global_size") {
      assert(CE->getNumArgs() == 1);
+     VisitedFunctionCallsIdFunction = true;
      // TODO: Abort unless the argument has the literal value 0
      RW.ReplaceText(CE->getArg(0)->getSourceRange(), "__k_ctx");
      RW.InsertTextBefore(CE->getSourceRange().getBegin(), "k_");
   }
-  if(name == "global_barrier") {
-    errs() << "global_barrier should not appear in non-persistent kernel\n";
+  if(name == "resizing_global_barrier" || name == "global_barrier" || name == "offer_fork" || name == "offer_kill") {
+    errs() << "Persistent kernel functions should not appear in non-persistent kernel\n";
     exit(1);
+  }
+  if (FunctionsThatCallIdFunctions.find(name) != FunctionsThatCallIdFunctions.end()) {
+    VisitedFunctionCallsIdFunction = true;
+    SourceLocation StartOfParams = Lexer::findLocationAfterToken(CE->getCallee()->getSourceRange().getEnd(),
+      tok::l_paren,
+      AU->getSourceManager(),
+      AU->getLangOpts(),
+      /*SkipTrailingWhitespaceAndNewLine=*/true);
+    RW.InsertTextAfter(StartOfParams, "__k_ctx");
+    if (CE->getNumArgs() > 0) {
+      RW.InsertTextAfter(StartOfParams, ", ");
+    }
   }
   return true;
 }
 
-void ProcessNonPersistentKernelVisitor::AddArgumentsForIdCalls(FunctionDecl *D, SourceLocation endOfParams) {
-
+void ProcessNonPersistentKernelVisitor::AddArgumentsForIdCalls(FunctionDecl *D, SourceLocation StartOfParams) {
+  RW.InsertTextAfter(StartOfParams, "__global Kernel_ctx *__k_ctx");
+  if (D->getNumParams() > 0) {
+    RW.InsertTextAfter(StartOfParams, ", ");
+  }
 }
 
 void ProcessNonPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
