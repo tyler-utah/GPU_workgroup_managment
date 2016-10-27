@@ -37,8 +37,22 @@ add_executable(kernel_merge
   include/LocalStorageDetector.h
 )
 
+add_executable(standalone_persistent
+  src/StandalonePersistent.cpp
+  src/ProcessStandalonePersistentKernelVisitor.cpp
+  include/ProcessKernelVisitor.h
+  include/KernelInfo.h
+  include/LocalStorageDetector.h
+)
+
 set_target_properties(kernel_merge
     PROPERTIES COMPILE_FLAGS "${LLVM_CXXFLAGS}"
 )
 
+set_target_properties(standalone_persistent
+    PROPERTIES COMPILE_FLAGS "${LLVM_CXXFLAGS}"
+)
+
 target_link_libraries(kernel_merge PUBLIC ${LLVM_LIBS} ${LLVM_SYS_LIBS} version.lib)
+
+target_link_libraries(standalone_persistent PUBLIC ${LLVM_LIBS} ${LLVM_SYS_LIBS} version.lib)

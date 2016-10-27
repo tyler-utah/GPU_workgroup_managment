@@ -19,30 +19,34 @@ if args.persistent is None:
   sys.stderr.write("A persistent kernel must be specified using --persistent")
   sys.exit(1)
 
-if args.non_persistent is None:
-  sys.stderr.write("Generation of stand-alone persistent kernel not implemented yet")
-  sys.exit(1)
+standalone = args.non_persistent is None
+toolname = "standalone_persistent" if standalone else "kernel_merge"
 
-cmd = [ findtools.kernel_merge_bin + os.sep + "kernel_merge",
-        args.non_persistent,
-        args.persistent,
-        "--",
-        "-I",
-        findtools.clang_built_includes,
-        "-I",
-        os.sep.join([findtools.GPU_workgroup_management_root, "kernel_merge", "stubs"]),
-        "-include",
-        "opencl-c.h",
-        "-include",
-        "stubs.h",
-        "-cl-std=CL2.0" ]
+cmd = [ findtools.kernel_merge_bin + os.sep + toolname ]
 
-print("Running merge tool: " + " ".join(cmd))
+if not standalone:
+  cmd += [ args.non_persistent ]
+
+cmd += [ args.persistent,
+         "--",
+         "-I",
+         findtools.clang_built_includes,
+         "-I",
+         os.sep.join([findtools.GPU_workgroup_management_root, "kernel_merge", "stubs"]),
+         "-include",
+         "opencl-c.h",
+         "-include",
+         "stubs.h",
+         "-cl-std=CL2.0" ]
+
+print("Running " + toolname + " tool: " + " ".join(cmd))
 
 proc = subprocess.Popen(cmd)
 proc.communicate()
 if proc.returncode != 0:
   sys.exit(1)
+
+outputfile = ("standalone" if standalone else "merged") + ".cl"
 
 cmd = [ findtools.llvm_bin_dir + os.sep + "clang",
         "-cc1",
@@ -56,7 +60,7 @@ cmd = [ findtools.llvm_bin_dir + os.sep + "clang",
         os.sep.join([findtools.GPU_workgroup_management_root, "src", "scheduler_rt", "rt_device"]),
         "-include",
         os.sep.join([findtools.GPU_workgroup_management_root, "src", "scheduler_rt", "rt_common", "cl_types.h"]),
-        "merged.cl" ]
+        outputfile ]
 
 print("Checking result using clang: " + " ".join(cmd))
 
@@ -68,7 +72,7 @@ if proc.returncode != 0:
 cmd = [ findtools.llvm_bin_dir + os.sep + "clang-format",
         '-style={SortIncludes: false}',
         "-i",
-        "merged.cl" ]
+        outputfile ]
 
 print("Tidying up using clang-format: " + " ".join(cmd))
 
