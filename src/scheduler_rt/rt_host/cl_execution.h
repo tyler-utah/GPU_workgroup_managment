@@ -125,7 +125,7 @@ class CL_Execution {
   
   
   //roughly from IWOCL tutorial (needs attribution)
-  int compile_kernel(const char* kernel_file, const char * kernel_include, const char * extra_include = "") {
+  int compile_kernel(const char* kernel_file, const char * kernel_include, const char * extra_include = "", int use_query_barrier = 0) {
     int ret = CL_SUCCESS;
     exec_program = cl::Program(exec_context, loadProgram(kernel_file));
     
@@ -146,6 +146,10 @@ class CL_Execution {
 
 	if (is_AMD()) {
 	  options << "-D" << "AMD_MEM_ORDERS" << " ";
+	}
+
+	if (use_query_barrier == 1) {
+		options << "-D" << "QUERY_BARRIER" << " ";
 	}
 
   

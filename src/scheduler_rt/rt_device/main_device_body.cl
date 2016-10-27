@@ -86,7 +86,8 @@
 		//if (check == 1) {
         //  atomic_store_explicit(s_ctx.persistent_flag, PERSIST_TASK_DONE, memory_order_seq_cst, memory_scope_all_svm_devices);
 		//}
-		atomic_fetch_sub_explicit(s_ctx.persistent_flag, 1, memory_order_release, memory_scope_all_svm_devices);
+		int check = atomic_fetch_sub_explicit(s_ctx.persistent_flag, 1, memory_order_release, memory_scope_all_svm_devices);
+
 	  }
 	}
   }

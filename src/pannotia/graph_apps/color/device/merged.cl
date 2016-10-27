@@ -1,10 +1,11 @@
-
 #include "../rt_common/cl_types.h"
 #include "restoration_ctx.h"
 #include "discovery.cl"
 #include "kernel_ctx.cl"
 #include "cl_scheduler.cl"
 #include "iw_barrier.cl"
+
+__global int __junk_global;
 
 // Simple min reduce from:
 // http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
@@ -25,6 +26,7 @@ void MY_reduce(__global int *buffer, int length, __global atomic_int *result,
       scratch[local_index] = INT_MAX;
     }
     barrier(CLK_LOCAL_MEM_FENCE);
+
     for (int offset = 1; offset < get_local_size(0); offset <<= 1) {
       int mask = (offset << 1) - 1;
       if ((local_index & mask) == 0) {
@@ -40,6 +42,9 @@ void MY_reduce(__global int *buffer, int length, __global atomic_int *result,
     }
   }
 }
+//
+
+__global int __junk_global;
 
 // mega_kernel: combines the color1 and color2 kernels using an
 // inter-workgroup barrier and the discovery protocol
@@ -67,7 +72,9 @@ void color_combined(__global int *row,          // 0
     swap = __restoration_ctx->swap;
     graph_color = __restoration_ctx->graph_color;
   }
-  while (graph_color < 100) {
+  while (
+      __restoration_ctx->target !=
+      UCHAR_MAX /* substitute for 'true', which can cause compiler hangs */) {
     switch (__restoration_ctx->target) {
     case 0:
       if (!(1)) {
@@ -176,7 +183,7 @@ void color_combined(__global int *row,          // 0
 }
 //
 
-kernel void mega_kernel(int length, __global int *buffer,
+kernel void mega_kernel(__global int *buffer, int length,
                         __global atomic_int *result, __global int *row, // 0
                         __global int *col,                              // 1
                         __global float *node_value,                     // 2

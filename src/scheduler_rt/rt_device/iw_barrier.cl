@@ -304,8 +304,12 @@ int __global_barrier_resize_query(__global IW_barrier *bar, __global Kernel_ctx 
   return 0;
 }
 
+#ifndef QUERY_BARRIER
 #define global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx) if (__global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx) == -1) { return;}
-//#define global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx) __global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx);
+#else
+#define global_barrier_resize(bar, k_ctx, s_ctx, scratchpad, r_ctx) if (__global_barrier_resize_query(bar, k_ctx, s_ctx, scratchpad, r_ctx) == -1) { return;}
+#endif
+
 
 /*---------------------------------------------------------------------------*/
 
