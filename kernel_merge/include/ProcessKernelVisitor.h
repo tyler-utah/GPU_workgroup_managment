@@ -40,7 +40,6 @@ public:
       errs() << "Nothing was re-written\n";
       exit(1);
     }
-    out << "__global int __junk_global;\n\n";
     out << std::string(RewriteBuf->begin(), RewriteBuf->end());
   }
 

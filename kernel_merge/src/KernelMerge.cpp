@@ -112,6 +112,7 @@ int main(int argc, const char **argv) {
   Merged << "\n";
   NonPersistentVisitor.EmitRewrittenText(Merged);
   Merged << "\n";
+  Merged << "__global int __junk_global;\n\n";
   PersistentVisitor.EmitRewrittenText(Merged);
   Merged << "\n";
   Merged << "\n";

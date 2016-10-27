@@ -161,6 +161,12 @@ static std::string ConvertTypeString(std::string type) {
     std::transform(result.begin(), result.end(), result.begin(), ::toupper);
     return "CL_" + result + "_TYPE";
   }
+  if (type == "unsigned char" ||
+      type == "unsigned short" ||
+      type == "unsigned int" ||
+      type == "unsigned long") {
+    return ConvertTypeString("u" + type.substr(std::string("unsigned ").size()));
+  }
   return type;
 }
 

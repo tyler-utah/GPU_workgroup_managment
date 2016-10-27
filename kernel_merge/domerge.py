@@ -8,12 +8,20 @@ parser = argparse.ArgumentParser(description="Kernel merge")
 
 # Required arguments
 
-parser.add_argument("non_persistent", type=str, action="store",
-                    help="Path to non-persistent kernel.")
-parser.add_argument("persistent", type=str, action="store",
-                    help="Path to persistent kernel.")
+parser.add_argument("--non_persistent", type=str, action="store",
+                    help="Path to non-persistent kernel; must be used in combination with --persistent.")
+parser.add_argument("--persistent", type=str, action="store",
+                    help="Path to persistent kernel; if used in combination with --non_persistent, causes the kernels to be merged, otherwise causes a stand-alone persistent kernel to be generated.")
 
 args = parser.parse_args()
+
+if args.persistent is None:
+  sys.stderr.write("A persistent kernel must be specified using --persistent")
+  sys.exit(1)
+
+if args.non_persistent is None:
+  sys.stderr.write("Generation of stand-alone persistent kernel not implemented yet")
+  sys.exit(1)
 
 cmd = [ findtools.kernel_merge_bin + os.sep + "kernel_merge",
         args.non_persistent,
