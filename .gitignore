@@ -10,3 +10,5 @@ write-ups/PLDI/paper.pdf
 *.bak
 
 build
+
+kernel_merge/findtools.py

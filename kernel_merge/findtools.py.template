@@ -1,0 +1,8 @@
+
+kernel_merge_bin = r"C:\Users\afd\papers\GPU_workgroup_managment\kernel_merge-build\RelWithDebInfo"
+
+GPU_workgroup_management_root = r"C:\Users\afd\papers\GPU_workgroup_managment"
+
+clang_built_includes = r"C:\Users\afd\llvm39-build\Release\lib\clang\3.9.1\include"
+
+llvm_bin_dir = r"C:\Users\afd\llvm39-build\Release\bin"
