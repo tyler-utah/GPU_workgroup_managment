@@ -233,8 +233,8 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
     }
     paramAlreadyExists = true;
     auto ElementType = dyn_cast<ConstantArrayType>(VD->getType())->getElementType();
-    strstr << ElementType->getCanonicalTypeInternal().getAsString(PrintingPolicy(AU->getLangOpts())); // TODO: is there a way to get e.g. float4 instead of float __attribute__((ext_vector_type(4))) ?
-    strstr << " " << VD->getType().getQualifiers().getAsString() << " * " << VD->getNameAsString();
+    strstr << ((QualType)ElementType).getAsString();
+    strstr << " * " << VD->getNameAsString();
     RW.InsertTextAfter(endOfParams, strstr.str());
   }
 
