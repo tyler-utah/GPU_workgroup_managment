@@ -26,5 +26,8 @@ typedef struct {
   CL_INT_TYPE poll_open;
   CL_INT_TYPE p_group_ids[MAX_P_GROUPS];
   Ticket_lock m;
+  
+  // Flag to immediately exit, when we're just getting the occupancy
+  CL_INT_TYPE im_exit;
 
 } Discovery_ctx;

@@ -17,7 +17,7 @@ void mk_init_scheduler_ctx(CL_Execution *exec, CL_Scheduler_ctx *s_ctx) {
   s_ctx->check_value = (cl_int*)clSVMAlloc(exec->exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER | CL_MEM_SVM_ATOMICS, sizeof(cl_int), 4);
 
 
-  *(s_ctx->persistent_flag) = PERSIST_TASK_UNDEF;
+  *(s_ctx->persistent_flag) = -1;
   *(s_ctx->groups_to_kill) = 0;
   *(s_ctx->pool_lock) = 0;
   *(s_ctx->check_value) = -1;
@@ -34,7 +34,7 @@ void mk_init_scheduler_ctx(CL_Execution *exec, CL_Scheduler_ctx *s_ctx) {
 
 void restart_scheduler(CL_Scheduler_ctx *s_ctx) {
 
-	*(s_ctx->persistent_flag) = PERSIST_TASK_UNDEF;
+	*(s_ctx->persistent_flag) = -1;
 	*(s_ctx->groups_to_kill) = 0;
 	*(s_ctx->pool_lock) = 0;
 	*(s_ctx->check_value) = -1;

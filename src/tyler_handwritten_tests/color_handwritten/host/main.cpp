@@ -27,7 +27,11 @@ DEFINE_bool(list, false, "List OpenCL platforms and devices");
 DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Path to scheduler runtime includes");
 DEFINE_string(restoration_ctx_path, "tyler_handwritten_tests/color_handwritten/common/", "Path to restoration context");
 DEFINE_string(graph_file, "", "Path to the graph_file");
-DEFINE_string(output, "", "Path to output the result");
+DEFINE_string(graph_output, "", "Path to output the graph result");
+DEFINE_string(output_timestamp_executing_groups, "timestamp_executing_groups.txt", "Path to output timestamps and the number of persistent groups");
+DEFINE_string(output_timestamp_non_persistent, "timestamp_non_persistent.txt", "Path to output timestamps for non persistent tasks");
+DEFINE_string(output_non_persistent_duration, "non_persistent_duration.txt", "Path to output duration results for non persistent tasks");
+DEFINE_string(output_summary, "summary.txt", "output file for summary of results");
 DEFINE_int32(non_persistent_wgs, 2, "ratio of workgroups to send to non-persistent task. Special values are (-1) to send all but one workgroup and (-2) to send one workgroup");
 DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipped: 0 - don't skip, 1 - skip");
 DEFINE_string(kernel_file, "tyler_handwritten_tests/color_handwritten/device/mega_kernel.cl", "the path the mega kernel file");
@@ -110,7 +114,7 @@ void output_graph_solution(const char *fname) {
 
 	exec.exec_queue.enqueueReadBuffer(color_d, CL_TRUE, 0, sizeof(cl_int) * num_nodes, color);
 	FILE * fp = fopen(fname, "w");
-	if (!fp) { printf("ERROR: unable to open file %s\n", FLAGS_output.c_str()); }
+	if (!fp) { printf("ERROR: unable to open file %s\n", FLAGS_graph_output.c_str()); }
 
 	for (int i = 0; i < num_nodes; i++)
 		fprintf(fp, "%d: %d\n", i + 1, color[i]);
@@ -297,9 +301,6 @@ int main(int argc, char *argv[]) {
 	// Launch the mega kernel
 
 	int occupancy_bound = cl_comm.get_occupancy_bound(local_size);
-
-	cl_comm.set_record_groups_time_data();
-
 	
 	std::vector<time_stamp> response_time;
 	std::vector<time_stamp> execution_time;
@@ -386,18 +387,18 @@ int main(int argc, char *argv[]) {
 	cout << "check value is: " << *(s_ctx.check_value) << " ms" << endl;
 
 
-	if (strcmp("", FLAGS_output.c_str()) != 0) {
-		cout << "outputing solution to " << FLAGS_output << endl;
-		output_graph_solution(FLAGS_output.c_str());
+	if (strcmp("", FLAGS_graph_output.c_str()) != 0) {
+		cout << "outputing solution to " << FLAGS_graph_output << endl;
+		output_graph_solution(FLAGS_graph_output.c_str());
 	}
 
-	cl_comm.print_groups_time_data("tmp.txt");
+	cl_comm.print_groups_time_data(FLAGS_output_timestamp_executing_groups.c_str());
 
-	cl_comm.print_response_exec_data("tmp2.txt");
+	cl_comm.print_response_exec_data(FLAGS_output_timestamp_non_persistent.c_str());
 
-	cl_comm.print_response_and_execution_times("tmp3.txt");
+	cl_comm.print_response_and_execution_times(FLAGS_output_non_persistent_duration.c_str());
 
-	cl_comm.print_summary_file("tmp4.txt");
+	cl_comm.print_summary_file(FLAGS_output_summary.c_str());
 
 	cl_comm.print_summary();
 

@@ -39,7 +39,8 @@ int discovery_protocol_rep(__global Discovery_ctx *d_ctx) {
     return NON_PARTICIPATING_FLAG;
   }
 
-  for (int i = 0; i < 5; i++) {
+  // Just to ensure accuracy
+  for (int i = 0; i < 10; i++) {
     TL_lock(&(d_ctx->m));
     TL_unlock(&(d_ctx->m));
   }
@@ -64,6 +65,8 @@ int discovery_protocol(__global Discovery_ctx *d_ctx, __local int * ret_flag) {
   return *ret_flag;
 }
 
-#define DISCOVERY_PROTOCOL(d_ctx, scratchpad)                                 \
+#define DISCOVERY_PROTOCOL(d_ctx, scratchpad)                             \
 	if (discovery_protocol(d_ctx, scratchpad) == NON_PARTICIPATING_FLAG)  \
-	    return;                                               
+	    return;                                                           \
+    if (d_ctx->im_exit == 1)                                              \
+       return;	

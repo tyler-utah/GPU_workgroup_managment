@@ -51,7 +51,7 @@ using namespace std;
 #include "../graph_apps/color/color.h"
 
 // Include non-persistent interface
-#include "../non_persistent_kernels/reduce.h"
+#include "../non_persistent_kernels/reduce/reduce.h"
 
 //From IWOCL tutorial (needs attribution)
 unsigned getDeviceList(std::vector<std::vector<cl::Device> >& devices)
