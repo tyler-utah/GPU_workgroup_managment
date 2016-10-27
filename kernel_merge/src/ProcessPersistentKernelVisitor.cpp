@@ -232,10 +232,9 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
       strstr << ", ";
     }
     paramAlreadyExists = true;
-    strstr << "__local ";
-    std::string typeName = dyn_cast<BuiltinType>(dyn_cast<ConstantArrayType>(VD->getType())->getElementType())->getName(PrintingPolicy(AU->getLangOpts()));
-    strstr << typeName;
-    strstr << " * " << VD->getNameAsString();
+    auto ElementType = dyn_cast<ConstantArrayType>(VD->getType())->getElementType();
+    strstr << ElementType->getCanonicalTypeInternal().getAsString(PrintingPolicy(AU->getLangOpts())); // TODO: is there a way to get e.g. float4 instead of float __attribute__((ext_vector_type(4))) ?
+    strstr << " " << VD->getType().getQualifiers().getAsString() << " * " << VD->getNameAsString();
     RW.InsertTextAfter(endOfParams, strstr.str());
   }
 
