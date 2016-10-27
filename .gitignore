@@ -1,4 +1,6 @@
 kernel_merge-build
+kernel_merge/*.pyc
+
 UVM_test/test1-build
 
 write-ups/PLDI/paper.aux
