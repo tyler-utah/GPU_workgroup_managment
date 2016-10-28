@@ -1,3 +1,5 @@
+#include "parse.h"
+
 // Could probably go into a pannotia header
 DEFINE_string(graph_file, "", "Path to the graph_file");
 DEFINE_string(graph_output, "", "Path to output the graph result");

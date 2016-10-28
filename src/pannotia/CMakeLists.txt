@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../scheduler_rt/rt_host/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../scheduler_rt/rt_common/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../base/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/graph_apps/color/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/graph_parser/)
@@ -19,3 +20,5 @@ target_link_libraries(pannotia_color
   base_file
   pannotia_graph_parse
 )
+
+add_definitions(-DPERSISTENT_PANNOTIA_COLOR)
