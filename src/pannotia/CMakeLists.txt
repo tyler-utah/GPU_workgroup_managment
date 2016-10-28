@@ -13,6 +13,7 @@ add_executable(pannotia_color
   ../host_skeleton/skel.cpp
   graph_apps/color/color.h
 )
+
 target_link_libraries(pannotia_color
   base_commandlineflags
   opencl_opencl
@@ -21,4 +22,21 @@ target_link_libraries(pannotia_color
   pannotia_graph_parse
 )
 
-add_definitions(-DPERSISTENT_PANNOTIA_COLOR)
+target_compile_options(pannotia_color PUBLIC -DPERSISTENT_PANNOTIA_COLOR)
+
+add_executable(pannotia_mis
+  ../host_skeleton/skel.cpp
+  graph_apps/mis/mis.h
+)
+
+target_link_libraries(pannotia_mis
+  base_commandlineflags
+  opencl_opencl
+  base_profile
+  base_file
+  pannotia_graph_parse
+)
+
+target_compile_options(pannotia_mis PUBLIC -DPERSISTENT_PANNOTIA_MIS)
+
+
