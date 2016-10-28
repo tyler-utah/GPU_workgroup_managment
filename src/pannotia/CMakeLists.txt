@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 2.8)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../scheduler_rt/rt_host/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../scheduler_rt/rt_common/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../base/)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/graph_apps/color/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/graph_parser/)
 
 
@@ -23,6 +22,7 @@ target_link_libraries(pannotia_color
 )
 
 target_compile_options(pannotia_color PUBLIC -DPERSISTENT_PANNOTIA_COLOR)
+target_include_directories(pannotia_color PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/graph_apps/color/)
 
 add_executable(pannotia_mis
   ../host_skeleton/skel.cpp
@@ -38,5 +38,24 @@ target_link_libraries(pannotia_mis
 )
 
 target_compile_options(pannotia_mis PUBLIC -DPERSISTENT_PANNOTIA_MIS)
+target_include_directories(pannotia_mis PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/graph_apps/mis/)
+
+
+add_executable(pannotia_sssp
+  ../host_skeleton/skel.cpp
+  graph_apps/sssp/sssp.h
+)
+
+target_link_libraries(pannotia_sssp
+  base_commandlineflags
+  opencl_opencl
+  base_profile
+  base_file
+  pannotia_graph_parse
+)
+
+target_compile_options(pannotia_sssp PUBLIC -DPERSISTENT_PANNOTIA_SSSP)
+target_include_directories(pannotia_sssp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/graph_apps/sssp/)
+
 
 
