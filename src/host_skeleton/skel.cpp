@@ -180,7 +180,7 @@ void run_non_persistent(CL_Execution *exec) {
 
 	clean_non_persistent_task(exec);
 
-	cout << "Error (should be 0): " << error << endl;
+	cout << "Error (from check_non_persistent_task(), should be 0): " << error << endl;
 	cout << "Iterations: " << FLAGS_run_non_persistent  << endl;
 	cout << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << endl;
 	cout << "Mean time: " << CL_Communicator::get_average_time_ms(times) << " ms" << endl;
@@ -313,7 +313,7 @@ void run_persistent(CL_Execution *exec) {
 
 	clean_persistent_task(exec);
 
-	cout << endl <<  "Error: " << error << endl << endl;
+	cout << endl <<  "Error (from check_non_persistent_task(), should be 0):" << error << endl << endl;
 	cout << "Average occupancy: " << CL_Communicator::average_int_vector(groups) << endl;
 	cout << "Iterations: " << FLAGS_run_persistent << endl;
 	cout << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << endl;
