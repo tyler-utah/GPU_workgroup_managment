@@ -7,6 +7,8 @@
 #include "kernel_ctx.cl"
 #include "cl_scheduler.cl"
 #include "iw_barrier.cl"
+#include "../rt_common/sense_reversal_barrier.h"
+#include "sense_reversal_barrier.cl"
 
 /*---------------------------------------------------------------------------*/
 
@@ -286,6 +288,8 @@ void octree_init(
 
 /*---------------------------------------------------------------------------*/
 
+__global int __junk;
+
 void octree_main (
                   /* mega-kernel args */
                   __global Kernel_ctx *kernel_ctx,
@@ -294,7 +298,7 @@ void octree_main (
                   Restoration_ctx *r_ctx,
 
                   /* octree args */
-                  __global IW_barrier *octree_bar,
+                  __global sense_reversal_barrier *octree_bar,
                   __global atomic_int *num_iterations,
                   __global int *randdata,
                   __global volatile int *maxl,
@@ -366,9 +370,7 @@ void octree_main (
          one work-group alive. This is to avoid to call octree_init()
          after a cfork() */
       if (k_get_group_id(kernel_ctx) > 0) {
-        if (__ckill(kernel_ctx, scheduler_ctx, scratchpad, k_get_group_id(kernel_ctx)) == -1) {
-          return;
-        }
+        offer_kill(kernel_ctx, scheduler_ctx, scratchpad, k_get_group_id(kernel_ctx));
       }
 
       // always suggest to fork
@@ -376,18 +378,12 @@ void octree_main (
       /* Hugues: variable 'i' is just used to give a valid argument, we */
       /* do not use the returned value. */
 
-      /* Hugues: the octree_bar->num_groups arg is here to put something */
-      /* valid as argument, I don't think this value is used anywhere */
-      /* else. I jus mimick the call to cfork() in */
-      /* global_barrier_resize(). But looking at the code of */
-      /* global_barrier(), bar->num_groups is not used there. */
-
       if (k_get_group_id(kernel_ctx) == 0) {
         /* flag to indicate we have been forked */
         to_fork.target = 1;
         /* pass the sense */
         to_fork.sense = sense;
-        cfork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(octree_bar->num_groups));
+        offer_fork(kernel_ctx, scheduler_ctx, scratchpad, &to_fork, &i, &(__junk));
       }
 
       // Try to acquire new task
@@ -511,7 +507,7 @@ __kernel void mega_kernel(
                           __global atomic_int * graphics_result,
 
                           // Persistent kernel args
-                          __global IW_barrier *octree_bar,
+                          __global sense_reversal_barrier *octree_bar,
                           __global atomic_int *num_iterations,
                           __global int *randdata,
                           __global volatile int *maxl,
