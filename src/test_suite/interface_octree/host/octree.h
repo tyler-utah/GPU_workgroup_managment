@@ -31,8 +31,6 @@ cl::Buffer particlesDone;
 cl::Buffer stealAttempts;
 cl::Buffer deq;
 cl::Buffer dh;
-IW_barrier octree_h_bar;
-cl::Buffer octree_d_bar;
 
 /*---------------------------------------------------------------------------*/
 // Specific to octree
@@ -92,17 +90,6 @@ void reset_persistent_task(CL_Execution *exec) {
   // re-write 0 to the CL buffers, etc
   int err = 0;
 
-  for (int i = 0; i < MAX_P_GROUPS; i++) {
-    octree_h_bar.barrier_flags[i] = 0;
-  }
-  octree_h_bar.phase = 0;
-  // for sense reversal barrier
-  octree_h_bar.counter = 0;
-  octree_h_bar.sense = 0;
-
-  err = exec->exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(IW_barrier), &octree_h_bar);
-  check_ocl(err);
-
   // err = exec->exec_queue.enqueueWriteBuffer(d_num_iterations, CL_TRUE, 0, sizeof(cl_int), &(num_iterations));
   // check_ocl(err);
   err = exec->exec_queue.enqueueFillBuffer(tree, 0, 0, sizeof(cl_uint)*MAXTREESIZE);
@@ -132,8 +119,6 @@ void init_persistent_app_for_real(CL_Execution *exec, int occupancy) {
   stealAttempts = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint));
   deq = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(Task) * maxlength * max_workgroups);
   dh = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * max_workgroups);
-
-  octree_d_bar = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
 
   reset_persistent_task(exec);
 

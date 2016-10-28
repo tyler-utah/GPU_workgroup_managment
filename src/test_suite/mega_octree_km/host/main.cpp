@@ -245,19 +245,6 @@ int main(int argc, char *argv[]) {
   cl::Buffer deq(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Task) * maxlength * num_pools);
   cl::Buffer dh(exec.exec_context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * num_pools);
 
-  IW_barrier octree_h_bar;
-  for (int i = 0; i < MAX_P_GROUPS; i++) {
-    octree_h_bar.barrier_flags[i] = 0;
-  }
-  octree_h_bar.phase = 0;
-  // for sense reversal barrier
-  octree_h_bar.counter = 0;
-  octree_h_bar.sense = 0;
-
-  cl::Buffer octree_d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
-  err = exec.exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(IW_barrier), &octree_h_bar);
-  check_ocl(err);
-
   cl_int num_iterations = FLAGS_num_iterations;
   err = exec.exec_queue.enqueueWriteBuffer(d_num_iterations, CL_TRUE, 0, sizeof(cl_int), &(num_iterations));
   check_ocl(err);
@@ -322,9 +309,6 @@ int main(int argc, char *argv[]) {
   check_ocl(err);
 
   // Set args for persistent kernel
-  // err = exec.exec_kernels["mega_kernel"].setArg(arg_index, octree_d_bar);
-  // arg_index++;
-  // check_ocl(err);
   err = exec.exec_kernels["mega_kernel"].setArg(arg_index, d_num_iterations);
   arg_index++;
   check_ocl(err);
