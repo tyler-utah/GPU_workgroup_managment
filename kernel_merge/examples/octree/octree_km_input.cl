@@ -30,25 +30,21 @@ int myrand( __global int *randdata) {
 /*---------------------------------------------------------------------------*/
 /* lbabp: load balance ABP style, aka work-stealing */
 
-void DLBABP_push(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global volatile int *maxl) {
+void DLBABP_push(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val) {
   int id = get_group_id(0);
   int private_tail = atomic_load_explicit(&(dh[id].tail), memory_order_acquire, memory_scope_device);
   deq[id * maxlength + private_tail] = *val;
   private_tail++;
   atomic_store_explicit(&(dh[id].tail), private_tail, memory_order_release, memory_scope_device);
-
-  if (*maxl < private_tail) {
-    atomic_max(maxl, private_tail);
-  }
 }
 
 /*---------------------------------------------------------------------------*/
 
-void DLBABP_enqueue(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global volatile int *maxl) {
+void DLBABP_enqueue(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val) {
   /* Hugues todo: check calls to DLBABP_enqueue, can any other thread
    * than id0 can call it ? */
   if (get_local_id(0) == 0) {
-    DLBABP_push(deq, dh, maxlength, val, maxl);
+    DLBABP_push(deq, dh, maxlength, val);
   }
 }
 
@@ -187,7 +183,6 @@ void octree_init(
                  unsigned int maxlength,
                  __global unsigned int* treeSize,
                  __global unsigned int* particlesDone,
-                 __global volatile int *maxl,
                  const int num_pools,
                  unsigned int numParticles,
                  __local Task *t
@@ -203,8 +198,6 @@ void octree_init(
   /* ---------- initOctree: global init ---------- */
   *treeSize = 100;
   *particlesDone = 0;
-  /* In Cuda, maxl is a kernel global initialized to 0 */
-  *maxl = 0;
 
   /* create and enqueue the first task */
   t->treepos=0;
@@ -217,7 +210,7 @@ void octree_init(
   t->end = numParticles;
   t->flip = false;
 
-  DLBABP_enqueue(deq, dh, maxlength, t, maxl);
+  DLBABP_enqueue(deq, dh, maxlength, t);
   /* ---------- end of initOctree ---------- */
 }
 
@@ -227,7 +220,6 @@ __kernel void octree_main (
                   /* octree args */
                   __global atomic_int *num_iterations,
                   __global int *randdata,
-                  __global volatile int *maxl,
                   __global float4* particles,
                   __global float4* newparticles,
                   __global unsigned int* tree,
@@ -263,7 +255,7 @@ __kernel void octree_main (
   /* ADD INIT HERE */
   if (get_local_id(0) == 0) {
     if (get_global_id(0) == 0) {
-      octree_init(deq, dh, maxlength, treeSize, particlesDone, maxl, num_pools, numParticles, t);
+      octree_init(deq, dh, maxlength, treeSize, particlesDone, num_pools, numParticles, t);
     }
   }
   global_barrier();
@@ -359,7 +351,7 @@ __kernel void octree_main (
 
           tree[(t[0]).treepos + i] = atomic_add(treeSize,(unsigned int)8);
           newTask[0].treepos = tree[(t[0]).treepos + i];
-          DLBABP_enqueue(deq, dh, maxlength, &newTask[0], maxl);
+          DLBABP_enqueue(deq, dh, maxlength, &newTask[0]);
         }
       } else {
         if (!(t[0]).flip) {
