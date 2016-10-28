@@ -48,6 +48,8 @@ using namespace std;
 //Include persistent interface
 #if defined PERSISTENT_PANNOTIA_COLOR
 #include "../graph_apps/color/color.h"
+#elif defined PERSISTENT_PANNOTIA_MIS
+#include "../graph_apps/mis/mis.h"
 #elif defined PERSISTENT_OCTREE
 #include "host/octree.h"
 #else
@@ -218,7 +220,7 @@ int amd_check(int v) {
 
 // Just for running the non persistent task
 void run_persistent(CL_Execution *exec) {
-	printf("Running non persistent app %s\n", persistent_app_name());
+	printf("Running persistent app %s\n", persistent_app_name());
 	printf("Running %d iterations\n", FLAGS_run_persistent);
 
 	int err = exec->compile_kernel(file::Path(FLAGS_persistent_kernel_file.c_str()),
@@ -329,7 +331,7 @@ void run_persistent(CL_Execution *exec) {
 int get_workgroups_for_non_persistent(int occupancy_bound) {
 	int ret;
 	if (FLAGS_non_persistent_wgs == -1) {
-		ret = occupancy_bound - 1;
+		ret = occupancy_bound - 2;
 	}
 	else if (FLAGS_non_persistent_wgs == -2) {
 		ret = 1;
