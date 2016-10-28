@@ -1,5 +1,5 @@
 
-DEFINE_string(non_persistent_kernel_file, "pannotia/non_persistent_kernels/device/reduce.cl", "the path the non persistent file");
+DEFINE_string(non_persistent_kernel_file, "non_persistent_kernels/reduce/device/reduce.cl", "the path the non persistent file");
 
 int graphics_arr_length;
 cl_int * h_graphics_buffer;
