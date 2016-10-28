@@ -59,21 +59,7 @@ void DLBABP_enqueue(__global Task *deq, __global DequeHeader *dh, unsigned int m
  * declared as an int, and ctr/index is accessed with mask and logical
  * AND operations. */
 
-int getIndex(int head) {
-  return head & 0xffff;
-}
-
-/*---------------------------------------------------------------------------*/
-
-int getZeroIndexIncCtr(int head) {
-  return (head + 0x10000) & 0xffff0000;
-}
-
-/*---------------------------------------------------------------------------*/
-
-int incIndex(int head) {
-  return head + 1;
-}
+#define getIndex(head) (head & 0xffff)
 
 /*---------------------------------------------------------------------------*/
 
@@ -91,7 +77,8 @@ int DLBABP_steal(__global Task *deq, __global DequeHeader *dh, unsigned int maxl
   }
 
   *val = deq[idx * maxlength + getIndex(oldHead)];
-  newHead = incIndex(oldHead);
+  /* IncIndex */
+  newHead = oldHead + 1;
   if (atomic_compare_exchange_strong_explicit(&(dh[idx].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
     return 1;
   }
@@ -125,7 +112,8 @@ int DLBABP_pop(__global Task *deq, __global DequeHeader *dh, unsigned int maxlen
   }
 
   atomic_store_explicit(&(dh[id].tail), 0, memory_order_release, memory_scope_device);
-  newHead = getZeroIndexIncCtr(oldHead);
+  /* Hugues: inline getZeroIndexIncCtr below */
+  newHead = (oldHead + 0x10000) & 0xffff0000;
   if(localTail == getIndex(oldHead)) {
     if(atomic_compare_exchange_strong_explicit(&(dh[id].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
       return 1;
@@ -137,13 +125,11 @@ int DLBABP_pop(__global Task *deq, __global DequeHeader *dh, unsigned int maxlen
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue2(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength,  __local Task *val, __global int *randdata, /* unsigned int *localStealAttempts, */ int num_pools)
+int DLBABP_dequeue2(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength,  __local Task *val, __global int *randdata, int num_pools)
 {
   if (DLBABP_pop(deq, dh, maxlength, val) == 1) {
     return 1;
   }
-
-  /* *localStealAttempts += 1; */
 
   if (DLBABP_steal(deq, dh, maxlength, val, myrand(randdata) % num_pools) == 1) {
     return 1;
@@ -154,11 +140,11 @@ int DLBABP_dequeue2(__global Task *deq, __global DequeHeader *dh, unsigned int m
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global int *randdata, /* unsigned int *localStealAttempts, */ int num_pools, __local volatile int *rval) {
+int DLBABP_dequeue(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global int *randdata, int num_pools, __local volatile int *rval) {
   int dval = 0;
 
   if(get_local_id(0) == 0) {
-    *rval = DLBABP_dequeue2(deq, dh, maxlength, val, randdata, /* localStealAttempts, */ num_pools);
+    *rval = DLBABP_dequeue2(deq, dh, maxlength, val, randdata, num_pools);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
   dval = *rval;
@@ -202,7 +188,6 @@ void octree_init(
                  __global unsigned int* treeSize,
                  __global unsigned int* particlesDone,
                  __global volatile int *maxl,
-                 /* __global unsigned int *stealAttempts, */
                  const int num_pools,
                  unsigned int numParticles,
                  __local Task *t
@@ -220,7 +205,6 @@ void octree_init(
   *particlesDone = 0;
   /* In Cuda, maxl is a kernel global initialized to 0 */
   *maxl = 0;
-  /* *stealAttempts = 0; */
 
   /* create and enqueue the first task */
   t->treepos=0;
@@ -251,7 +235,6 @@ __kernel void octree_main (
                   __global unsigned int* treeSize,
                   __global unsigned int* particlesDone,
                   const unsigned int maxchilds,
-                  /* __global unsigned int *stealAttempts, */
                   const int num_pools,
                   __global Task *deq,
                   __global DequeHeader *dh,
@@ -273,17 +256,14 @@ __kernel void octree_main (
   uint local_id = get_local_id(0);
   uint local_size = get_local_size(0);
 
-  /* uint localStealAttempts; */
-
   __local volatile int rval[1];
 
   int i;
 
   /* ADD INIT HERE */
   if (get_local_id(0) == 0) {
-    /* localStealAttempts = 0; */
     if (get_global_id(0) == 0) {
-      octree_init(deq, dh, maxlength, treeSize, particlesDone, maxl, /* stealAttempts, */ num_pools, numParticles, t);
+      octree_init(deq, dh, maxlength, treeSize, particlesDone, maxl, num_pools, numParticles, t);
     }
   }
   global_barrier();
@@ -316,13 +296,10 @@ __kernel void octree_main (
     }
 
     // Try to acquire new task
-    if (DLBABP_dequeue(deq, dh, maxlength, &(t[0]), randdata, /* &localStealAttempts, */ num_pools, rval) == 0) {
+    if (DLBABP_dequeue(deq, dh, maxlength, &(t[0]), randdata, num_pools, rval) == 0) {
       (check[0]) = *particlesDone;
       barrier(CLK_LOCAL_MEM_FENCE);
       if ((check[0]) == numParticles) {
-        /* if (local_id == 0) { */
-        /*   atomic_add(stealAttempts, localStealAttempts); */
-        /* } */
         break;
       }
       continue;
