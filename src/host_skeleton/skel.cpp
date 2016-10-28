@@ -471,7 +471,7 @@ void run_merged(CL_Execution *exec) {
 	CL_Communicator::my_sleep(1000);
 
 	init_persistent_app_for_real(exec, num_wgs);
-	set_persistent_app_args_for_real(arg_index, exec->exec_kernels["mega_kernel"]);
+	set_persistent_app_args_for_real(arg_index_cached, exec->exec_kernels["mega_kernel"]);
 
 	int error_non_persistent = 0;
 	int error_persistent = 0;
