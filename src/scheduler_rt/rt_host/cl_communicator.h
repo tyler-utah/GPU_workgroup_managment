@@ -389,6 +389,7 @@ class CL_Communicator {
 			response_exec_data.clear();
 			response_times.clear();
 			execution_times.clear();
+			redlines = 0;
 		}
 
 		static double reduce_times_ms(std::vector<time_stamp> v) {

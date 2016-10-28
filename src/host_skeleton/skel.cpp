@@ -50,6 +50,8 @@ using namespace std;
 #include "../graph_apps/color/color.h"
 #elif defined PERSISTENT_PANNOTIA_MIS
 #include "../graph_apps/mis/mis.h"
+#elif defined PERSISTENT_PANNOTIA_SSSP
+#include "../graph_apps/sssp/sssp.h"
 #elif defined PERSISTENT_OCTREE
 #include "host/octree.h"
 #else
@@ -281,7 +283,6 @@ void run_persistent(CL_Execution *exec) {
 		check_ocl(err);
 		err = exec->exec_queue.finish();
 		check_ocl(err);
-
 		err = exec->exec_queue.enqueueNDRangeKernel(exec->exec_kernels["persistent"],
 			cl::NullRange,
 			cl::NDRange(FLAGS_threads_per_wg * num_wgs),
@@ -296,6 +297,7 @@ void run_persistent(CL_Execution *exec) {
 		while (std::atomic_load_explicit((std::atomic<int> *)(s_ctx.persistent_flag), std::memory_order_acquire) != 0);
 		time_stamp end = CL_Communicator::gettime_chrono();
 		err = exec->exec_queue.finish();
+		
 		check_ocl(err);
 		//auto elapsed = evt.getProfilingInfo<CL_PROFILING_COMMAND_END>() - evt.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 
@@ -568,7 +570,7 @@ int main(int argc, char *argv[]) {
 	cl::Context context(exec.exec_device);
 	exec.exec_context = context;
 	//cl::CommandQueue queue(exec.exec_context, CL_QUEUE_PROFILING_ENABLE);
-	cl::CommandQueue queue(exec.exec_context, CL_QUEUE_PROFILING_ENABLE);
+	cl::CommandQueue queue(exec.exec_context);
 	exec.exec_queue = queue;
 
 	if (FLAGS_run_non_persistent > 0) {

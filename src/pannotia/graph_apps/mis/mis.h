@@ -113,6 +113,10 @@ void reset_persistent_task(CL_Execution *exec) {
 	check_ocl(err);
 	err = exec->exec_queue.enqueueWriteBuffer(col_d, CL_TRUE, 0, num_edges * sizeof(cl_int), csr->col_array);
 
+	for (int i = 0; i < num_nodes; i++) {
+		s_array_output[i] = -1;
+	}
+
 }
 
 int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {

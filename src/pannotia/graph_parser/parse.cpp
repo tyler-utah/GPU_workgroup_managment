@@ -689,7 +689,7 @@ csr_array *parseMetis_transpose(char* tmpchar, int *p_num_nodes, int *p_num_edge
     return csr;
 }
 
-csr_array *parseCOO_transpose(char* tmpchar, int *p_num_nodes, int *p_num_edges, bool directed) {
+csr_array *parseCOO_transpose(const char* tmpchar, int *p_num_nodes, int *p_num_edges, bool directed) {
     int cnt = 0;
     unsigned int lineno = 0;
     char line[128], sp[3], a, p;
