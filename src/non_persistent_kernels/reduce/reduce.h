@@ -39,9 +39,11 @@ int set_non_persistent_app_args(int arg_index, cl::Kernel k) {
 	// Set the args for graphics kernel
 	int err = k.setArg(arg_index, d_graphics_buffer);
 	arg_index++;
-	err |= k.setArg(arg_index, graphics_arr_length);
+        check_ocl(err);
+	err = k.setArg(arg_index, graphics_arr_length);
 	arg_index++;
-	err |= clSetKernelArgSVMPointer(k(), arg_index, graphics_result);
+        check_ocl(err);
+	err = clSetKernelArgSVMPointer(k(), arg_index, graphics_result);
 	arg_index++;
 	check_ocl(err);
 	return arg_index;
