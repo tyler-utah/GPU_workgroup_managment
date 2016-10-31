@@ -46,7 +46,7 @@ DEFINE_int32(run_persistent, 0, "Run only the persistent task. If greater than 0
 DEFINE_string(restoration_ctx_path, "test_suite/os_freq/common/", "Path to restoration context");
 DEFINE_string(merged_kernel_file, "test_suite/os_freq/device/merged.cl", "the path the mega kernel file");
 DEFINE_string(persistent_kernel_file, "test_suite/os_freq/device/os_freq.cl", "the path the mega kernel file");
-DEFINE_int32(num_iterations, 100, "number of iterations");
+DEFINE_int32(num_iterations, 1000, "number of iterations");
 
 using namespace std;
 
@@ -251,8 +251,6 @@ int main(int argc, char *argv[]) {
 
   CL_Communicator::my_sleep(1000);
 
-  vector<time_stamp> times;
-  vector<int> groups;
   int error = 0;
   int i = 0;
 
@@ -261,12 +259,24 @@ int main(int argc, char *argv[]) {
   err = exec.exec_queue.finish();
   check_ocl(err);
 
-  while (true) {
-    uint64_t start_loop, time_loop, time_kernel;
-    cl::Event event;
-    cl_ulong start_kernel, end_kernel;
+  // everything is in nanosec
+  uint64_t start_loop = 0;
+  uint64_t time_loop = 0;
+  uint64_t time_diff = 0;
+  cl::Event event;
+  cl_ulong start_kernel = 0;
+  cl_ulong end_kernel = 0;
+  cl_ulong time_kernel = 0;
 
+  while (true) {
     start_loop = gettime_nanosec();
+
+	// print the stat of the previous loop, to be able to terminate
+	// loop on a timing measurement
+	time_diff = time_loop - time_kernel;
+	printf("Loop   %10lld ns ", time_loop);
+	printf("Kernel %10lld ns ", time_kernel);
+	printf("Diff   %10lld ns\n", time_diff);
 
     reset_discovery(&exec, d_ctx_mem, false);
     reset_barrier(&exec, d_bar);
@@ -284,19 +294,13 @@ int main(int argc, char *argv[]) {
     err = exec.exec_queue.finish();
     check_ocl(err);
 
-    //start_kernel = event.getProfilingInfo(CL_PROFILING_COMMAND_START, &err);
     err = event.getProfilingInfo(CL_PROFILING_COMMAND_START, &start_kernel);
     check_ocl(err);
-    //end_kernel = event.getProfilingInfo(CL_PROFILING_COMMAND_END, &err);
     err = event.getProfilingInfo(CL_PROFILING_COMMAND_END, &end_kernel);
     check_ocl(err);
 
-    time_kernel = (uint64_t) (end_kernel - start_kernel);
-    printf ("== Kernel duration: %ld ns\n", time_kernel);
-
+    time_kernel = end_kernel - start_kernel;
     time_loop = gettime_nanosec() - start_loop;
-    printf ("== Loop duration:   %ld ns\n", time_loop);
-    printf ("== Time for OS gpu: %ld ns\n", time_loop - time_kernel);
   }
 }
 
