@@ -1,5 +1,5 @@
 
-DEFINE_string(non_persistent_kernel_file, "pannotia/non_persistent_kernels/device/reduce.cl", "the path the non persistent file");
+DEFINE_string(non_persistent_kernel_file, "non_persistent_kernels/reduce/device/reduce.cl", "the path the non persistent file");
 
 int graphics_arr_length;
 cl_int * h_graphics_buffer;
@@ -39,9 +39,11 @@ int set_non_persistent_app_args(int arg_index, cl::Kernel k) {
 	// Set the args for graphics kernel
 	int err = k.setArg(arg_index, d_graphics_buffer);
 	arg_index++;
-	err |= k.setArg(arg_index, graphics_arr_length);
+        check_ocl(err);
+	err = k.setArg(arg_index, graphics_arr_length);
 	arg_index++;
-	err |= clSetKernelArgSVMPointer(k(), arg_index, graphics_result);
+        check_ocl(err);
+	err = clSetKernelArgSVMPointer(k(), arg_index, graphics_result);
 	arg_index++;
 	check_ocl(err);
 	return arg_index;

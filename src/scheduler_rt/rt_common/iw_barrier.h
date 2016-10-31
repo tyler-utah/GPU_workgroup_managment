@@ -12,10 +12,4 @@ typedef struct {
   CL_INT_TYPE num_groups;
   CL_INT_TYPE to_kill;
 
-  /* Hugues: for sense reversal barrier (I do not use the variables
-     above since I need atomic_int for counter, and num_groups is
-     currently used by the barriers implem) */
-  ATOMIC_CL_INT_TYPE counter;
-  ATOMIC_CL_INT_TYPE sense;
-
 } IW_barrier;

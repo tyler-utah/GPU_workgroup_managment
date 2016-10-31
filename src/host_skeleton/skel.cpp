@@ -2,11 +2,11 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include<iostream>
+#include <iostream>
 #include <vector>
-#include "limits.h"
+#include <limits.h>
 
-#include "../rt_common/cl_types.h"
+#include "cl_types.h"
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
 #include "cl_execution.h"
@@ -17,8 +17,6 @@
 #include "kernel_ctx.h"
 #include "iw_barrier.h"
 #include "base/file.h"
-
-#include "parse.h"
 
 DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
 DEFINE_int32(device_id, 0, "OpenCL device ID to use");
@@ -47,8 +45,18 @@ DEFINE_int32(run_persistent, 0, "Run only the persistent task. If greater than 0
 
 using namespace std;
 
-// Include persistent interface
+//Include persistent interface
+#if defined PERSISTENT_PANNOTIA_COLOR
 #include "../graph_apps/color/color.h"
+#elif defined PERSISTENT_PANNOTIA_MIS
+#include "../graph_apps/mis/mis.h"
+#elif defined PERSISTENT_PANNOTIA_SSSP
+#include "../graph_apps/sssp/sssp.h"
+#elif defined PERSISTENT_OCTREE
+#include "host/octree.h"
+#else
+#error "No persistent task macro defined? like PERSISTENT_XYZ (check your CMakeLists.txt)"
+#endif
 
 // Include non-persistent interface
 #include "../non_persistent_kernels/reduce/reduce.h"
@@ -136,8 +144,8 @@ void run_non_persistent(CL_Execution *exec) {
 	printf("Running %d iterations\n", FLAGS_run_non_persistent);
 	printf("%d threads per workgroup, %d workgroups\n", FLAGS_threads_per_wg, FLAGS_num_wgs);
 
-	int err = exec->compile_kernel(file::Path(FLAGS_non_persistent_kernel_file.c_str()), 
-		                           file::Path(FLAGS_scheduler_rt_path), 
+	int err = exec->compile_kernel(file::Path(FLAGS_non_persistent_kernel_file.c_str()),
+		                           file::Path(FLAGS_scheduler_rt_path),
 		                           file::Path(FLAGS_restoration_ctx_path),
 		                           FLAGS_use_query_barrier);
 	check_ocl(err);
@@ -176,7 +184,7 @@ void run_non_persistent(CL_Execution *exec) {
 
 	clean_non_persistent_task(exec);
 
-	cout << "Error (should be 0): " << error << endl;
+	cout << "Error (from check_non_persistent_task(), should be 0): " << error << endl;
 	cout << "Iterations: " << FLAGS_run_non_persistent  << endl;
 	cout << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << endl;
 	cout << "Mean time: " << CL_Communicator::get_average_time_ms(times) << " ms" << endl;
@@ -214,11 +222,11 @@ int amd_check(int v) {
 
 // Just for running the non persistent task
 void run_persistent(CL_Execution *exec) {
-	printf("Running non persistent app %s\n", persistent_app_name());
+	printf("Running persistent app %s\n", persistent_app_name());
 	printf("Running %d iterations\n", FLAGS_run_persistent);
 
-	int err = exec->compile_kernel(file::Path(FLAGS_persistent_kernel_file.c_str()), 
-		                           file::Path(FLAGS_scheduler_rt_path), 
+	int err = exec->compile_kernel(file::Path(FLAGS_persistent_kernel_file.c_str()),
+		                           file::Path(FLAGS_scheduler_rt_path),
 		                           file::Path(FLAGS_restoration_ctx_path),
 		                           FLAGS_use_query_barrier);
 	check_ocl(err);
@@ -275,7 +283,6 @@ void run_persistent(CL_Execution *exec) {
 		check_ocl(err);
 		err = exec->exec_queue.finish();
 		check_ocl(err);
-
 		err = exec->exec_queue.enqueueNDRangeKernel(exec->exec_kernels["persistent"],
 			cl::NullRange,
 			cl::NDRange(FLAGS_threads_per_wg * num_wgs),
@@ -290,9 +297,10 @@ void run_persistent(CL_Execution *exec) {
 		while (std::atomic_load_explicit((std::atomic<int> *)(s_ctx.persistent_flag), std::memory_order_acquire) != 0);
 		time_stamp end = CL_Communicator::gettime_chrono();
 		err = exec->exec_queue.finish();
+		
 		check_ocl(err);
 		//auto elapsed = evt.getProfilingInfo<CL_PROFILING_COMMAND_END>() - evt.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-		
+
 		times.push_back(end - begin);
 
 		// check the result
@@ -309,7 +317,7 @@ void run_persistent(CL_Execution *exec) {
 
 	clean_persistent_task(exec);
 
-	cout << endl <<  "Error: " << error << endl << endl;
+	cout << endl <<  "Error (from check_non_persistent_task(), should be 0):" << error << endl << endl;
 	cout << "Average occupancy: " << CL_Communicator::average_int_vector(groups) << endl;
 	cout << "Iterations: " << FLAGS_run_persistent << endl;
 	cout << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << endl;
@@ -325,7 +333,7 @@ void run_persistent(CL_Execution *exec) {
 int get_workgroups_for_non_persistent(int occupancy_bound) {
 	int ret;
 	if (FLAGS_non_persistent_wgs == -1) {
-		ret = occupancy_bound - 1;
+		ret = occupancy_bound - 2;
 	}
 	else if (FLAGS_non_persistent_wgs == -2) {
 		ret = 1;
@@ -339,7 +347,7 @@ int get_workgroups_for_non_persistent(int occupancy_bound) {
 }
 
 void execute_merged_iteration(CL_Execution *exec, CL_Communicator &cl_comm, int number_of_workgroups, int workgroups_for_non_persistent, int &error) {
-	
+
 	int err = cl_comm.launch_mega_kernel(cl::NDRange(FLAGS_threads_per_wg * number_of_workgroups), cl::NDRange(FLAGS_threads_per_wg));
 	check_ocl(err);
 
@@ -405,8 +413,8 @@ void run_merged(CL_Execution *exec) {
 	printf("Using query barrier: %d\n", FLAGS_use_query_barrier);
 
 	// Should be built into the cmake file. Haven't thought of how to do this yet.
-	int err = exec->compile_kernel(file::Path(FLAGS_merged_kernel_file.c_str()), 
-		                           file::Path(FLAGS_scheduler_rt_path), 
+	int err = exec->compile_kernel(file::Path(FLAGS_merged_kernel_file.c_str()),
+		                           file::Path(FLAGS_scheduler_rt_path),
 		                           file::Path(FLAGS_restoration_ctx_path),
 		                           FLAGS_use_query_barrier);
 
@@ -457,7 +465,7 @@ void run_merged(CL_Execution *exec) {
 	int wg_size = FLAGS_num_wgs;
 	CL_Communicator cl_comm(*exec, "mega_kernel", s_ctx, &d_ctx_mem);
 	reset_discovery(exec, d_ctx_mem, true);
-	
+
 	int occupancy = get_occupancy_d_ctx(exec, exec->exec_kernels["mega_kernel"], d_ctx_mem);
 
 	int num_wgs = min(FLAGS_num_wgs, amd_check(occupancy));
@@ -467,7 +475,7 @@ void run_merged(CL_Execution *exec) {
 	CL_Communicator::my_sleep(1000);
 
 	init_persistent_app_for_real(exec, num_wgs);
-	set_persistent_app_args_for_real(arg_index, exec->exec_kernels["mega_kernel"]);
+	set_persistent_app_args_for_real(arg_index_cached, exec->exec_kernels["mega_kernel"]);
 
 	int error_non_persistent = 0;
 	int error_persistent = 0;
@@ -562,7 +570,7 @@ int main(int argc, char *argv[]) {
 	cl::Context context(exec.exec_device);
 	exec.exec_context = context;
 	//cl::CommandQueue queue(exec.exec_context, CL_QUEUE_PROFILING_ENABLE);
-	cl::CommandQueue queue(exec.exec_context, CL_QUEUE_PROFILING_ENABLE);
+	cl::CommandQueue queue(exec.exec_context);
 	exec.exec_queue = queue;
 
 	if (FLAGS_run_non_persistent > 0) {
@@ -582,5 +590,5 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	
+
 }

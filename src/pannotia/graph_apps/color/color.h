@@ -1,3 +1,5 @@
+#include "parse.h"
+
 // Could probably go into a pannotia header
 DEFINE_string(graph_file, "", "Path to the graph_file");
 DEFINE_string(graph_output, "", "Path to output the graph result");
@@ -7,7 +9,7 @@ DEFINE_string(graph_solution_file, "pannotia/graph_apps/color/device/color_adapt
 // ---
 DEFINE_string(restoration_ctx_path, "pannotia/graph_apps/color", "Path to restoration context");
 DEFINE_string(merged_kernel_file, "pannotia/graph_apps/color/device/merged.cl", "the path the mega kernel file");
-DEFINE_string(persistent_kernel_file, "pannotia/graph_apps/color/device/color_adapted.cl", "the path the mega kernel file");
+DEFINE_string(persistent_kernel_file, "pannotia/graph_apps/color/device/standalone.cl", "the path the mega kernel file");
 
 
 
@@ -94,6 +96,10 @@ void reset_persistent_task(CL_Execution *exec) {
 	check_ocl(err);
 	err = exec->exec_queue.enqueueWriteBuffer(col_d, CL_TRUE, 0, num_edges * sizeof(cl_int), csr->col_array);
 	check_ocl(err);
+
+	for (int i = 0; i < num_nodes; i++) {
+		color_output[i] = -1;
+	}
 
 }
 

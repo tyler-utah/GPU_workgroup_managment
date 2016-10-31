@@ -19,36 +19,30 @@ typedef struct {
 /*---------------------------------------------------------------------------*/
 
 
-int myrand( __global int *randdata) {
+int myrand( __global int *randdata, int group_id) {
   /* Hugues: size of randdata is set in host code, it is considered to
      be an upper bound to the possible number of groups */
-  int id = get_group_id(0);
-  randdata[id] = randdata[id] * 1103515245 + 12345;
-  return((unsigned)(randdata[id] / 65536) % 32768) + id;
+  randdata[group_id] = randdata[group_id] * 1103515245 + 12345;
+  return((unsigned)(randdata[group_id] / 65536) % 32768) + group_id;
 }
 
 /*---------------------------------------------------------------------------*/
 /* lbabp: load balance ABP style, aka work-stealing */
 
-void DLBABP_push(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global volatile int *maxl) {
-  int id = get_group_id(0);
-  int private_tail = atomic_load_explicit(&(dh[id].tail), memory_order_acquire, memory_scope_device);
-  deq[id * maxlength + private_tail] = *val;
+void DLBABP_push(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, int group_id) {
+  int private_tail = atomic_load_explicit(&(dh[group_id].tail), memory_order_acquire, memory_scope_device);
+  deq[group_id * maxlength + private_tail] = *val;
   private_tail++;
-  atomic_store_explicit(&(dh[id].tail), private_tail, memory_order_release, memory_scope_device);
-
-  if (*maxl < private_tail) {
-    atomic_max(maxl, private_tail);
-  }
+  atomic_store_explicit(&(dh[group_id].tail), private_tail, memory_order_release, memory_scope_device);
 }
 
 /*---------------------------------------------------------------------------*/
 
-void DLBABP_enqueue(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global volatile int *maxl) {
+void DLBABP_enqueue(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, int group_id) {
   /* Hugues todo: check calls to DLBABP_enqueue, can any other thread
    * than id0 can call it ? */
   if (get_local_id(0) == 0) {
-    DLBABP_push(deq, dh, maxlength, val, maxl);
+    DLBABP_push(deq, dh, maxlength, val, group_id);
   }
 }
 
@@ -59,21 +53,7 @@ void DLBABP_enqueue(__global Task *deq, __global DequeHeader *dh, unsigned int m
  * declared as an int, and ctr/index is accessed with mask and logical
  * AND operations. */
 
-int getIndex(int head) {
-  return head & 0xffff;
-}
-
-/*---------------------------------------------------------------------------*/
-
-int getZeroIndexIncCtr(int head) {
-  return (head + 0x10000) & 0xffff0000;
-}
-
-/*---------------------------------------------------------------------------*/
-
-int incIndex(int head) {
-  return head + 1;
-}
+#define getIndex(head) (head & 0xffff)
 
 /*---------------------------------------------------------------------------*/
 
@@ -91,7 +71,8 @@ int DLBABP_steal(__global Task *deq, __global DequeHeader *dh, unsigned int maxl
   }
 
   *val = deq[idx * maxlength + getIndex(oldHead)];
-  newHead = incIndex(oldHead);
+  /* IncIndex */
+  newHead = oldHead + 1;
   if (atomic_compare_exchange_strong_explicit(&(dh[idx].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
     return 1;
   }
@@ -101,51 +82,49 @@ int DLBABP_steal(__global Task *deq, __global DequeHeader *dh, unsigned int maxl
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_pop(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val) {
+int DLBABP_pop(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, int group_id) {
   int localTail;
   int oldHead;
   int newHead;
-  int id = get_group_id(0);
 
-  localTail = atomic_load_explicit(&(dh[id].tail), memory_order_acquire, memory_scope_device);
+  localTail = atomic_load_explicit(&(dh[group_id].tail), memory_order_acquire, memory_scope_device);
   if(localTail == 0) {
     return -1;
   }
 
   localTail--;
 
-  atomic_store_explicit(&(dh[id].tail), localTail, memory_order_release, memory_scope_device);
+  atomic_store_explicit(&(dh[group_id].tail), localTail, memory_order_release, memory_scope_device);
 
-  *val = deq[id * maxlength + localTail];
+  *val = deq[group_id * maxlength + localTail];
 
-  oldHead = atomic_load_explicit(&(dh[id].head), memory_order_acquire, memory_scope_device);
+  oldHead = atomic_load_explicit(&(dh[group_id].head), memory_order_acquire, memory_scope_device);
 
   if (localTail > getIndex(oldHead)) {
     return 1;
   }
 
-  atomic_store_explicit(&(dh[id].tail), 0, memory_order_release, memory_scope_device);
-  newHead = getZeroIndexIncCtr(oldHead);
+  atomic_store_explicit(&(dh[group_id].tail), 0, memory_order_release, memory_scope_device);
+  /* Hugues: inline getZeroIndexIncCtr below */
+  newHead = (oldHead + 0x10000) & 0xffff0000;
   if(localTail == getIndex(oldHead)) {
-    if(atomic_compare_exchange_strong_explicit(&(dh[id].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
+    if(atomic_compare_exchange_strong_explicit(&(dh[group_id].head), &oldHead, newHead, memory_order_acq_rel, memory_order_relaxed, memory_scope_device)) {
       return 1;
     }
   }
-  atomic_store_explicit(&(dh[id].head), newHead, memory_order_release, memory_scope_device);
+  atomic_store_explicit(&(dh[group_id].head), newHead, memory_order_release, memory_scope_device);
   return -1;
 }
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue2(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength,  __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools)
+int DLBABP_dequeue2(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength,  __local Task *val, __global int *randdata, int num_pools, int group_id)
 {
-  if (DLBABP_pop(deq, dh, maxlength, val) == 1) {
+  if (DLBABP_pop(deq, dh, maxlength, val, group_id) == 1) {
     return 1;
   }
 
-  *localStealAttempts += 1;
-
-  if (DLBABP_steal(deq, dh, maxlength, val, myrand(randdata) % num_pools) == 1) {
+  if (DLBABP_steal(deq, dh, maxlength, val, myrand(randdata, group_id) % num_pools) == 1) {
     return 1;
   } else {
     return 0;
@@ -154,11 +133,11 @@ int DLBABP_dequeue2(__global Task *deq, __global DequeHeader *dh, unsigned int m
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_dequeue(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global int *randdata, unsigned int *localStealAttempts, int num_pools, __local volatile int *rval) {
+int DLBABP_dequeue(__global Task *deq, __global DequeHeader *dh, unsigned int maxlength, __local Task *val, __global int *randdata, int num_pools, __local volatile int *rval, int group_id) {
   int dval = 0;
 
   if(get_local_id(0) == 0) {
-    *rval = DLBABP_dequeue2(deq, dh, maxlength, val, randdata, localStealAttempts, num_pools);
+    *rval = DLBABP_dequeue2(deq, dh, maxlength, val, randdata, num_pools, group_id);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
   dval = *rval;
@@ -201,8 +180,6 @@ void octree_init(
                  unsigned int maxlength,
                  __global unsigned int* treeSize,
                  __global unsigned int* particlesDone,
-                 __global volatile int *maxl,
-                 __global unsigned int *stealAttempts,
                  const int num_pools,
                  unsigned int numParticles,
                  __local Task *t
@@ -218,9 +195,6 @@ void octree_init(
   /* ---------- initOctree: global init ---------- */
   *treeSize = 100;
   *particlesDone = 0;
-  /* In Cuda, maxl is a kernel global initialized to 0 */
-  *maxl = 0;
-  *stealAttempts = 0;
 
   /* create and enqueue the first task */
   t->treepos=0;
@@ -233,7 +207,7 @@ void octree_init(
   t->end = numParticles;
   t->flip = false;
 
-  DLBABP_enqueue(deq, dh, maxlength, t, maxl);
+  DLBABP_enqueue(deq, dh, maxlength, t, 0);
   /* ---------- end of initOctree ---------- */
 }
 
@@ -241,9 +215,7 @@ void octree_init(
 
 __kernel void octree_main (
                   /* octree args */
-                  __global atomic_int *num_iterations,
                   __global int *randdata,
-                  __global volatile int *maxl,
                   __global float4* particles,
                   __global float4* newparticles,
                   __global unsigned int* tree,
@@ -251,7 +223,6 @@ __kernel void octree_main (
                   __global unsigned int* treeSize,
                   __global unsigned int* particlesDone,
                   const unsigned int maxchilds,
-                  __global unsigned int *stealAttempts,
                   const int num_pools,
                   __global Task *deq,
                   __global DequeHeader *dh,
@@ -270,20 +241,12 @@ __kernel void octree_main (
 
   __local Task newTask[1];
 
-  uint local_id = get_local_id(0);
-  uint local_size = get_local_size(0);
-
-  uint localStealAttempts;
-
   __local volatile int rval[1];
-
-  int i;
 
   /* ADD INIT HERE */
   if (get_local_id(0) == 0) {
-    localStealAttempts = 0;
     if (get_global_id(0) == 0) {
-      octree_init(deq, dh, maxlength, treeSize, particlesDone, maxl, stealAttempts, num_pools, numParticles, t);
+      octree_init(deq, dh, maxlength, treeSize, particlesDone, num_pools, numParticles, t);
     }
   }
   global_barrier();
@@ -291,38 +254,27 @@ __kernel void octree_main (
   /* main loop */
   while (true) {
 
-    barrier(CLK_LOCAL_MEM_FENCE);
+    uint local_id = get_local_id(0);
+    uint local_size = get_local_size(0);
 
-    /* can be killed before handling a task, but always keep at least
-       one work-group alive. This is to avoid to call octree_init()
-       after a cfork() */
-    if (get_group_id(0) > 0) {
-      offer_kill();
-    }
-
-    // always suggest to fork
-
-    /* Hugues: variable 'i' is just used to give a valid argument, we */
-    /* do not use the returned value. */
-
-    /* Hugues: the octree_bar->num_groups arg is here to put something */
-    /* valid as argument, I don't think this value is used anywhere */
-    /* else. I jus mimick the call to cfork() in */
-    /* global_barrier_resize(). But looking at the code of */
-    /* global_barrier(), bar->num_groups is not used there. */
-
+    // only the first group can fork, to limit calls to offer_fork.
     if (get_group_id(0) == 0) {
       offer_fork();
     }
 
+    // can be killed before handling a task, but always keep at least
+    // one work-group alive.
+    if (get_group_id(0) > 0) {
+      offer_kill();
+    }
+
+    int group_id = get_group_id(0);
+
     // Try to acquire new task
-    if (DLBABP_dequeue(deq, dh, maxlength, &(t[0]), randdata, &localStealAttempts, num_pools, rval) == 0) {
+    if (DLBABP_dequeue(deq, dh, maxlength, &(t[0]), randdata, num_pools, rval, group_id) == 0) {
       (check[0]) = *particlesDone;
       barrier(CLK_LOCAL_MEM_FENCE);
       if ((check[0]) == numParticles) {
-        if (local_id == 0) {
-          atomic_add(stealAttempts, localStealAttempts);
-        }
         break;
       }
       continue;
@@ -382,7 +334,7 @@ __kernel void octree_main (
 
           tree[(t[0]).treepos + i] = atomic_add(treeSize,(unsigned int)8);
           newTask[0].treepos = tree[(t[0]).treepos + i];
-          DLBABP_enqueue(deq, dh, maxlength, &newTask[0], maxl);
+          DLBABP_enqueue(deq, dh, maxlength, &newTask[0], group_id);
         }
       } else {
         if (!(t[0]).flip) {

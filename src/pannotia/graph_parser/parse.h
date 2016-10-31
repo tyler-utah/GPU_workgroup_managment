@@ -55,5 +55,5 @@ ell_array *csr2ell(csr_array *csr, int num_nodes, int num_edges, int fill);
 double_edges *parseCOO_doubleEdge(char* tmpchar, int *p_num_nodes, int *p_num_edges, bool directed);
 double_edges *parseMetis_doubleEdge(char* tmpchar, int *p_num_nodes, int *p_num_edges, bool directed);
 
-csr_array *parseCOO_transpose(char* tmpchar, int *p_num_nodes, int *p_num_edges, bool directed);
+csr_array *parseCOO_transpose(const char* tmpchar, int *p_num_nodes, int *p_num_edges, bool directed);
 csr_array *parseMetis_transpose(char* tmpchar, int *p_num_nodes, int *p_num_edges, bool directed);

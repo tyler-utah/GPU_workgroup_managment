@@ -7,7 +7,7 @@
 #include <limits.h>
 
 // Must be loaded early because it defines CL_XXX_TYPE
-#include "scheduler_rt/rt_common/cl_types.h"
+#include "cl_types.h"
 
 #include "base/commandlineflags.h"
 #include "opencl/opencl.h"
@@ -19,6 +19,7 @@
 #include "cl_scheduler.h"
 #include "kernel_ctx.h"
 #include "iw_barrier.h"
+#include "sense_reversal_barrier.h"
 #include "base/file.h"
 
 DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
@@ -245,17 +246,12 @@ int main(int argc, char *argv[]) {
   cl::Buffer deq(exec.exec_context, CL_MEM_READ_WRITE, sizeof(Task) * maxlength * num_pools);
   cl::Buffer dh(exec.exec_context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * num_pools);
 
-  IW_barrier octree_h_bar;
-  for (int i = 0; i < MAX_P_GROUPS; i++) {
-    octree_h_bar.barrier_flags[i] = 0;
-  }
-  octree_h_bar.phase = 0;
-  // for sense reversal barrier
+  sense_reversal_barrier octree_h_bar;
   octree_h_bar.counter = 0;
   octree_h_bar.sense = 0;
 
-  cl::Buffer octree_d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
-  err = exec.exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(IW_barrier), &octree_h_bar);
+  cl::Buffer octree_d_bar(exec.exec_context, CL_MEM_READ_WRITE, sizeof(sense_reversal_barrier));
+  err = exec.exec_queue.enqueueWriteBuffer(octree_d_bar, CL_TRUE, 0, sizeof(sense_reversal_barrier), &octree_h_bar);
   check_ocl(err);
 
   cl_int num_iterations = FLAGS_num_iterations;
