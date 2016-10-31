@@ -263,21 +263,46 @@ int main(int argc, char *argv[]) {
   uint64_t start_loop = 0;
   uint64_t time_loop = 0;
   uint64_t time_diff = 0;
+  uint64_t avg_loop = 0;
+  uint64_t avg_diff = 0;
   cl::Event event;
   cl_ulong start_kernel = 0;
   cl_ulong end_kernel = 0;
   cl_ulong time_kernel = 0;
+  cl_ulong avg_kernel = 0;
+
+#define SAMPLE_SIZE 20
+  uint64_t sample_loop[SAMPLE_SIZE] = {0};
+  uint64_t sample_diff[SAMPLE_SIZE] = {0};
+  cl_ulong sample_kernel[SAMPLE_SIZE] = {0};
+  int idx = 0;
 
   while (true) {
     start_loop = gettime_nanosec();
-
-	// print the stat of the previous loop, to be able to terminate
+	
+	// compute the stat of the previous loop, to be able to terminate
 	// loop on a timing measurement
 	time_diff = time_loop - time_kernel;
-	printf("Loop   %10lld ns ", time_loop);
-	printf("Kernel %10lld ns ", time_kernel);
-	printf("Diff   %10lld ns\n", time_diff);
-
+	
+	sample_loop[idx] = time_loop / (uint64_t)SAMPLE_SIZE;
+	sample_kernel[idx] = time_kernel / (cl_ulong)SAMPLE_SIZE;
+	sample_diff[idx] = time_diff / (uint64_t)SAMPLE_SIZE;
+	// compute average
+	avg_loop = 0;
+	avg_kernel = 0;
+	avg_diff = 0;
+	for (int i = 0; i < SAMPLE_SIZE; i++) {
+		avg_loop += sample_loop[i];
+		avg_kernel += sample_kernel[i];
+		avg_diff += sample_diff[i];
+	}
+	
+	idx = (idx + 1) % SAMPLE_SIZE;
+	
+	printf("Loop %8lld ns (avg %8lld) ", time_loop, avg_loop);
+	printf("Krnl %8lld ns (avg %8lld) ", time_kernel, avg_kernel);
+	printf("Diff %8lld ns (avg %8lld)\n", time_diff, avg_diff);
+	
     reset_discovery(&exec, d_ctx_mem, false);
     reset_barrier(&exec, d_bar);
     restart_scheduler(&s_ctx);
