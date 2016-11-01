@@ -5,42 +5,47 @@
 #include "cl_scheduler.cl"
 #include "iw_barrier.cl"
 
-// Simple min reduce from:
-// http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
-void MY_reduce(__global int *buffer, int length, __global atomic_int *result,
-               __local int *scratch, __global Kernel_ctx *__k_ctx) {
+/*
+  Matrix multiplication: C = A * B
 
-  ;
+  We assume C is big enough to store the result.
+*/
+
+/*---------------------------------------------------------------------------*/
+
+void matmult(__global int *A, const int a_num_line, const int a_num_col,
+             __global int *B, const int b_num_line, const int b_num_col,
+             __global int *C, __global ulong *c_hash,
+             __global Kernel_ctx *__k_ctx) {
+  /* safety */
+  if (a_num_col != b_num_line) {
+    return;
+  }
+
   int gid = k_get_global_id(__k_ctx);
-  int local_index = get_local_id(0);
-  int stride = k_get_global_size(__k_ctx);
+  int num_threads = k_get_global_size(__k_ctx);
+  int c_size = a_num_line * b_num_col;
 
-  for (int global_index = gid; global_index < length; global_index += stride) {
-    // Load data into local memory
-    if (global_index < length) {
-      scratch[local_index] = buffer[global_index];
-    } else {
-      // Infinity is the identity element for the min operation
-      scratch[local_index] = INT_MAX;
+  for (int i = gid; i < c_size; i += num_threads) {
+    int c_line = i / b_num_col;
+    int c_col = i % b_num_col;
+    int a_offset = c_line * a_num_col;
+    C[i] = 0;
+    for (int j = 0; j < b_num_line; j++) {
+      C[i] += A[a_offset + j] * B[(j * b_num_col) + c_col];
     }
-    barrier(CLK_LOCAL_MEM_FENCE);
+  }
 
-    for (int offset = 1; offset < get_local_size(0); offset <<= 1) {
-      int mask = (offset << 1) - 1;
-      if ((local_index & mask) == 0) {
-        int other = scratch[local_index + offset];
-        int mine = scratch[local_index];
-        scratch[local_index] = (mine < other) ? mine : other;
-      }
-      barrier(CLK_LOCAL_MEM_FENCE);
-    }
-    // Putting an atomic here so we can get a global reduction
-    if (local_index == 0) {
-      atomic_fetch_min((result), scratch[0]);
+  /* Hash using djb2, see http://www.cse.yorku.ca/~oz/hash.html */
+  if (gid == 0) {
+    *c_hash = 5381;
+    for (int i = 0; i < c_size; i++) {
+      *c_hash = (*c_hash) * 33 + C[i];
     }
   }
 }
-//
+
+/*---------------------------------------------------------------------------*/
 
 __global int __junk_global;
 
@@ -433,10 +438,12 @@ void octree_main(
 }
 
 kernel void
-mega_kernel(__global int *buffer, int length, __global atomic_int *result,
-            __global int *randdata, __global float4 *particles,
-            __global float4 *newparticles, __global unsigned int *tree,
-            const unsigned int numParticles, __global unsigned int *treeSize,
+mega_kernel(__global int *A, const int a_num_line, const int a_num_col,
+            __global int *B, const int b_num_line, const int b_num_col,
+            __global int *C, __global ulong *c_hash, __global int *randdata,
+            __global float4 *particles, __global float4 *newparticles,
+            __global unsigned int *tree, const unsigned int numParticles,
+            __global unsigned int *treeSize,
             __global unsigned int *particlesDone, const unsigned int maxchilds,
             const int num_pools, __global Task *deq, __global DequeHeader *dh,
             const unsigned int maxlength, __global float4 *frompart,
@@ -444,7 +451,6 @@ mega_kernel(__global int *buffer, int length, __global atomic_int *result,
             __global Discovery_ctx *d_ctx,
             __global Kernel_ctx *non_persistent_kernel_ctx,
             __global Kernel_ctx *persistent_kernel_ctx, SCHEDULER_ARGS) {
-  __local int scratch[256];
   __local unsigned int count[8];
   __local int sum[8];
   __local Task t[1];
@@ -452,7 +458,8 @@ mega_kernel(__global int *buffer, int length, __global atomic_int *result,
   __local Task newTask[1];
   __local volatile int rval[1];
 #define NON_PERSISTENT_KERNEL                                                  \
-  MY_reduce(buffer, length, result, scratch, non_persistent_kernel_ctx)
+  matmult(A, a_num_line, a_num_col, B, b_num_line, b_num_col, C, c_hash,       \
+          non_persistent_kernel_ctx)
 #define PERSISTENT_KERNEL                                                      \
   octree_main(randdata, particles, newparticles, tree, numParticles, treeSize, \
               particlesDone, maxchilds, num_pools, deq, dh, maxlength,         \

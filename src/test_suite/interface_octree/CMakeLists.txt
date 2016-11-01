@@ -18,4 +18,4 @@ target_link_libraries(octree
   base_file
 )
 
-add_definitions(-DPERSISTENT_OCTREE)
+add_definitions(-DPERSISTENT_OCTREE -DNON_PERSISTENT_MATMULT)

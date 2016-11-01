@@ -59,7 +59,13 @@ using namespace std;
 #endif
 
 // Include non-persistent interface
+#if defined NON_PERSISTENT_REDUCE
 #include "../non_persistent_kernels/reduce/reduce.h"
+#elif defined NON_PERSISTENT_MATMULT
+#include "../non_persistent_kernels/matmult/matmult.h"
+#else
+#error "No non-persistent task macro defined ? like NON_PERSISTENT_XYZ (check your CMakeLists.txt)"
+#endif
 
 //From IWOCL tutorial (needs attribution)
 unsigned getDeviceList(std::vector<std::vector<cl::Device> >& devices)
@@ -297,7 +303,7 @@ void run_persistent(CL_Execution *exec) {
 		while (std::atomic_load_explicit((std::atomic<int> *)(s_ctx.persistent_flag), std::memory_order_acquire) != 0);
 		time_stamp end = CL_Communicator::gettime_chrono();
 		err = exec->exec_queue.finish();
-		
+
 		check_ocl(err);
 		//auto elapsed = evt.getProfilingInfo<CL_PROFILING_COMMAND_END>() - evt.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 
