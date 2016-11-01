@@ -312,7 +312,7 @@ int __global_barrier_resize_query(__global IW_barrier *bar, __global Kernel_ctx 
 
 /*---------------------------------------------------------------------------*/
 
-void global_barrier_robust_to_resizing(__global sense_reversal_barrier *bar, __local int *sense, __global Kernel_ctx *k_ctx)
+void global_barrier_robust_to_resizing(__global IW_barrier *bar, __local int *sense, __global Kernel_ctx *k_ctx)
 {
   if (get_local_id(0) == 0) {
     /* flip the sense */
