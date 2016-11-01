@@ -96,7 +96,16 @@ int main(int argc, const char **argv) {
     MegaKernel << VD->getNameAsString() << ", ";
     PersistentVisitor.GetRW().ReplaceText(VD->getSourceRange(), "");
   }
-  MegaKernel << "bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local)\n";
+  MegaKernel << "bar, persistent_kernel_ctx, s_ctx, scratchpad, &r_ctx_local";
+  if (PersistentVisitor.UsesGlobalBarrierRobustToResizing()) {
+    MegaKernel << ", &__sense";
+  }
+  MegaKernel << ")\n";
+
+  if (PersistentVisitor.UsesGlobalBarrierRobustToResizing()) {
+    MegaKernel << "\n  __local int __sense;\n";
+    MegaKernel << "  __sense = 0;\n\n";
+  }
 
   MegaKernel << "  #include \"main_device_body.cl\"\n";
   MegaKernel << "}\n";

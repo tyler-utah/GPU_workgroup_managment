@@ -101,11 +101,17 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
       RW.InsertTextBefore(CE->getSourceRange().getBegin(), "b_");
     }
   }
+  if (name == "global_barrier") {
+    VisitedFunctionCallsGlobalBarrierRobustToResizingFunction = true;
+    RW.ReplaceText(CE->getSourceRange(), "global_barrier_robust_to_resizing(__bar, __sense, __k_ctx)");  }
   if (name == "resizing_global_barrier" || name == "offer_fork") {
     ForkPointCounter++;
     assert(CE->getNumArgs() == 1);
     std::stringstream sstr;
     sstr << "{ Restoration_ctx __to_fork; __to_fork.target = " << ForkPointCounter << "; ";
+    if (UsesGlobalBarrierRobustToResizing()) {
+      sstr << "__to_fork.__sense = *__sense; ";
+    }
     for (auto DS : DeclsToRestore) {
       for (auto D : DS->decls()) {
         VarDecl *VD = dyn_cast<VarDecl>(D);
@@ -129,7 +135,7 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   if (name == "offer_kill") {
     RW.ReplaceText(CE->getSourceRange(), "offer_kill(__k_ctx, __s_ctx, __scratchpad, k_get_group_id(__k_ctx))");
   }
-  if (FunctionsThatCallIdFunctions.find(name) != FunctionsThatCallIdFunctions.end()) {
+  if (CallsIdFunction(name) || CallsGlobalBarrierRobustToResizing(name)) {
     VisitedFunctionCallsIdFunction = true;
     SourceLocation StartOfParams = Lexer::findLocationAfterToken(CE->getCallee()->getSourceRange().getEnd(),
       tok::l_paren,
@@ -140,12 +146,19 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
       RW.InsertTextAfter(StartOfParams, "__bar, ");
     }
     RW.InsertTextAfter(StartOfParams, "__k_ctx");
+    if (CallsGlobalBarrierRobustToResizing(name)) {
+      RW.InsertTextAfter(StartOfParams, ", __sense");
+    }
     if (CE->getNumArgs() > 0) {
       RW.InsertTextAfter(StartOfParams, ", ");
     }
   }
 
   return true;
+}
+
+bool ProcessPersistentKernelVisitor::CallsGlobalBarrierRobustToResizing(std::string name) {
+  return FunctionsThatCallGlobalBarrierRobustToResizingFunction.find(name) != FunctionsThatCallGlobalBarrierRobustToResizingFunction.end();
 }
 
 static std::string ConvertTypeString(std::string type) {
@@ -201,6 +214,34 @@ void ProcessPersistentKernelVisitor::AddArgumentsForIdCalls(FunctionDecl *D, Sou
   }
 }
 
+bool ProcessPersistentKernelVisitor::TraverseFunctionDecl(FunctionDecl *D) {
+  assert(!VisitedFunctionCallsGlobalBarrierRobustToResizingFunction);
+  bool result = ProcessKernelVisitor::TraverseFunctionDecl(D);
+  if (!D->hasAttr<OpenCLKernelAttr>() && VisitedFunctionCallsGlobalBarrierRobustToResizingFunction) {
+    FunctionsThatCallGlobalBarrierRobustToResizingFunction.insert(D->getNameAsString());
+    SourceLocation StartOfParams = Lexer::findLocationAfterToken(D->getLocation(),
+      tok::l_paren,
+      AU->getSourceManager(),
+      AU->getLangOpts(),
+      /*SkipTrailingWhitespaceAndNewLine=*/true);
+    if (!CallsIdFunction(D->getNameAsString())) {
+      // If the function already calls an id function, we will have added the relevant arguments.  If not, add them now
+      this->AddArgumentsForIdCalls(D, StartOfParams);
+    }
+    if (D->getNumParams() == 0) {
+      RW.InsertTextAfter(StartOfParams, ", ");
+    }
+    RW.InsertTextAfter(StartOfParams, "__local int * __sense");
+    if (D->getNumParams() > 0) {
+      RW.InsertTextAfter(StartOfParams, ", ");
+    }
+  }
+  VisitedFunctionCallsIdFunction = false;
+  return result;
+
+}
+
+
 void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   if (GetKI().KernelFunction) {
     errs() << "Multiple kernel functions in source file not supported, stopping.\n";
@@ -252,6 +293,9 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
   RW.InsertTextAfter(endOfParams, ", CL_Scheduler_ctx __s_ctx");
   RW.InsertTextAfter(endOfParams, ", __local int * __scratchpad");
   RW.InsertTextAfter(endOfParams, ", Restoration_ctx * __restoration_ctx");
+  if (UsesGlobalBarrierRobustToResizing()) {
+    RW.InsertTextAfter(endOfParams, ", __local int * __sense");
+  }
 
   // Add "__k_ctx" parameter to kernel
 
@@ -347,6 +391,10 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
 
   std::string preLoopCode;
   preLoopCode += "if(__restoration_ctx->target != 0) {\n";
+  if (UsesGlobalBarrierRobustToResizing()) {
+    preLoopCode += "*__sense = __restoration_ctx->__sense;\n";
+    this->RestorationCtx += "  CL_INT_TYPE __sense;\n";
+  }
   for (auto DS : DeclsToRestore) {
     for (auto D : DS->decls()) {
       VarDecl *VD = dyn_cast<VarDecl>(D);
@@ -404,4 +452,8 @@ bool ASTUsesOfferFunctions(ASTUnit * AU) {
   UsesOfferFunctionsVisitor V;
   V.TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
   return V.UsesOfferFunctions();
+}
+
+bool ProcessPersistentKernelVisitor::UsesGlobalBarrierRobustToResizing() {
+  return FunctionsThatCallGlobalBarrierRobustToResizingFunction.size() > 0;
 }

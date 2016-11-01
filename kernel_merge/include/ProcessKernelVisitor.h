@@ -82,6 +82,11 @@ private:
   KernelInfo KI;
 
 protected:
+
+  bool CallsIdFunction(std::string name) {
+    return FunctionsThatCallIdFunctions.find(name) != FunctionsThatCallIdFunctions.end();
+  }
+
   bool VisitedFunctionCallsIdFunction;
   std::set<std::string> FunctionsThatCallIdFunctions;
   ASTUnit *AU;
