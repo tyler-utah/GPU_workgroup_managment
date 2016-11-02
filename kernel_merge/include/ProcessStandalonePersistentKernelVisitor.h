@@ -10,6 +10,7 @@ class ProcessStandalonePersistentKernelVisitor
   : public ProcessKernelVisitor<ProcessStandalonePersistentKernelVisitor> {
 public:
   ProcessStandalonePersistentKernelVisitor(ASTUnit * AU) : ProcessKernelVisitor(AU) {
+    this->VisitedFunctionCallsGlobalBarrierDiscoveryFunction = false;
     TraverseTranslationUnitDecl(AU->getASTContext().getTranslationUnitDecl());
     if (!GetKI().KernelFunction) {
       errs() << "Persistent kernel file must declare a kernel function.\n";
@@ -19,9 +20,17 @@ public:
 
   bool VisitCallExpr(CallExpr *CE);
 
+  bool TraverseFunctionDecl(FunctionDecl *D);
+
   virtual void ProcessKernelFunction(FunctionDecl *D);
 
   virtual void AddArgumentsForIdCalls(FunctionDecl *D, SourceLocation StartOfParams);
+
+private:
+  bool CallsGlobalBarrierDiscovery(std::string name);
+
+  bool VisitedFunctionCallsGlobalBarrierDiscoveryFunction;
+  std::set<std::string> FunctionsThatCallGlobalBarrierDiscoveryFunction;
 
 };
 

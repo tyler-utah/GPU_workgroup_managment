@@ -17,13 +17,14 @@ bool ProcessStandalonePersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     RW.InsertTextBefore(CE->getSourceRange().getBegin(), "p_");
   }
   if (name == "resizing_global_barrier" || name == "global_barrier") {
+    VisitedFunctionCallsGlobalBarrierDiscoveryFunction = true;
     RW.ReplaceText(CE->getSourceRange(), "global_barrier_disc(__bar, __d_ctx)");
   }
   if (name == "offer_fork" || name == "offer_kill") {
     // Remove these calls
     RW.ReplaceText(CE->getSourceRange(), "");
   }
-  if (FunctionsThatCallIdFunctions.find(name) != FunctionsThatCallIdFunctions.end()) {
+  if (CallsIdFunction(name) || CallsGlobalBarrierDiscovery(name)) {
     VisitedFunctionCallsIdFunction = true;
     SourceLocation StartOfParams = Lexer::findLocationAfterToken(CE->getCallee()->getSourceRange().getEnd(),
       tok::l_paren,
@@ -31,6 +32,9 @@ bool ProcessStandalonePersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
       AU->getLangOpts(),
       /*SkipTrailingWhitespaceAndNewLine=*/true);
     RW.InsertTextAfter(StartOfParams, "__d_ctx");
+    if (CallsGlobalBarrierDiscovery(name)) {
+      RW.InsertTextAfter(StartOfParams, ", __bar");
+    }
     if (CE->getNumArgs() > 0) {
       RW.InsertTextAfter(StartOfParams, ", ");
     }
@@ -143,5 +147,36 @@ void ProcessStandalonePersistentKernelVisitor::ProcessKernelFunction(FunctionDec
     std::string("if (get_local_id(0) == 0) {\n"
                 "  atomic_fetch_sub_explicit(s_ctx.persistent_flag, 1, memory_order_acq_rel, memory_scope_all_svm_devices);\n"
                 "}\n"));
+
+}
+
+bool ProcessStandalonePersistentKernelVisitor::CallsGlobalBarrierDiscovery(std::string name) {
+  return FunctionsThatCallGlobalBarrierDiscoveryFunction.find(name) != FunctionsThatCallGlobalBarrierDiscoveryFunction.end();
+}
+
+bool ProcessStandalonePersistentKernelVisitor::TraverseFunctionDecl(FunctionDecl *D) {
+  assert(!VisitedFunctionCallsGlobalBarrierDiscoveryFunction);
+  bool result = ProcessKernelVisitor::TraverseFunctionDecl(D);
+  if (!D->hasAttr<OpenCLKernelAttr>() && VisitedFunctionCallsGlobalBarrierDiscoveryFunction) {
+    FunctionsThatCallGlobalBarrierDiscoveryFunction.insert(D->getNameAsString());
+    SourceLocation StartOfParams = Lexer::findLocationAfterToken(D->getLocation(),
+      tok::l_paren,
+      AU->getSourceManager(),
+      AU->getLangOpts(),
+      /*SkipTrailingWhitespaceAndNewLine=*/true);
+    if (!CallsIdFunction(D->getNameAsString())) {
+      // If the function already calls an id function, we will have added the relevant arguments.  If not, add them now
+      this->AddArgumentsForIdCalls(D, StartOfParams);
+    }
+    if (D->getNumParams() == 0) {
+      RW.InsertTextAfter(StartOfParams, ", ");
+    }
+    RW.InsertTextAfter(StartOfParams, "__global IW_barrier * __bar");
+    if (D->getNumParams() > 0) {
+      RW.InsertTextAfter(StartOfParams, ", ");
+    }
+  }
+  VisitedFunctionCallsIdFunction = false;
+  return result;
 
 }
