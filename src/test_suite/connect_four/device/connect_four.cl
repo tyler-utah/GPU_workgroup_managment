@@ -16,6 +16,10 @@
 
 /*---------------------------------------------------------------------------*/
 
+const int max_scan_id = 6+7+6+6;
+
+/*---------------------------------------------------------------------------*/
+
 typedef enum {
   RIGHT,
   DOWN,
@@ -84,81 +88,63 @@ int scan_board(__local uchar *board, int row, int col, Direction direction) {
 
 /*---------------------------------------------------------------------------*/
 
-void board_value(__local uchar *board, __global int *value, __local int *val)
+int board_partial_value(__local uchar *board, int local_id, int local_size)
 {
-  /* a task is operated within one workgroup */
-  if (get_group_id(0) == 0) {
-    int lid = get_local_id(0);
-    int local_size = get_local_size(0);
+  /**
+   * scanning strategy: scan in 4 directions.
+   *  - right: one thread per row => 6 threads
+   *  - down: one thread per col => 7 threads
+   *  - down_right: one thread per diagonal that may contains 4
+   *                tokens => 6 threads
+   *  - down_left: one thread per diagonal that may contains 4
+   *               tokens => 6 threads
+   */
+  int max_scan_id = 6+7+6+6;
+  int value = 0;
 
-    /**
-     * scanning strategy: scan in 4 directions.
-     *  - right: one thread per row => 6 threads
-     *  - down: one thread per col => 7 threads
-     *  - down_right: one thread per diagonal that may contains 4
-     *                tokens => 6 threads
-     *  - down_left: one thread per diagonal that may contains 4
-     *               tokens => 6 threads
-     */
+  for (int i = local_id; i < max_scan_id; i += local_size) {
+    int tmpval;
 
-    int maxid = 6+7+6+6;
-    int i;
-
-    val[lid] = 0;
-
-    for (i = lid; i < maxid; i += local_size) {
-      int tmpval;
-
-      if (0 <= i && i < 6) {
-        /* scan row */
-        tmpval = scan_board(board, i, 0, RIGHT);
-      }
-      if (6 <= i && i < (6+7)) {
-        /* scan col */
-        i -= 6;
-        tmpval = scan_board(board, 0, i, DOWN);
-      }
-      if ((6+7) <= i && i < (6+7+6)) {
-        /* scan diagonal right */
-        i -= (6+7);
-        if (i < 3) {
-          tmpval = scan_board(board, i, 0, DOWN_RIGHT);
-        } else {
-          tmpval = scan_board(board, 0, (i - 2), DOWN_RIGHT);
-        }
-      }
-      if ((6+7+6) <= i && i < maxid) {
-        /* scan diagonal left */
-        i -= (6+7+6);
-        if (i < 3) {
-          tmpval = scan_board(board, i, (NUM_COL - 1), DOWN_LEFT);
-        } else {
-          /* Warning: here i is ((i - 3) + 3), draw a board to see */
-          tmpval = scan_board(board, 0, i, DOWN_LEFT);
-        }
-      }
-
-      /* update value */
-      if (tmpval == PLUS_INF || tmpval == MINUS_INF) {
-        /* found a winner */
-        val[lid] = tmpval;
-        break;
+    if (0 <= i && i < 6) {
+      /* scan row */
+      tmpval = scan_board(board, i, 0, RIGHT);
+    }
+    if (6 <= i && i < (6+7)) {
+      /* scan col */
+      i -= 6;
+      tmpval = scan_board(board, 0, i, DOWN);
+    }
+    if ((6+7) <= i && i < (6+7+6)) {
+      /* scan diagonal right */
+      i -= (6+7);
+      if (i < 3) {
+        tmpval = scan_board(board, i, 0, DOWN_RIGHT);
       } else {
-        val[lid] += tmpval;
+        tmpval = scan_board(board, 0, (i - 2), DOWN_RIGHT);
+      }
+    }
+    if ((6+7+6) <= i && i < max_scan_id) {
+      /* scan diagonal left */
+      i -= (6+7+6);
+      if (i < 3) {
+        tmpval = scan_board(board, i, (NUM_COL - 1), DOWN_LEFT);
+      } else {
+        /* Warning: here i is ((i - 3) + 3), draw a board to see */
+        tmpval = scan_board(board, 0, i, DOWN_LEFT);
       }
     }
 
-    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
-    if (lid == 0) {
-      for (i = 0; i < maxid; i++) {
-        *value += val[i];
-        if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
-          *value = val[i];
-          break;
-        }
-      }
+    /* update value */
+    if (tmpval == PLUS_INF || tmpval == MINUS_INF) {
+      /* found a winner */
+      value = tmpval;
+      break;
+    } else {
+      value += tmpval;
     }
   }
+
+  return value;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -207,7 +193,10 @@ connect_four(
   /* Moves are stored in uchar since possible values are in 0..6 */
   uchar moves[8];
 
-  if (get_local_id(0) == 0) {
+  int local_id = get_local_id(0);
+  int local_size = get_local_size(0);
+
+  if (local_id == 0) {
     for (int i = 0; i < NUM_CELL; i++) {
       board[i] = base_board[i];
     }
@@ -215,20 +204,28 @@ connect_four(
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  if (get_local_id(0) == 0) {
-    moves[0] = 2;
-    moves[1] = 3;
-    moves[2] = 2;
-    moves[3] = 3;
-    moves[4] = 2;
-    moves[5] = 1;
-    moves[6] = 3;
-    play_moves(&board, moves, 7);
+  /* if (get_group_id(0) < 7) { */
+  /*   moves[0] = get_group_id(0); */
+  /*   play_moves(&board, moves, 1); */
+
+  /* } */
+
+  if (get_group_id(0) == 0) {
+    val[local_id] = board_partial_value(board, local_id, local_size);
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    /* reduction */
+    if (get_local_id(0) == 0) {
+      for (int i = 0; i < local_size; i++) {
+        if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
+          *value = val[i];
+          break;
+        }
+        *value += val[i];
+      }
+    }
   }
-
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  board_value(&board, value, val);
 
   barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
