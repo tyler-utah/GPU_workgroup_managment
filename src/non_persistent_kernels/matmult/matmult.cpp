@@ -12,7 +12,7 @@ DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
 DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_int32(threads, 256, "Number of threads per workgroups");
 DEFINE_int32(workgroups, 4, "Number of workgroups");
-DEFINE_string(kernel_file, "test_suite/matmult/matmult.cl", "Kernel file name");
+DEFINE_string(kernel_file, "non_persistent_kernels/matmult/device/matmult.cl", "Kernel file name");
 
 // dummy needed to fill cl_execution primitives args
 DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Dummy");
