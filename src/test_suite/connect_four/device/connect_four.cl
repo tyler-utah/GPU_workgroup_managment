@@ -84,15 +84,8 @@ int scan_board(__global uchar *board, int row, int col, Direction direction) {
 
 /*---------------------------------------------------------------------------*/
 
-__kernel void
-connect_four(
-             __global uchar *board,
-             __global int *value
-             )
+void board_value(__global uchar *board, __global int *value, __local int *val)
 {
-  __local int val[256];
-  /* board is 6 lines, 7 cols */
-
   /* a task is operated within one workgroup */
   if (get_group_id(0) == 0) {
     int lid = get_local_id(0);
@@ -166,6 +159,18 @@ connect_four(
       }
     }
   }
+}
+
+/*---------------------------------------------------------------------------*/
+
+__kernel void
+connect_four(
+             __global uchar *board,
+             __global int *value
+             )
+{
+  __local int val[256];
+  board_value(board, value, val);
 }
 
 /*---------------------------------------------------------------------------*/
