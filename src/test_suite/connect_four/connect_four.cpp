@@ -138,6 +138,7 @@ int main(int argc, char *argv[])
   }
   scan_board(f, h_board);
   fclose(f);
+  cout << "Base board" << endl;
   print_board(h_board);
 
   const size_t board_mem_size = sizeof(cl_uchar) * 6 * 7;
@@ -180,6 +181,11 @@ int main(int argc, char *argv[])
   cout << "Kernel executed in " << kernel_time_ns << " ns" << endl;
 
   // Resulting value
+  err = exec.exec_queue.enqueueReadBuffer(d_board, CL_TRUE, 0, board_mem_size, h_board);
+  check_ocl(err);
+  cout << "Updated board" << endl;
+  print_board(h_board);
+
   err = exec.exec_queue.enqueueReadBuffer(d_value, CL_TRUE, 0, sizeof(cl_int), &h_value);
   check_ocl(err);
 

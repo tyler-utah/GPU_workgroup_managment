@@ -37,7 +37,7 @@ void chain_value(int *value, uchar player, int chain) {
 
 /*---------------------------------------------------------------------------*/
 
-int scan_board(__global uchar *board, int row, int col, Direction direction) {
+int scan_board(__local uchar *board, int row, int col, Direction direction) {
   int res = 0;
   uchar player = EMPTY;
   int chain = 0;
@@ -84,7 +84,7 @@ int scan_board(__global uchar *board, int row, int col, Direction direction) {
 
 /*---------------------------------------------------------------------------*/
 
-void board_value(__global uchar *board, __global int *value, __local int *val)
+void board_value(__local uchar *board, __global int *value, __local int *val)
 {
   /* a task is operated within one workgroup */
   if (get_group_id(0) == 0) {
@@ -163,14 +163,82 @@ void board_value(__global uchar *board, __global int *value, __local int *val)
 
 /*---------------------------------------------------------------------------*/
 
+void play_moves(__local uchar *board, uchar *move, int num_move)
+{
+  /* we explore possible moves for the computer, so computer is always
+     the first to play */
+  uchar player = COMPUTER;
+
+  for (int i = 0; i < num_move; i++) {
+    int col = move[i];
+    int row = 0;
+
+    /* special case: columns is full, ignore invalid move */
+    if (board[col] != EMPTY) {
+      continue;
+    }
+
+    while (row < NUM_ROW &&
+           board[(row * NUM_COL) + col] == EMPTY) {
+      row++;
+    }
+    /* place token one row above */
+    board[((row-1) * NUM_COL) + col] = player;
+
+    /* update player */
+    if (player == COMPUTER) {
+      player = HUMAN;
+    } else {
+      player = COMPUTER;
+    }
+  }
+}
+
+/*---------------------------------------------------------------------------*/
+
 __kernel void
 connect_four(
-             __global uchar *board,
+             __global uchar *base_board,
              __global int *value
              )
 {
   __local int val[256];
-  board_value(board, value, val);
+  __local uchar board[NUM_CELL];
+  /* Moves are stored in uchar since possible values are in 0..6 */
+  uchar moves[8];
+
+  if (get_local_id(0) == 0) {
+    for (int i = 0; i < NUM_CELL; i++) {
+      board[i] = base_board[i];
+    }
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  if (get_local_id(0) == 0) {
+    moves[0] = 2;
+    moves[1] = 3;
+    moves[2] = 2;
+    moves[3] = 3;
+    moves[4] = 2;
+    moves[5] = 1;
+    moves[6] = 3;
+    play_moves(&board, moves, 7);
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  board_value(&board, value, val);
+
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+  if (get_global_id(0) == 0) {
+    for (int i = 0; i < NUM_CELL; i++) {
+      base_board[i] = board[i];
+    }
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 }
 
 /*---------------------------------------------------------------------------*/
