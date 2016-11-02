@@ -14,10 +14,9 @@
 DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
 DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_int32(threads, 256, "Number of threads per workgroups");
-DEFINE_int32(workgroups, 4, "Number of workgroups");
+DEFINE_int32(workgroups, 10, "Number of workgroups");
 DEFINE_string(kernel_file, "test_suite/connect_four/device/connect_four.cl", "Kernel file name");
 
-// dummy needed to fill cl_execution primitives args
 DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Dummy");
 DEFINE_string(restoration_ctx_path, "test_suite/connect_four/common/", "Path to restoration context and other header files");
 
@@ -146,9 +145,9 @@ int main(int argc, char *argv[])
   err = exec.exec_queue.enqueueWriteBuffer(d_board, CL_TRUE, 0, board_mem_size, h_board);
   check_ocl(err);
 
-  cl_int h_value = 0;
-  cl::Buffer d_value(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
-  err = exec.exec_queue.enqueueWriteBuffer(d_value, CL_TRUE, 0, sizeof(cl_int), &h_value);
+  cl_int h_value[NUM_COL] = {0};
+  cl::Buffer d_value(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * NUM_COL);
+  err = exec.exec_queue.enqueueWriteBuffer(d_value, CL_TRUE, 0, sizeof(cl_int) * NUM_COL, h_value);
   check_ocl(err);
 
   // Set args
@@ -186,19 +185,21 @@ int main(int argc, char *argv[])
   cout << "Updated board" << endl;
   print_board(h_board);
 
-  err = exec.exec_queue.enqueueReadBuffer(d_value, CL_TRUE, 0, sizeof(cl_int), &h_value);
+  err = exec.exec_queue.enqueueReadBuffer(d_value, CL_TRUE, 0, sizeof(cl_int) * NUM_COL, h_value);
   check_ocl(err);
 
-  cout << "Board value: ";
-  if (h_value == PLUS_INF) {
-    cout << "PLUS_INF (computer wins)" ;
-  } else if (h_value == MINUS_INF) {
-    cout << "MINUS_INF (human wins)" ;
-  } else {
-    cout << h_value;
+  cout << "Next moves values: " << endl;
+  for (int i = 0; i < NUM_COL; i++) {
+    cout << "  " << i << ": ";
+    if (h_value[i] == PLUS_INF) {
+      cout << "PLUS_INF (computer wins)" ;
+    } else if (h_value[i] == MINUS_INF) {
+      cout << "MINUS_INF (human wins)" ;
+    } else {
+      cout << h_value[i];
+    }
+    cout << endl;
   }
-  cout << endl;
-
   // clean
 
   //----------------------------------------------------------------------

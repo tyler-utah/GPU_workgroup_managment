@@ -16,6 +16,15 @@
 
 /*---------------------------------------------------------------------------*/
 
+/**
+ * scanning strategy: scan in 4 directions.
+ *  - right: one thread per row => 6 threads
+ *  - down: one thread per col => 7 threads
+ *  - down_right: one thread per diagonal that may contains 4
+ *                tokens => 6 threads
+ *  - down_left: one thread per diagonal that may contains 4
+ *               tokens => 6 threads
+ */
 const int max_scan_id = 6+7+6+6;
 
 /*---------------------------------------------------------------------------*/
@@ -29,6 +38,7 @@ typedef enum {
 
 /*---------------------------------------------------------------------------*/
 
+/* Hugues: different ponderation for chain of length 2 and 3 ? */
 void chain_value(int *value, uchar player, int chain) {
   if (player != EMPTY) {
     if (4 <= chain) {
@@ -88,20 +98,9 @@ int scan_board(__local uchar *board, int row, int col, Direction direction) {
 
 /*---------------------------------------------------------------------------*/
 
-int board_partial_value(__local uchar *board, int local_id, int local_size)
+/* Only wgmaster return value is meaningful */
+int board_value(__local uchar *board, __local int *val, int local_id, int local_size)
 {
-  /**
-   * scanning strategy: scan in 4 directions.
-   *  - right: one thread per row => 6 threads
-   *  - down: one thread per col => 7 threads
-   *  - down_right: one thread per diagonal that may contains 4
-   *                tokens => 6 threads
-   *  - down_left: one thread per diagonal that may contains 4
-   *               tokens => 6 threads
-   */
-  int max_scan_id = 6+7+6+6;
-  int value = 0;
-
   for (int i = local_id; i < max_scan_id; i += local_size) {
     int tmpval;
 
@@ -134,17 +133,32 @@ int board_partial_value(__local uchar *board, int local_id, int local_size)
       }
     }
 
-    /* update value */
+    /* update val */
     if (tmpval == PLUS_INF || tmpval == MINUS_INF) {
       /* found a winner */
-      value = tmpval;
+      val[local_id] = tmpval;
       break;
     } else {
-      value += tmpval;
+      val[local_id] += tmpval;
     }
   }
 
-  return value;
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  /* wgmaster reduces */
+  if (local_id == 0) {
+    int res = 0;
+    for (int i = 0; i < local_size; i++) {
+      if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
+        return val[i];
+      }
+      res += val[i];
+    }
+    return res;
+  }
+
+  /* only wgmaster is meaningful */
+  return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -185,7 +199,7 @@ void play_moves(__local uchar *board, uchar *move, int num_move)
 __kernel void
 connect_four(
              __global uchar *base_board,
-             __global int *value
+             __global int *values
              )
 {
   __local int val[256];
@@ -195,6 +209,7 @@ connect_four(
 
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
+  int group_id = get_group_id(0);
 
   if (local_id == 0) {
     for (int i = 0; i < NUM_CELL; i++) {
@@ -204,38 +219,32 @@ connect_four(
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  /* if (get_group_id(0) < 7) { */
-  /*   moves[0] = get_group_id(0); */
-  /*   play_moves(&board, moves, 1); */
+  if (group_id < NUM_COL) {
 
-  /* } */
-
-  if (get_group_id(0) == 0) {
-    val[local_id] = board_partial_value(board, local_id, local_size);
+    /* wgmaster rebuild the local board */
+    if (local_id == 0) {
+      moves[0] = group_id;
+      play_moves(board, moves, 1);
+    }
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    /* reduction */
-    if (get_local_id(0) == 0) {
-      for (int i = 0; i < local_size; i++) {
-        if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
-          *value = val[i];
-          break;
-        }
-        *value += val[i];
-      }
+    /* get value */
+    int value = board_value(board, val, local_id, local_size);
+    if (local_id == 0) {
+      values[group_id] = value;
     }
   }
 
-  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+  /* barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE); */
 
-  if (get_global_id(0) == 0) {
-    for (int i = 0; i < NUM_CELL; i++) {
-      base_board[i] = board[i];
-    }
-  }
+  /* if (get_global_id(0) == 0) { */
+  /*   for (int i = 0; i < NUM_CELL; i++) { */
+  /*     base_board[i] = board[i]; */
+  /*   } */
+  /* } */
 
-  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+  /* barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE); */
 }
 
 /*---------------------------------------------------------------------------*/
