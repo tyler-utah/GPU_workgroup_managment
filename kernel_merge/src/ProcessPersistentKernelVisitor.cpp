@@ -103,7 +103,8 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   }
   if (name == "global_barrier") {
     VisitedFunctionCallsGlobalBarrierRobustToResizingFunction = true;
-    RW.ReplaceText(CE->getSourceRange(), "global_barrier_robust_to_resizing(__bar, __sense, __k_ctx)");  }
+    RW.ReplaceText(CE->getSourceRange(), "global_barrier_robust_to_resizing(__bar, __sense, __k_ctx)");
+  }
   if (name == "resizing_global_barrier" || name == "offer_fork") {
     ForkPointCounter++;
     assert(CE->getNumArgs() == 1);
@@ -136,7 +137,12 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
     RW.ReplaceText(CE->getSourceRange(), "offer_kill(__k_ctx, __s_ctx, __scratchpad, k_get_group_id(__k_ctx))");
   }
   if (CallsIdFunction(name) || CallsGlobalBarrierRobustToResizing(name)) {
-    VisitedFunctionCallsIdFunction = true;
+    if(CallsIdFunction(name)) {
+      VisitedFunctionCallsIdFunction = true;
+    }
+    if (CallsGlobalBarrierRobustToResizing(name)) {
+      VisitedFunctionCallsGlobalBarrierRobustToResizingFunction = true;
+    }
     SourceLocation StartOfParams = Lexer::findLocationAfterToken(CE->getCallee()->getSourceRange().getEnd(),
       tok::l_paren,
       AU->getSourceManager(),
