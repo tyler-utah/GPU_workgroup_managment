@@ -18,9 +18,9 @@ DEFINE_int32(workgroups, 10, "Number of workgroups");
 DEFINE_string(kernel_file, "test_suite/connect_four/device/connect_four.cl", "Kernel file name");
 
 // FIXME: size number of pools w.r.t. occupancy
-DEFINE_int32(pools, 20, "Number of task pools");
+DEFINE_int32(pools, 10, "Number of task pools");
 // Pool size is quite arbitrary, may be tuned
-DEFINE_int32(pool_size, 100, "Size of a task pool");
+DEFINE_int32(pool_size, 20, "Size of a task pool");
 
 DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Dummy");
 DEFINE_string(restoration_ctx_path, "test_suite/connect_four/common/", "Path to restoration context and other header files");
@@ -160,6 +160,15 @@ int main(int argc, char *argv[])
   cl::Buffer d_task_pool;
   d_task_pool = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, FLAGS_pools * FLAGS_pool_size * sizeof(Task));
 
+  // init the task_pool to force 0 since we print it afterwards
+  Task *h_task_pool = (Task *)calloc(FLAGS_pools * FLAGS_pool_size, sizeof(Task));
+  if (h_task_pool == NULL) {
+    cout << "calloc failed" << endl;
+    exit(EXIT_FAILURE);
+  }
+  err = exec.exec_queue.enqueueWriteBuffer(d_task_pool, CL_TRUE, 0, FLAGS_pools * FLAGS_pool_size * sizeof(Task), h_task_pool);
+  check_ocl(err);
+
   cl::Buffer d_task_pool_lock;
   d_task_pool_lock = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, FLAGS_pools * sizeof(cl_int));
   err = exec.exec_queue.enqueueFillBuffer(d_task_pool_lock, 0, 0, FLAGS_pools * sizeof(cl_int));
@@ -229,6 +238,27 @@ int main(int argc, char *argv[])
       cout << val;
     }
     cout << endl;
+  }
+
+  // print task pools and head
+  err = exec.exec_queue.enqueueReadBuffer(d_task_pool, CL_TRUE, 0, FLAGS_pools * FLAGS_pool_size * sizeof(Task), h_task_pool);
+  check_ocl(err);
+
+  cl_int *h_task_pool_head = (cl_int *)calloc(FLAGS_pools, sizeof(cl_int));
+  if (h_task_pool_head == NULL) {
+    cout << "calloc failed" << endl;
+    exit(EXIT_FAILURE);
+  }
+  err = exec.exec_queue.enqueueReadBuffer(d_task_pool_head, CL_TRUE, 0, FLAGS_pools * sizeof(cl_int), h_task_pool_head);
+  check_ocl(err);
+
+  for (int i = 0; i < FLAGS_pools; i++) {
+    printf("Pool %2.2d (head %2.2d): ", i, h_task_pool_head[i]);
+    for (int j = 0; j < FLAGS_pool_size; j++) {
+      printf("%s", (j == h_task_pool_head[i]) ? "|" : " ");
+      printf("%3.3d", h_task_pool[(i * FLAGS_pool_size) + j]);
+    }
+    printf("\n");
   }
 
   // clean

@@ -230,7 +230,7 @@ int compute_node_value(__global uchar *base_board, __local uchar *board, __local
 
 /*---------------------------------------------------------------------------*/
 
-void create_children(__global Node *nodes, __global atomic_int *node_head, int parent_id, int local_id, int local_size)
+void create_children(__local int *child_id, __global Node *nodes, __global atomic_int *node_head, int parent_id, int local_id, int local_size)
 {
   __global Node *parent = &(nodes[parent_id]);
   for (int i = local_id; i < NUM_COL; i += local_size) {
@@ -244,6 +244,7 @@ void create_children(__global Node *nodes, __global atomic_int *node_head, int p
     child->moves[parent->level] = i;
     atomic_store(&(child->value), 0);
     atomic_store(&(child->num_child_answer), 0);
+    child_id[i] = n;
   }
   barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 }
@@ -265,9 +266,9 @@ void unlock(__global atomic_int *task_pool_lock, int pool_id)
 
 /*---------------------------------------------------------------------------*/
 
-/* Task_pop() grabs a task from a non-empty pool and returns false. If
-   the pool is empty, it fails and returns true. */
-bool Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
+/* Task_pop() grabs a task from a pool and stores it in the task
+   argument. If the pool is empty, then NULL_TASK is assigned to task. */
+void Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
 {
   if (local_id == 0) {
     *task = NULL_TASK;
@@ -278,18 +279,17 @@ bool Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int 
       task_pool_head[pool_id]--;
       *task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
     }
-    unlock(task_pool_head, pool_id);
+    unlock(task_pool_lock, pool_id);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
-  return (*task == NULL_TASK);
 }
 
 /*---------------------------------------------------------------------------*/
 
-/* Task_push() add a task to a non-full pool and returns false in case
-   of success. If the pool is already full, it fails and returns
-   true. */
-bool Task_push(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
+/* Task_push() adds the task argument to the indicated pool. If the pool
+ is full, then the task argument is left untouched, otherwise NULL_TASK
+ is assigned to it. */
+void Task_push(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
 {
   if (local_id == 0) {
     /* spinwait on the pool lock */
@@ -300,10 +300,9 @@ bool Task_push(__local Task *task, __global Task *task_pool, __global atomic_int
       task_pool_head[pool_id]++;
       *task = NULL_TASK;
     }
-    unlock(task_pool_head, pool_id);
+    unlock(task_pool_lock, pool_id);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
-  return (*task != NULL_TASK);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -323,6 +322,7 @@ connect_four(
   __local int val[256];
   __local uchar board[NUM_CELL];
   __local Task task;
+  __local int child_id[7];
   /* Moves are stored in uchar since possible values are in 0..6 */
   uchar moves[8];
 
@@ -360,15 +360,27 @@ connect_four(
 
   if (group_id < 7) {
 
-    bool failed;
-    failed = Task_pop(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, group_id % num_task_pool);
-    if (failed) {
+    int pool_id = group_id % num_task_pool;
+
+    Task_pop(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, group_id);
+    if (task == NULL_TASK) {
       return;
     }
     /* compute value of node */
-    int value = compute_node_value(base_board, board, val, &(nodes[task]), local_id, local_size);
-    if (value != PLUS_INF && value != MINUS_INF) {
-      create_children(nodes, node_head, task, local_id, local_size);
+    if (nodes[task].level < 3) {
+      int value = compute_node_value(base_board, board, val, &(nodes[task]), local_id, local_size);
+      if (value != PLUS_INF && value != MINUS_INF) {
+        create_children(child_id, nodes, node_head, task, local_id, local_size);
+        for (int i = 0; i < 7; i++) {
+          task = child_id[i];
+          /* fixme: task_push may fail, in which case use task_donate once
+             it is implemented */
+          Task_push(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, pool_id);
+        }
+      } else {
+        /* todo: update parent without creating children */
+        ;
+      }
     }
   }
 }
