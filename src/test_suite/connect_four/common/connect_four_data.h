@@ -16,6 +16,7 @@ const CL_INT_TYPE PLUS_INF = 666;
 const CL_INT_TYPE MINUS_INF = -666;
 
 const CL_INT_TYPE MAX_LOOKAHEAD = 3;
+const CL_INT_TYPE MAX_NODE = 70;
 
 /*---------------------------------------------------------------------------*/
 
@@ -26,5 +27,10 @@ typedef struct {
   ATOMIC_CL_INT_TYPE value;
   ATOMIC_CL_INT_TYPE num_child_answer;
 } Node;
+
+/*---------------------------------------------------------------------------*/
+
+/* A task is just a node index */
+typedef CL_INT_TYPE Task;
 
 /*---------------------------------------------------------------------------*/

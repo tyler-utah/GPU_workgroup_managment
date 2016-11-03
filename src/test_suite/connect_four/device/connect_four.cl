@@ -210,19 +210,42 @@ void update_board(__local uchar *board, __global uchar *base_board, __global Nod
 
 /*---------------------------------------------------------------------------*/
 
-/* compute_node_value() returns, for the wg master thread, the value of
-   the board given the node moves, this value is also stored in the
-   corresponding node field. This function does not compute values of
-   potential children nodes. For other thread than wg master, the
-   returned value is junk. */
+/* compute_node_value() returns the value of the board given the node
+   moves, this value is also stored in the corresponding node
+   field. This function does not compute values of potential children
+   nodes. */
 int compute_node_value(__global uchar *base_board, __local uchar *board, __local int *val, __global Node *node, int local_id, int local_size)
 {
   update_board(board, base_board, node, local_id, local_size);
   int value = board_value(board, val, local_id, local_size);
   if (local_id == 0) {
     atomic_store(&(node->value), value);
+    /* broadcast value to all nodes through val */
+    val[0] = value;
   }
+  barrier(CLK_LOCAL_MEM_FENCE);
+  value = val[0];
   return value;
+}
+
+/*---------------------------------------------------------------------------*/
+
+void create_children(__global Node *nodes, __global atomic_int *node_head, int parent_id, int local_id, int local_size)
+{
+  __global Node *parent = &(nodes[parent_id]);
+  for (int i = local_id; i < NUM_COL; i += local_size) {
+    int n = atomic_fetch_add(node_head, 1);
+    Node *child = &(nodes[n]);
+    child->parent = parent_id;
+    child->level = parent->level + 1;
+    for (int j = 0; j < parent->level; j++) {
+      child->moves[j] = parent->moves[j];
+    }
+    child->moves[parent->level] = i;
+    atomic_store(&(child->value), 0);
+    atomic_store(&(child->num_child_answer), 0);
+  }
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -231,7 +254,6 @@ __kernel void
 connect_four(
              __global uchar *base_board,
              __global Node *nodes,
-             const int max_node,
              __global atomic_int *node_head
              )
 {
@@ -280,6 +302,9 @@ connect_four(
 
     /* compute value of node */
     int value = compute_node_value(base_board, board, val, &(nodes[node_id]), local_id, local_size);
+    if (value != PLUS_INF && value != MINUS_INF) {
+      create_children(nodes, node_head, node_id, local_id, local_size);
+    }
   }
 }
 

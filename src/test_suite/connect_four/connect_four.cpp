@@ -146,9 +146,8 @@ int main(int argc, char *argv[])
   check_ocl(err);
 
   // nodes
-  const cl_int max_node = 10;
   cl::Buffer d_nodes;
-  d_nodes = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, max_node * sizeof(Node));
+  d_nodes = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, MAX_NODE * sizeof(Node));
   cl::Buffer d_node_head;
   d_node_head = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
 
@@ -157,7 +156,6 @@ int main(int argc, char *argv[])
   int arg_index = 0;
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_board));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_nodes));
-  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, max_node));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_node_head));
 
   // Run kernel
@@ -188,18 +186,21 @@ int main(int argc, char *argv[])
   // cout << "Updated board" << endl;
   // print_board(h_board);
 
-  Node h_nodes[max_node];
-  err = exec.exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, max_node * sizeof(Node), h_nodes);
+  Node h_nodes[MAX_NODE];
+  err = exec.exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, MAX_NODE * sizeof(Node), h_nodes);
   check_ocl(err);
 
-  cout << "Node values: " << endl;
-  for (int i = 0; i < NUM_COL; i++) {
-    cout << "  " << i << ": ";
+  cout << "Nodes: " << endl;
+  for (int i = 0; i < MAX_NODE; i++) {
+    printf("  %2.2d: ", i);
+    cout << " level: " << h_nodes[i].level;
+    cout << " parent: " << h_nodes[i].parent;
+    cout << " value: ";
     int val = h_nodes[i].value;
     if (val == PLUS_INF) {
-      cout << "PLUS_INF (computer wins)" ;
+      cout << "CMPTR_WIN" ;
     } else if (val == MINUS_INF) {
-      cout << "MINUS_INF (human wins)" ;
+      cout << "HUMAN_WIN" ;
     } else {
       cout << val;
     }
