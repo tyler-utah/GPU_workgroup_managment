@@ -157,7 +157,7 @@ int board_value(__local uchar *board, __local int *val, int local_id, int local_
     return res;
   }
 
-  /* only wgmaster is meaningful */
+  /* only wgmaster return value is meaningful */
   return 0;
 }
 
