@@ -141,20 +141,24 @@ int main(int argc, char *argv[])
   print_board(h_board);
 
   const size_t board_mem_size = sizeof(cl_uchar) * 6 * 7;
-  cl::Buffer d_board(exec.exec_context, CL_MEM_READ_ONLY, board_mem_size);
+  cl::Buffer d_board(exec.exec_context, CL_MEM_READ_WRITE, board_mem_size);
   err = exec.exec_queue.enqueueWriteBuffer(d_board, CL_TRUE, 0, board_mem_size, h_board);
   check_ocl(err);
 
-  cl_int h_value[NUM_COL] = {0};
-  cl::Buffer d_value(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * NUM_COL);
-  err = exec.exec_queue.enqueueWriteBuffer(d_value, CL_TRUE, 0, sizeof(cl_int) * NUM_COL, h_value);
-  check_ocl(err);
+  // nodes
+  const cl_int max_node = 10;
+  cl::Buffer d_nodes;
+  d_nodes = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, max_node * sizeof(Node));
+  cl::Buffer d_node_head;
+  d_node_head = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
 
   // Set args
 
   int arg_index = 0;
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_board));
-  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_value));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_nodes));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, max_node));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_node_head));
 
   // Run kernel
   cl::Event event;
@@ -179,27 +183,29 @@ int main(int argc, char *argv[])
   kernel_time_ns = kernel_end_ns - kernel_start_ns;
   cout << "Kernel executed in " << kernel_time_ns << " ns" << endl;
 
-  // Resulting value
-  err = exec.exec_queue.enqueueReadBuffer(d_board, CL_TRUE, 0, board_mem_size, h_board);
-  check_ocl(err);
-  cout << "Updated board" << endl;
-  print_board(h_board);
+  // err = exec.exec_queue.enqueueReadBuffer(d_board, CL_TRUE, 0, board_mem_size, h_board);
+  // check_ocl(err);
+  // cout << "Updated board" << endl;
+  // print_board(h_board);
 
-  err = exec.exec_queue.enqueueReadBuffer(d_value, CL_TRUE, 0, sizeof(cl_int) * NUM_COL, h_value);
+  Node h_nodes[max_node];
+  err = exec.exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, max_node * sizeof(Node), h_nodes);
   check_ocl(err);
 
-  cout << "Next moves values: " << endl;
+  cout << "Node values: " << endl;
   for (int i = 0; i < NUM_COL; i++) {
     cout << "  " << i << ": ";
-    if (h_value[i] == PLUS_INF) {
+    int val = h_nodes[i].value;
+    if (val == PLUS_INF) {
       cout << "PLUS_INF (computer wins)" ;
-    } else if (h_value[i] == MINUS_INF) {
+    } else if (val == MINUS_INF) {
       cout << "MINUS_INF (human wins)" ;
     } else {
-      cout << h_value[i];
+      cout << val;
     }
     cout << endl;
   }
+
   // clean
 
   //----------------------------------------------------------------------

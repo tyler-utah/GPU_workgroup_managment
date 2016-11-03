@@ -163,35 +163,49 @@ int board_value(__local uchar *board, __local int *val, int local_id, int local_
 
 /*---------------------------------------------------------------------------*/
 
-void play_moves(__local uchar *board, uchar *move, int num_move)
+/* update_board() replay moves of node from the base board and store the
+   resulting board in the local board */
+void update_board(__local uchar *board, __global uchar *base_board, __global Node *node, int local_id, int local_size)
 {
-  /* we explore possible moves for the computer, so computer is always
-     the first to play */
-  uchar player = COMPUTER;
+  /* start from base board */
+  for (int i = local_id; i < NUM_CELL; i += local_size) {
+    board[i] = base_board[i];
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
 
-  for (int i = 0; i < num_move; i++) {
-    int col = move[i];
-    int row = 0;
+  /* moves must be played sequentially, so wgmaster thread does it */
+  if (local_id == 0) {
 
-    /* special case: columns is full, ignore invalid move */
-    if (board[col] != EMPTY) {
-      continue;
-    }
+    /* we explore possible moves for the computer, so computer is always
+       the first to play */
+    uchar player = COMPUTER;
 
-    while (row < NUM_ROW &&
-           board[(row * NUM_COL) + col] == EMPTY) {
-      row++;
-    }
-    /* place token one row above */
-    board[((row-1) * NUM_COL) + col] = player;
+    /* play moves */
+    for (int i = 0; i < node->level; i++) {
+      int col = node->moves[i];
+      int row = 0;
 
-    /* update player */
-    if (player == COMPUTER) {
-      player = HUMAN;
-    } else {
-      player = COMPUTER;
+      /* special case: columns is full, ignore invalid move */
+      if (board[col] != EMPTY) {
+        continue;
+      }
+
+      while (row < NUM_ROW &&
+             board[(row * NUM_COL) + col] == EMPTY) {
+        row++;
+      }
+      /* place token one row above */
+      board[((row-1) * NUM_COL) + col] = player;
+
+      /* update player */
+      if (player == COMPUTER) {
+        player = HUMAN;
+      } else {
+        player = COMPUTER;
+      }
     }
   }
+  barrier(CLK_LOCAL_MEM_FENCE);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -199,7 +213,9 @@ void play_moves(__local uchar *board, uchar *move, int num_move)
 __kernel void
 connect_four(
              __global uchar *base_board,
-             __global int *values
+             __global Node *nodes,
+             const int max_node,
+             __global atomic_int *node_head
              )
 {
   __local int val[256];
@@ -207,44 +223,57 @@ connect_four(
   /* Moves are stored in uchar since possible values are in 0..6 */
   uchar moves[8];
 
+  __local int task_pool[10];
+  __local atomic_int task_pool_head;
+
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
   int group_id = get_group_id(0);
+  int global_id = get_global_id(0);
 
+  /* init */
   if (local_id == 0) {
-    for (int i = 0; i < NUM_CELL; i++) {
-      board[i] = base_board[i];
-    }
+    atomic_store(&task_pool_head, 0);
   }
 
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  if (group_id < NUM_COL) {
-
-    /* wgmaster rebuild the local board */
-    if (local_id == 0) {
-      moves[0] = group_id;
-      play_moves(board, moves, 1);
+  if (global_id == 0) {
+    /* create first nodes */
+    for (int i = 0; i < 7; i++) {
+      nodes[i].parent = -1;
+      nodes[i].level = 1;
+      nodes[i].moves[0] = i;
+      atomic_store(&(nodes[i].value), 0);
+      atomic_store(&(nodes[i].num_child_answer), 0);
     }
+    atomic_store(node_head, 7);
+  }
 
-    barrier(CLK_LOCAL_MEM_FENCE);
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
-    /* get value */
+  /* poor man's global barrier, to replace with proper global_barrier()
+     for kernel_merge usage */
+  while (atomic_load(node_head) != 7);
+
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
+  if (group_id < 7) {
+
+    /* use group_id as node id */
+    int node_id = group_id;
+
+    /* compute value of node */
+    update_board(board, base_board, &(nodes[node_id]), local_id, local_size);
     int value = board_value(board, val, local_id, local_size);
+
     if (local_id == 0) {
-      values[group_id] = value;
+      /* update value of node */
+      atomic_store(&(nodes[node_id].value), value);
+
+      /* TODO: if value not +- INF, create new nodes */
+
+      /* else propagate value to parent, etc... */
     }
   }
-
-  /* barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE); */
-
-  /* if (get_global_id(0) == 0) { */
-  /*   for (int i = 0; i < NUM_CELL; i++) { */
-  /*     base_board[i] = board[i]; */
-  /*   } */
-  /* } */
-
-  /* barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE); */
 }
 
 /*---------------------------------------------------------------------------*/
