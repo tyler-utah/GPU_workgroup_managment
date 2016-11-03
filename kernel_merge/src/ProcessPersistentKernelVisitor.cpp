@@ -103,7 +103,9 @@ bool ProcessPersistentKernelVisitor::VisitCallExpr(CallExpr *CE) {
   }
   if (name == "global_barrier") {
     VisitedFunctionCallsGlobalBarrierRobustToResizingFunction = true;
-    RW.ReplaceText(CE->getSourceRange(), "global_barrier_robust_to_resizing(__bar, __sense, __k_ctx)");
+    if (!UsesOfferFunctions) {
+      RW.ReplaceText(CE->getSourceRange(), "global_barrier_robust_to_resizing(__bar, __sense, __k_ctx)");
+    }
   }
   if (name == "resizing_global_barrier" || name == "offer_fork") {
     ForkPointCounter++;
@@ -390,6 +392,10 @@ void ProcessPersistentKernelVisitor::ProcessKernelFunction(FunctionDecl *D) {
         exit(1);
       }
     }
+  }
+
+  if (GlobalBarrier) {
+    RW.ReplaceText(GlobalBarrier->getSourceRange(), "global_barrier(__bar, __k_ctx)");
   }
 
   this->RestorationCtx = "typedef struct {\n";
