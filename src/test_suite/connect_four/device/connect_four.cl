@@ -210,6 +210,23 @@ void update_board(__local uchar *board, __global uchar *base_board, __global Nod
 
 /*---------------------------------------------------------------------------*/
 
+/* compute_node_value() returns, for the wg master thread, the value of
+   the board given the node moves, this value is also stored in the
+   corresponding node field. This function does not compute values of
+   potential children nodes. For other thread than wg master, the
+   returned value is junk. */
+int compute_node_value(__global uchar *base_board, __local uchar *board, __local int *val, __global Node *node, int local_id, int local_size)
+{
+  update_board(board, base_board, node, local_id, local_size);
+  int value = board_value(board, val, local_id, local_size);
+  if (local_id == 0) {
+    atomic_store(&(node->value), value);
+  }
+  return value;
+}
+
+/*---------------------------------------------------------------------------*/
+
 __kernel void
 connect_four(
              __global uchar *base_board,
@@ -262,17 +279,7 @@ connect_four(
     int node_id = group_id;
 
     /* compute value of node */
-    update_board(board, base_board, &(nodes[node_id]), local_id, local_size);
-    int value = board_value(board, val, local_id, local_size);
-
-    if (local_id == 0) {
-      /* update value of node */
-      atomic_store(&(nodes[node_id].value), value);
-
-      /* TODO: if value not +- INF, create new nodes */
-
-      /* else propagate value to parent, etc... */
-    }
+    int value = compute_node_value(base_board, board, val, &(nodes[node_id]), local_id, local_size);
   }
 }
 
