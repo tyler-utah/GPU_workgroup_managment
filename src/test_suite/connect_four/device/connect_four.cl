@@ -258,6 +258,13 @@ bool try_lock(__global atomic_int *task_pool_lock, int pool_id)
 
 /*---------------------------------------------------------------------------*/
 
+void unlock(__global atomic_int *task_pool_lock, int pool_id)
+{
+  atomic_store(&(task_pool_lock[pool_id]), false);
+}
+
+/*---------------------------------------------------------------------------*/
+
 void Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
 {
   if (local_id == 0) {
@@ -268,6 +275,7 @@ void Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int 
         task_pool_head[pool_id]--;
         *task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
       }
+      unlock(task_pool_head, pool_id);
     }
   }
   barrier(CLK_LOCAL_MEM_FENCE);
