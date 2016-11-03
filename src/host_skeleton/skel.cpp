@@ -52,6 +52,8 @@ using namespace std;
 #include "../graph_apps/mis/mis.h"
 #elif defined PERSISTENT_PANNOTIA_SSSP
 #include "../graph_apps/sssp/sssp.h"
+#elif defined PERSISTENT_PANNOTIA_BC
+#include "../graph_apps/bc/bc.h"
 #elif defined PERSISTENT_OCTREE
 #include "host/octree.h"
 #else
@@ -280,6 +282,7 @@ void run_persistent(CL_Execution *exec) {
 	int error = 0;
 
 	for (int i = 0; i < FLAGS_run_persistent; i++) {
+		cout << "Running iteration " << i << endl;
 		reset_discovery(exec, d_ctx_mem, false);
 		reset_barrier(exec, d_bar);
 		reset_persistent_task(exec);

@@ -1,1 +1,3 @@
-Tyler: I'll make a directory of pannotia solutions to keep on google docs.
+Download the solution set from:
+
+https://drive.google.com/file/d/0B39h0-zMAGilSGFici01M18yUXc/view?usp=sharing
