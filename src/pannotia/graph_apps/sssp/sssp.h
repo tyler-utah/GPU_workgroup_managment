@@ -109,15 +109,15 @@ int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {
 	arg_index++;
 	err |= k.setArg(arg_index, row_d);
 	arg_index++;
-	err = k.setArg(arg_index, col_d);
+	err |= k.setArg(arg_index, col_d);
 	arg_index++;
 	err |= k.setArg(arg_index, data_d);
 	arg_index++;
-	err = k.setArg(arg_index, x_d);
+	err |= k.setArg(arg_index, x_d);
 	arg_index++;
 	err |= k.setArg(arg_index, y_d);
 	arg_index++;
-	err = k.setArg(arg_index, stop_d);
+	err |= k.setArg(arg_index, stop_d);
 	arg_index++;
 	check_ocl(err);
 
@@ -146,7 +146,7 @@ bool diff_solution_file_int(int * a, const char * solution_fname, int v) {
 	FILE * fp = fopen(solution_fname, "r");
 	for (int i = 0; i < v; i++) {
 		if (feof(fp)) {
-			printf("111\n");
+			//printf("111\n");
 			ret = false;
 			break;
 		}
@@ -154,12 +154,12 @@ bool diff_solution_file_int(int * a, const char * solution_fname, int v) {
 		int trash;
 		int found = fscanf(fp, "%d: %d\n", &trash, &compare);
 		if (found != 2) {
-			printf("222\n");
+			//printf("222\n");
 			ret = false;
 			break;
 		}
 		if (compare != a[i]) {
-			printf("%d found %d expected %d\n", i, compare, a[i]);
+			//printf("%d found %d expected %d\n", i, compare, a[i]);
 			ret = false;
 			break;
 		}
@@ -170,7 +170,7 @@ bool diff_solution_file_int(int * a, const char * solution_fname, int v) {
 }
 
 bool check_persistent_task(CL_Execution *exec) {
-	output_persistent_solution("testing.txt", exec);
+	//output_persistent_solution("testing.txt", exec);
 	exec->exec_queue.enqueueReadBuffer(x_d, CL_TRUE, 0, sizeof(cl_int) * num_nodes, cost_array_output);
 	return diff_solution_file_int(cost_array_output, FLAGS_graph_solution_file.c_str(), num_nodes);
 }
