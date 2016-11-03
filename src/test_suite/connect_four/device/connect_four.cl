@@ -250,6 +250,31 @@ void create_children(__global Node *nodes, __global atomic_int *node_head, int p
 
 /*---------------------------------------------------------------------------*/
 
+bool try_lock(__global atomic_int *task_pool_lock, int pool_id)
+{
+  int expected = false;
+  return atomic_compare_exchange_strong(&(task_pool_lock[pool_id]), &expected, true);
+}
+
+/*---------------------------------------------------------------------------*/
+
+void Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
+{
+  if (local_id == 0) {
+    *task = NULL_TASK;
+    if (try_lock(task_pool_lock, pool_id)) {
+      /* If pool is not empty, pick up the latest inserted task. */
+      if (task_pool_head[pool_id] > 0) {
+        task_pool_head[pool_id]--;
+        *task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
+      }
+    }
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+}
+
+/*---------------------------------------------------------------------------*/
+
 __kernel void
 connect_four(
              __global uchar *base_board,
@@ -264,6 +289,7 @@ connect_four(
 {
   __local int val[256];
   __local uchar board[NUM_CELL];
+  __local Task task;
   /* Moves are stored in uchar since possible values are in 0..6 */
   uchar moves[8];
 
@@ -301,13 +327,14 @@ connect_four(
 
   if (group_id < 7) {
 
-    /* use group_id as node id */
-    int node_id = group_id;
+    Task_pop(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, group_id % num_task_pool);
 
-    /* compute value of node */
-    int value = compute_node_value(base_board, board, val, &(nodes[node_id]), local_id, local_size);
-    if (value != PLUS_INF && value != MINUS_INF) {
-      create_children(nodes, node_head, node_id, local_id, local_size);
+    if (task != NULL_TASK) {
+      /* compute value of node */
+      int value = compute_node_value(base_board, board, val, &(nodes[task]), local_id, local_size);
+      if (value != PLUS_INF && value != MINUS_INF) {
+        create_children(nodes, node_head, task, local_id, local_size);
+      }
     }
   }
 }

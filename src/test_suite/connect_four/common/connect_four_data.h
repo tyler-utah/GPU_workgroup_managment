@@ -32,5 +32,6 @@ typedef struct {
 
 /* A task is just a node index */
 typedef CL_INT_TYPE Task;
+const Task NULL_TASK = -1;
 
 /*---------------------------------------------------------------------------*/
