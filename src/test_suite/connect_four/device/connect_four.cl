@@ -265,20 +265,45 @@ void unlock(__global atomic_int *task_pool_lock, int pool_id)
 
 /*---------------------------------------------------------------------------*/
 
-void Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
+/* Task_pop() grabs a task from a non-empty pool and returns false. If
+   the pool is empty, it fails and returns true. */
+bool Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
 {
   if (local_id == 0) {
     *task = NULL_TASK;
-    if (try_lock(task_pool_lock, pool_id)) {
-      /* If pool is not empty, pick up the latest inserted task. */
-      if (task_pool_head[pool_id] > 0) {
-        task_pool_head[pool_id]--;
-        *task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
-      }
-      unlock(task_pool_head, pool_id);
+    /* spinwait on the pool lock */
+    while (!(try_lock(task_pool_lock, pool_id)));
+    /* If pool is not empty, pick up the latest inserted task. */
+    if (task_pool_head[pool_id] > 0) {
+      task_pool_head[pool_id]--;
+      *task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
     }
+    unlock(task_pool_head, pool_id);
   }
   barrier(CLK_LOCAL_MEM_FENCE);
+  return (*task == NULL_TASK);
+}
+
+/*---------------------------------------------------------------------------*/
+
+/* Task_push() add a task to a non-full pool and returns false in case
+   of success. If the pool is already full, it fails and returns
+   true. */
+bool Task_push(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
+{
+  if (local_id == 0) {
+    /* spinwait on the pool lock */
+    while (!(try_lock(task_pool_lock, pool_id)));
+    /* If pool is not full, insert task */
+    if (task_pool_head[pool_id] < task_pool_size) {
+      task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]] = *task;
+      task_pool_head[pool_id]++;
+      *task = NULL_TASK;
+    }
+    unlock(task_pool_head, pool_id);
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+  return (*task != NULL_TASK);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -335,14 +360,15 @@ connect_four(
 
   if (group_id < 7) {
 
-    Task_pop(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, group_id % num_task_pool);
-
-    if (task != NULL_TASK) {
-      /* compute value of node */
-      int value = compute_node_value(base_board, board, val, &(nodes[task]), local_id, local_size);
-      if (value != PLUS_INF && value != MINUS_INF) {
-        create_children(nodes, node_head, task, local_id, local_size);
-      }
+    bool failed;
+    failed = Task_pop(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, group_id % num_task_pool);
+    if (failed) {
+      return;
+    }
+    /* compute value of node */
+    int value = compute_node_value(base_board, board, val, &(nodes[task]), local_id, local_size);
+    if (value != PLUS_INF && value != MINUS_INF) {
+      create_children(nodes, node_head, task, local_id, local_size);
     }
   }
 }
