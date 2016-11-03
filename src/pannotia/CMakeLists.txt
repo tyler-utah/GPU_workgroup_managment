@@ -57,3 +57,19 @@ target_link_libraries(pannotia_sssp
 
 target_compile_options(pannotia_sssp PUBLIC -DPERSISTENT_PANNOTIA_SSSP -DNON_PERSISTENT_REDUCE)
 target_include_directories(pannotia_sssp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/graph_apps/sssp/)
+
+add_executable(pannotia_bc
+  ../host_skeleton/skel.cpp
+  graph_apps/bc/bc.h
+)
+
+target_link_libraries(pannotia_bc
+  base_commandlineflags
+  opencl_opencl
+  base_profile
+  base_file
+  pannotia_graph_parse
+)
+
+target_compile_options(pannotia_bc PUBLIC -DPERSISTENT_PANNOTIA_BC -DNON_PERSISTENT_REDUCE)
+target_include_directories(pannotia_bc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/graph_apps/bc/)
