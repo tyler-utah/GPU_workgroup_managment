@@ -17,6 +17,11 @@ DEFINE_int32(threads, 256, "Number of threads per workgroups");
 DEFINE_int32(workgroups, 10, "Number of workgroups");
 DEFINE_string(kernel_file, "test_suite/connect_four/device/connect_four.cl", "Kernel file name");
 
+// FIXME: size number of pools w.r.t. occupancy
+DEFINE_int32(pools, 20, "Number of task pools");
+// Pool size is quite arbitrary, may be tuned
+DEFINE_int32(pool_size, 100, "Size of a task pool");
+
 DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Dummy");
 DEFINE_string(restoration_ctx_path, "test_suite/connect_four/common/", "Path to restoration context and other header files");
 
@@ -147,9 +152,23 @@ int main(int argc, char *argv[])
 
   // nodes
   cl::Buffer d_nodes;
-  d_nodes = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, MAX_NODE * sizeof(Node));
+  d_nodes = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, NUM_NODE * sizeof(Node));
   cl::Buffer d_node_head;
   d_node_head = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+
+  // task pools
+  cl::Buffer d_task_pool;
+  d_task_pool = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, FLAGS_pools * FLAGS_pool_size * sizeof(Task));
+
+  cl::Buffer d_task_pool_lock;
+  d_task_pool_lock = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, FLAGS_pools * sizeof(cl_int));
+  err = exec.exec_queue.enqueueFillBuffer(d_task_pool_lock, 0, 0, FLAGS_pools * sizeof(cl_int));
+  check_ocl(err);
+
+  cl::Buffer d_task_pool_head;
+  d_task_pool_head = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, FLAGS_pools * sizeof(cl_int));
+  err = exec.exec_queue.enqueueFillBuffer(d_task_pool_lock, 0, 0, FLAGS_pools * sizeof(cl_int));
+  check_ocl(err);
 
   // Set args
 
@@ -157,6 +176,11 @@ int main(int argc, char *argv[])
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_board));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_nodes));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_node_head));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_task_pool));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_task_pool_lock));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_task_pool_head));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_pools));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_pool_size));
 
   // Run kernel
   cl::Event event;
@@ -186,12 +210,12 @@ int main(int argc, char *argv[])
   // cout << "Updated board" << endl;
   // print_board(h_board);
 
-  Node h_nodes[MAX_NODE];
-  err = exec.exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, MAX_NODE * sizeof(Node), h_nodes);
+  Node h_nodes[NUM_NODE];
+  err = exec.exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, NUM_NODE * sizeof(Node), h_nodes);
   check_ocl(err);
 
   cout << "Nodes: " << endl;
-  for (int i = 0; i < MAX_NODE; i++) {
+  for (int i = 0; i < NUM_NODE; i++) {
     printf("  %2.2d: ", i);
     cout << " level: " << h_nodes[i].level;
     cout << " parent: " << h_nodes[i].parent;

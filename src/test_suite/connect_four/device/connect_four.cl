@@ -254,7 +254,12 @@ __kernel void
 connect_four(
              __global uchar *base_board,
              __global Node *nodes,
-             __global atomic_int *node_head
+             __global atomic_int *node_head,
+             __global Task *task_pool,
+             __global atomic_int *task_pool_lock,
+             __global int *task_pool_head,
+             const int num_task_pool,
+             const int task_pool_size
              )
 {
   __local int val[256];
@@ -262,27 +267,26 @@ connect_four(
   /* Moves are stored in uchar since possible values are in 0..6 */
   uchar moves[8];
 
-  __local int task_pool[10];
-  __local atomic_int task_pool_head;
-
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
   int group_id = get_group_id(0);
   int global_id = get_global_id(0);
 
   /* init */
-  if (local_id == 0) {
-    atomic_store(&task_pool_head, 0);
-  }
-
   if (global_id == 0) {
-    /* create first nodes */
+    /* Initiate with the 7 nodes of the first level */
     for (int i = 0; i < 7; i++) {
+      /* create node */
       nodes[i].parent = -1;
       nodes[i].level = 1;
       nodes[i].moves[0] = i;
       atomic_store(&(nodes[i].value), 0);
       atomic_store(&(nodes[i].num_child_answer), 0);
+
+      /* register task */
+      int pool_id = i % num_task_pool;
+      task_pool[(pool_id * task_pool_size)] = i;
+      task_pool_head[pool_id] = 1;
     }
     atomic_store(node_head, 7);
   }

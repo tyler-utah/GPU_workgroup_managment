@@ -16,7 +16,7 @@ const CL_INT_TYPE PLUS_INF = 666;
 const CL_INT_TYPE MINUS_INF = -666;
 
 const CL_INT_TYPE MAX_LOOKAHEAD = 3;
-const CL_INT_TYPE MAX_NODE = 70;
+const CL_INT_TYPE NUM_NODE = 70;
 
 /*---------------------------------------------------------------------------*/
 
