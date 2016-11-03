@@ -13,34 +13,26 @@
 
 /*---------------------------------------------------------------------------*/
 
-void matmult(__global int *A, const int a_num_line, const int a_num_col,
-             __global int *B, const int b_num_line, const int b_num_col,
-             __global int *C, __global ulong *c_hash,
+void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
+             const int B_row, const int B_col, __global int *C,
              __global Kernel_ctx *__k_ctx) {
   /* safety */
-  if (a_num_col != b_num_line) {
+  if (A_col != B_row) {
     return;
   }
 
   int gid = k_get_global_id(__k_ctx);
   int num_threads = k_get_global_size(__k_ctx);
-  int c_size = a_num_line * b_num_col;
+  int c_size = A_row * B_col;
 
+  /* Multiply matrices */
   for (int i = gid; i < c_size; i += num_threads) {
-    int c_line = i / b_num_col;
-    int c_col = i % b_num_col;
-    int a_offset = c_line * a_num_col;
+    int c_row = i / B_col;
+    int c_col = i % B_col;
+    int a_offset = c_row * A_col;
     C[i] = 0;
-    for (int j = 0; j < b_num_line; j++) {
-      C[i] += A[a_offset + j] * B[(j * b_num_col) + c_col];
-    }
-  }
-
-  /* Hash using djb2, see http://www.cse.yorku.ca/~oz/hash.html */
-  if (gid == 0) {
-    *c_hash = 5381;
-    for (int i = 0; i < c_size; i++) {
-      *c_hash = (*c_hash) * 33 + C[i];
+    for (int j = 0; j < B_row; j++) {
+      C[i] += A[a_offset + j] * B[(j * B_col) + c_col];
     }
   }
 }
@@ -438,12 +430,11 @@ void octree_main(
 }
 
 kernel void
-mega_kernel(__global int *A, const int a_num_line, const int a_num_col,
-            __global int *B, const int b_num_line, const int b_num_col,
-            __global int *C, __global ulong *c_hash, __global int *randdata,
-            __global float4 *particles, __global float4 *newparticles,
-            __global unsigned int *tree, const unsigned int numParticles,
-            __global unsigned int *treeSize,
+mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
+            const int B_row, const int B_col, __global int *C,
+            __global int *randdata, __global float4 *particles,
+            __global float4 *newparticles, __global unsigned int *tree,
+            const unsigned int numParticles, __global unsigned int *treeSize,
             __global unsigned int *particlesDone, const unsigned int maxchilds,
             const int num_pools, __global Task *deq, __global DequeHeader *dh,
             const unsigned int maxlength, __global float4 *frompart,
@@ -458,8 +449,7 @@ mega_kernel(__global int *A, const int a_num_line, const int a_num_col,
   __local Task newTask[1];
   __local volatile int rval[1];
 #define NON_PERSISTENT_KERNEL                                                  \
-  matmult(A, a_num_line, a_num_col, B, b_num_line, b_num_col, C, c_hash,       \
-          non_persistent_kernel_ctx)
+  matmult(A, A_row, A_col, B, B_row, B_col, C, non_persistent_kernel_ctx)
 #define PERSISTENT_KERNEL                                                      \
   octree_main(randdata, particles, newparticles, tree, numParticles, treeSize, \
               particlesDone, maxchilds, num_pools, deq, dh, maxlength,         \
