@@ -101,6 +101,8 @@ int scan_board(__local uchar *board, int row, int col, Direction direction) {
 /* Only wgmaster return value is meaningful */
 int board_value(__local uchar *board, __local int *val, int local_id, int local_size)
 {
+  val[local_id] = 0;
+
   for (int i = local_id; i < max_scan_id; i += local_size) {
     int tmpval;
 
@@ -235,6 +237,10 @@ void create_children(__local int *child_id, __global Node *nodes, __global atomi
   __global Node *parent = &(nodes[parent_id]);
   for (int i = local_id; i < NUM_COL; i += local_size) {
     int n = atomic_fetch_add(node_head, 1);
+    /* safety */
+    if (n >= NUM_NODE) {
+      break;
+    }
     Node *child = &(nodes[n]);
     child->parent = parent_id;
     child->level = parent->level + 1;
@@ -316,7 +322,10 @@ connect_four(
              __global atomic_int *task_pool_lock,
              __global int *task_pool_head,
              const int num_task_pool,
-             const int task_pool_size
+             const int task_pool_size,
+             /* for debugging */
+             __global int *debug_int,
+             __global uchar *debug_board
              )
 {
   __local int val[256];
@@ -330,6 +339,21 @@ connect_four(
   int local_size = get_local_size(0);
   int group_id = get_group_id(0);
   int global_id = get_global_id(0);
+
+  /* /\* for debug, compuate base board value *\/ */
+  /* if (group_id == 0) { */
+  /*   if (local_id == 0) { */
+  /*     for (int i = 0; i < NUM_CELL; i++) { */
+  /*       board[i] = base_board[i]; */
+  /*     } */
+  /*   } */
+  /*   barrier(CLK_LOCAL_MEM_FENCE); */
+  /*   int v = board_value(&board, val, local_id, local_size); */
+  /*   if (local_id == 0) { */
+  /*     *base_value = v; */
+  /*   } */
+  /*   barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE); */
+  /* } */
 
   /* init */
   if (global_id == 0) {
@@ -358,17 +382,27 @@ connect_four(
 
   barrier(CLK_GLOBAL_MEM_FENCE);
 
-  if (group_id < 7) {
+  /* main loop */
+  while (true) {
 
     int pool_id = group_id % num_task_pool;
 
     Task_pop(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, group_id);
     if (task == NULL_TASK) {
-      return;
+      break;
     }
     /* compute value of node */
-    if (nodes[task].level < 3) {
-      int value = compute_node_value(base_board, board, val, &(nodes[task]), local_id, local_size);
+    int value = compute_node_value(base_board, board, val, &(nodes[task]), local_id, local_size);
+
+    if (task == 35 && local_id == 0) {
+      *debug_int = value;
+      for (int i = 0; i < NUM_CELL; i++) {
+        debug_board[i] = board[i];
+      }
+    }
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+    if (nodes[task].level < 2) {
       if (value != PLUS_INF && value != MINUS_INF) {
         create_children(child_id, nodes, node_head, task, local_id, local_size);
         for (int i = 0; i < 7; i++) {

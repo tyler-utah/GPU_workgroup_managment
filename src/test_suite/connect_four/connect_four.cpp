@@ -179,6 +179,13 @@ int main(int argc, char *argv[])
   err = exec.exec_queue.enqueueFillBuffer(d_task_pool_lock, 0, 0, FLAGS_pools * sizeof(cl_int));
   check_ocl(err);
 
+  cl::Buffer d_debug_int;
+  d_debug_int = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+
+  cl::Buffer d_debug_board(exec.exec_context, CL_MEM_READ_WRITE, board_mem_size);
+  err = exec.exec_queue.enqueueFillBuffer(d_debug_board, EMPTY, 0, board_mem_size);
+  check_ocl(err);
+
   // Set args
 
   int arg_index = 0;
@@ -190,6 +197,10 @@ int main(int argc, char *argv[])
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_task_pool_head));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_pools));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_pool_size));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_debug_int));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_debug_board));
+
+  cout << "Args are set, run kernel" << endl;
 
   // Run kernel
   cl::Event event;
@@ -205,40 +216,29 @@ int main(int argc, char *argv[])
 
   // Computation results
 
-  // Timing
-  cl_ulong kernel_start_ns, kernel_end_ns, kernel_time_ns;
-  err = event.getProfilingInfo(CL_PROFILING_COMMAND_START, &kernel_start_ns);
-  check_ocl(err);
-  err = event.getProfilingInfo(CL_PROFILING_COMMAND_END, &kernel_end_ns);
-  check_ocl(err);
-  kernel_time_ns = kernel_end_ns - kernel_start_ns;
-  cout << "Kernel executed in " << kernel_time_ns << " ns" << endl;
-
-  // err = exec.exec_queue.enqueueReadBuffer(d_board, CL_TRUE, 0, board_mem_size, h_board);
-  // check_ocl(err);
-  // cout << "Updated board" << endl;
-  // print_board(h_board);
-
   Node h_nodes[NUM_NODE];
   err = exec.exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, NUM_NODE * sizeof(Node), h_nodes);
   check_ocl(err);
 
   cout << "Nodes: " << endl;
   for (int i = 0; i < NUM_NODE; i++) {
-    printf("  %2.2d: ", i);
-    cout << " level: " << h_nodes[i].level;
-    cout << " parent: " << h_nodes[i].parent;
-    cout << " value: ";
+    printf("   [%2.2d]", i);
+    printf(" lvl:%+d", h_nodes[i].level);
+    printf(" par:%+2.2d", h_nodes[i].parent);
+    cout << " val:";
     int val = h_nodes[i].value;
     if (val == PLUS_INF) {
-      cout << "CMPTR_WIN" ;
+      cout << "CMPTR" ;
     } else if (val == MINUS_INF) {
-      cout << "HUMAN_WIN" ;
+      cout << "HUMAN" ;
     } else {
-      cout << val;
+      printf("%+4.4d", val);
     }
-    cout << endl;
+    if (((i+1) % 3) == 0) {
+      cout << endl;
+    }
   }
+  cout << endl;
 
   // print task pools and head
   err = exec.exec_queue.enqueueReadBuffer(d_task_pool, CL_TRUE, 0, FLAGS_pools * FLAGS_pool_size * sizeof(Task), h_task_pool);
@@ -260,6 +260,27 @@ int main(int argc, char *argv[])
     }
     printf("\n");
   }
+
+  // Timing
+  cl_ulong kernel_start_ns, kernel_end_ns, kernel_time_ns;
+  err = event.getProfilingInfo(CL_PROFILING_COMMAND_START, &kernel_start_ns);
+  check_ocl(err);
+  err = event.getProfilingInfo(CL_PROFILING_COMMAND_END, &kernel_end_ns);
+  check_ocl(err);
+  kernel_time_ns = kernel_end_ns - kernel_start_ns;
+  cout << "Kernel executed in " << kernel_time_ns << " ns" << endl;
+
+  // debug
+  err = exec.exec_queue.enqueueReadBuffer(d_debug_board, CL_TRUE, 0, board_mem_size, h_board);
+  check_ocl(err);
+  cout << "Debug board" << endl;
+  print_board(h_board);
+
+  cl_int h_debug_int;
+  err = exec.exec_queue.enqueueReadBuffer(d_debug_int, CL_TRUE, 0, sizeof(cl_int), &h_debug_int);
+  check_ocl(err);
+
+  cout << "Debug int: " << h_debug_int << endl;
 
   // clean
 
