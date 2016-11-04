@@ -392,8 +392,10 @@ connect_four(
     if (task == NULL_TASK) {
       break;
     }
+    __global Node *node = &(nodes[task]);
+
     /* compute value of node */
-    int value = compute_node_value(base_board, board, val, &(nodes[task]), local_id, local_size);
+    int value = compute_node_value(base_board, board, val, node, local_id, local_size);
 
     if (task == 35 && local_id == 0) {
       *debug_int = value;
@@ -404,11 +406,24 @@ connect_four(
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
     /* if maxlevel is reached, or value is +-INF, we reached a leaf */
-    if (nodes[task].level >= maxlevel ||
+    if (node->level >= maxlevel ||
         value == PLUS_INF ||
         value == MINUS_INF) {
+
       /* update parent */
-      ;
+      __global Node *parent = &(nodes[node->parent]);
+      if (local_id == 0) {
+        if ((parent->level % 2) == 0) {
+          /* odd level: human, take lowest value of children */
+          atomic_fetch_min(&(parent->value), value);
+        } else {
+          /* even level: computer, take highest value of children */
+          atomic_fetch_max(&(parent->value), value);
+        }
+        /* in all case, increase counter of answer */
+        atomic_fetch_add(&(parent->num_child_answer), 1);
+      }
+
     } else {
       /* create children and associated tasks */
       create_children(child_id, nodes, node_head, task, local_id, local_size);
@@ -419,6 +434,10 @@ connect_four(
         Task_push(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, pool_id);
       }
     }
+  }
+
+  if (global_id == 0) {
+    *debug_int = atomic_load(&(nodes[35].num_child_answer));
   }
 }
 
