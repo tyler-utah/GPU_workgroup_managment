@@ -316,6 +316,7 @@ void Task_push(__local Task *task, __global Task *task_pool, __global atomic_int
 __kernel void
 connect_four(
              __global uchar *base_board,
+             const int maxlevel,
              __global Node *nodes,
              __global atomic_int *node_head,
              __global Task *task_pool,
@@ -402,18 +403,20 @@ connect_four(
     }
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
-    if (nodes[task].level < 2) {
-      if (value != PLUS_INF && value != MINUS_INF) {
-        create_children(child_id, nodes, node_head, task, local_id, local_size);
-        for (int i = 0; i < 7; i++) {
-          task = child_id[i];
-          /* fixme: task_push may fail, in which case use task_donate once
-             it is implemented */
-          Task_push(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, pool_id);
-        }
-      } else {
-        /* todo: update parent without creating children */
-        ;
+    /* if maxlevel is reached, or value is +-INF, we reached a leaf */
+    if (nodes[task].level >= maxlevel ||
+        value == PLUS_INF ||
+        value == MINUS_INF) {
+      /* update parent */
+      ;
+    } else {
+      /* create children and associated tasks */
+      create_children(child_id, nodes, node_head, task, local_id, local_size);
+      for (int i = 0; i < 7; i++) {
+        task = child_id[i];
+        /* fixme: task_push may fail, in which case use task_donate once
+           it is implemented */
+        Task_push(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, pool_id);
       }
     }
   }

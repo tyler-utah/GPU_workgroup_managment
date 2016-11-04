@@ -21,6 +21,7 @@ DEFINE_string(kernel_file, "test_suite/connect_four/device/connect_four.cl", "Ke
 DEFINE_int32(pools, 10, "Number of task pools");
 // Pool size is quite arbitrary, may be tuned
 DEFINE_int32(pool_size, 20, "Size of a task pool");
+DEFINE_int32(maxlevel, 2, "Max level of look-ahead");
 
 DEFINE_string(scheduler_rt_path, "scheduler_rt/rt_device", "Dummy");
 DEFINE_string(restoration_ctx_path, "test_suite/connect_four/common/", "Path to restoration context and other header files");
@@ -92,6 +93,11 @@ int main(int argc, char *argv[])
   cout << "Start" << endl;
 
   flags::ParseCommandLineFlags(&argc, &argv, true);
+
+  if (FLAGS_maxlevel > MAX_LOOKAHEAD) {
+    cout << "Warning, lowering lookahead to " << MAX_LOOKAHEAD << endl;
+    FLAGS_maxlevel = MAX_LOOKAHEAD;
+  }
 
   cl_int err;
 
@@ -190,6 +196,7 @@ int main(int argc, char *argv[])
 
   int arg_index = 0;
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_board));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_maxlevel));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_nodes));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_node_head));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_task_pool));
