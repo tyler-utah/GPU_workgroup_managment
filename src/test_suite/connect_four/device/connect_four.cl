@@ -313,6 +313,37 @@ void Task_push(__local Task *task, __global Task *task_pool, __global atomic_int
 
 /*---------------------------------------------------------------------------*/
 
+/* update_parent() propagate the child value to its parent, recursively
+   to the top if needed. */
+void update_parent(__global Node *nodes, __global Node *child, int local_id)
+{
+  if (local_id == 0) {
+    while (true) {
+      if (child->level == 1) {
+        /* reached the top */
+        break;
+      }
+      int value = atomic_load(&(child->value));
+      __global Node *parent = &(nodes[child->parent]);
+      if ((parent->level % 2) == 0) {
+        /* odd level: human, take lowest value of children */
+        atomic_fetch_min(&(parent->value), value);
+      } else {
+        /* even level: computer, take highest value of children */
+        atomic_fetch_max(&(parent->value), value);
+      }
+      /* in all case, increase counter of answer */
+      int prev_num_answer = atomic_fetch_add(&(parent->num_child_answer), 1);
+      /* when prev_num_answer == 6, it means that our answer was the
+         last and that we must propagate the answer upward */
+      child = parent;
+    }
+  }
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+}
+
+/*---------------------------------------------------------------------------*/
+
 __kernel void
 connect_four(
              __global uchar *base_board,
@@ -333,8 +364,6 @@ connect_four(
   __local uchar board[NUM_CELL];
   __local Task task;
   __local int child_id[7];
-  /* Moves are stored in uchar since possible values are in 0..6 */
-  uchar moves[8];
 
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
@@ -409,21 +438,7 @@ connect_four(
     if (node->level >= maxlevel ||
         value == PLUS_INF ||
         value == MINUS_INF) {
-
-      /* update parent */
-      __global Node *parent = &(nodes[node->parent]);
-      if (local_id == 0) {
-        if ((parent->level % 2) == 0) {
-          /* odd level: human, take lowest value of children */
-          atomic_fetch_min(&(parent->value), value);
-        } else {
-          /* even level: computer, take highest value of children */
-          atomic_fetch_max(&(parent->value), value);
-        }
-        /* in all case, increase counter of answer */
-        atomic_fetch_add(&(parent->num_child_answer), 1);
-      }
-
+      update_parent(nodes, node, local_id);
     } else {
       /* create children and associated tasks */
       create_children(child_id, nodes, node_head, task, local_id, local_size);
