@@ -55,7 +55,7 @@ using namespace std;
 #elif defined PERSISTENT_PANNOTIA_BC
 #include "../graph_apps/bc/bc.h"
 #elif defined PERSISTENT_OCTREE
-#include "host/octree.h"
+#include "octree.h"
 #else
 #error "No persistent task macro defined? like PERSISTENT_XYZ (check your CMakeLists.txt)"
 #endif
