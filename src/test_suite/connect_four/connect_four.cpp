@@ -220,7 +220,7 @@ int main(int argc, char *argv[])
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_debug_int));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_debug_board));
 
-  cout << "Args are set, run kernel" << endl;
+  cout << "Args are set, run kernel (" << FLAGS_threads << " threads, " << FLAGS_workgroups << " workgroups)" << endl;
 
   // Run kernel
   cl::Event event;
@@ -240,8 +240,8 @@ int main(int argc, char *argv[])
   err = exec.exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, NUM_NODE * sizeof(Node), h_nodes);
   check_ocl(err);
 
-  cout << "Nodes: " << endl;
-  for (int i = 0; i < NUM_NODE; i++) {
+  cout << "Nodes (limited to 70): " << endl;
+  for (int i = 0; i < 70; i++) {
     printf("   [%2.2d]", i);
     printf(" lvl:%+d", h_nodes[i].level);
     printf(" par:%+2.2d", h_nodes[i].parent);

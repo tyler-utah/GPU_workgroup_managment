@@ -18,7 +18,7 @@ const CL_INT_TYPE MINUS_INF = -666;
 /* The actual level of lookahead is controlled by the "maxlevel" flag,
  * MAX_LOOKAHEAD is a hard-coded upper-bound. */
 const CL_INT_TYPE MAX_LOOKAHEAD = 7;
-const CL_INT_TYPE NUM_NODE = 70;
+const CL_INT_TYPE NUM_NODE = 7 * 64;
 
 /*---------------------------------------------------------------------------*/
 
