@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
 
   cl::Buffer d_task_pool_head;
   d_task_pool_head = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, FLAGS_pools * sizeof(cl_int));
-  err = exec.exec_queue.enqueueFillBuffer(d_task_pool_lock, 0, 0, FLAGS_pools * sizeof(cl_int));
+  err = exec.exec_queue.enqueueFillBuffer(d_task_pool_head, 0, 0, FLAGS_pools * sizeof(cl_int));
   check_ocl(err);
 
   cl::Buffer d_next_move_value(exec.exec_context, CL_MEM_READ_WRITE, NUM_COL * sizeof(cl_int));
@@ -193,7 +193,7 @@ int main(int argc, char *argv[])
   check_ocl(err);
 
   cl::Buffer d_root_done(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
-  err = exec.exec_queue.enqueueFillBuffer(d_next_move_value, 0, 0, sizeof(cl_int));
+  err = exec.exec_queue.enqueueFillBuffer(d_root_done, 0, 0, sizeof(cl_int));
   check_ocl(err);
 
   cl::Buffer d_debug_int;
@@ -272,11 +272,16 @@ int main(int argc, char *argv[])
   err = exec.exec_queue.enqueueReadBuffer(d_task_pool_head, CL_TRUE, 0, FLAGS_pools * sizeof(cl_int), h_task_pool_head);
   check_ocl(err);
 
+  int limit = FLAGS_pool_size < 20 ? FLAGS_pool_size : 20;
+  printf("Pools (size limited to %d):\n", limit);
   for (int i = 0; i < FLAGS_pools; i++) {
     printf("Pool %2.2d (head %2.2d): ", i, h_task_pool_head[i]);
-    for (int j = 0; j < FLAGS_pool_size; j++) {
+    for (int j = 0; j < limit; j++) {
       printf("%s", (j == h_task_pool_head[i]) ? "|" : " ");
       printf("%3.3d", h_task_pool[(i * FLAGS_pool_size) + j]);
+    }
+    if (FLAGS_pool_size >= limit) {
+      printf(" ...");
     }
     printf("\n");
   }
