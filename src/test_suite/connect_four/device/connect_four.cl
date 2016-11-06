@@ -258,18 +258,18 @@ int wgm_task_pop(__global Task *task_pool, __global atomic_int *task_pool_lock, 
 /* Task_push() adds the task argument to the indicated pool. If the pool
    is full, then the task argument is left untouched, otherwise
    NULL_TASK is assigned to it. */
-Task wgm_task_push(Task node_id, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
+Task wgm_task_push(Task task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
 {
   /* spinwait on the pool lock */
   while (!(try_lock(task_pool_lock, pool_id)));
   /* If pool is not full, insert task */
   if (task_pool_head[pool_id] < task_pool_size) {
-    task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]] = node_id;
+    task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]] = task;
     task_pool_head[pool_id]++;
-    node_id = NULL_TASK;
+    task = NULL_TASK;
   }
   unlock(task_pool_lock, pool_id);
-  return node_id;
+  return task;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -354,7 +354,8 @@ connect_four(
       atomic_store(&(nodes[i].num_child_answer), 0);
 
       /* register task */
-      int pool_id = i % num_task_pool;
+      //int pool_id = i % num_task_pool;
+      int pool_id = 0;
       task_pool[(pool_id * task_pool_size) + task_pool_head[pool_id]] = i;
       task_pool_head[pool_id] += 1;
     }
@@ -379,6 +380,17 @@ connect_four(
 
     if (local_id == 0) {
       task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
+      /* if no more task in own pool, try to steal some from other pools */
+      if (task == NULL_TASK) {
+        for (int i = 1; i < num_task_pool; i++) {
+          int steal_pool_id = (group_id + i) % num_task_pool;
+          task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
+          if (task != NULL_TASK) {
+            break;
+          }
+        }
+      }
+      /* if task is still null, there may be no work left anymore */
       game_over = false;
       if (task == NULL_TASK) {
         game_over = (atomic_load(root_done) == NUM_COL);
