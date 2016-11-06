@@ -244,20 +244,15 @@ int main(int argc, char *argv[])
   cout << "Nodes (limited to 70): " << endl;
   for (int i = 0; i < 70; i++) {
     printf("   [%2.2d]", i);
-    printf(" lvl:%+d", h_nodes[i].level);
-    printf(" par:%+2.2d", h_nodes[i].parent);
-    cout << " val:";
-    int val = h_nodes[i].value;
-    if (val == PLUS_INF) {
-      cout << "CMPTR" ;
-    } else if (val == MINUS_INF) {
-      cout << "HUMAN" ;
-    } else {
-      printf("%+4.4d", val);
+    printf(" l:%+d", h_nodes[i].level);
+    printf(" p:%+2.2d", h_nodes[i].parent);
+    printf(" v:%+3.3d", h_nodes[i].value);
+    // moves
+    printf(" m[");
+    for (int j = 0; j < h_nodes[i].level; j++) {
+      printf(" %d", h_nodes[i].moves[j]);
     }
-    if (((i+1) % 3) == 0) {
-      cout << endl;
-    }
+    printf(" ]\n");
   }
   cout << endl;
 

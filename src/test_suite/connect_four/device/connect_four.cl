@@ -293,10 +293,10 @@ void wgm_update_parent(__global Node *nodes, int node_id, __global int *next_mov
     int value = atomic_load(&(node->value));
 
     if ((parent->level % 2) == 0) {
-      /* odd level: human, take lowest value of children */
+      /* parent level is even: human takes lowest value */
       atomic_fetch_min(&(parent->value), value);
     } else {
-      /* even level: computer, take highest value of children */
+      /* parent level is odd: computer takes highest value */
       atomic_fetch_max(&(parent->value), value);
     }
     /* in all case, increase counter of answer */
