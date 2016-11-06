@@ -439,8 +439,11 @@ connect_four(
         /* create children */
         for (int i = 0; i < NUM_COL; i++) {
           Task child_id = wgm_create_children(i, nodes, node_head, task);
-          /* fixme: task_push may fail, in which case use task_donate once */
-          wgm_task_push(child_id, task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
+          int push_pool_id = pool_id;
+          /* loop on trying to push the task in a pool */
+          while (wgm_task_push(child_id, task_pool, task_pool_lock, task_pool_head, task_pool_size, push_pool_id) != NULL_TASK) {
+            push_pool_id = (push_pool_id + 1) % num_task_pool;
+          }
         }
       }
     }
