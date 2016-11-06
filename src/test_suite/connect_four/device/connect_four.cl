@@ -406,9 +406,11 @@ connect_four(
 
   /* poor man's global barrier, to replace with proper global_barrier()
      for kernel_merge usage */
-  while (atomic_load(node_head) != 7);
+  if (local_id == 0) {
+    while (atomic_load(node_head) != 7);
+  }
 
-  barrier(CLK_GLOBAL_MEM_FENCE);
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
   /* main loop */
   while (true) {
