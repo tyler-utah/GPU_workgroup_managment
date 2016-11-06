@@ -334,8 +334,6 @@ connect_four(
   __local int val[256];
   __local uchar board[NUM_CELL];
   __local Task task;
-  __local int child_id[7];
-  __local int value;
 
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
@@ -396,7 +394,7 @@ connect_four(
     if (local_id == 0) {
 
       /* Reduce value */
-      value = 0;
+      int value = 0;
       for (int i = 0; i < local_size; i++) {
         if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
           value = val[i];
