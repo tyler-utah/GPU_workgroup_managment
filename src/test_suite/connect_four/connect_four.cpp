@@ -14,7 +14,7 @@
 DEFINE_int32(platform_id, 0, "OpenCL platform ID to use");
 DEFINE_int32(device_id, 0, "OpenCL device ID to use");
 DEFINE_int32(threads, 256, "Number of threads per workgroups");
-DEFINE_int32(workgroups, 10, "Number of workgroups");
+DEFINE_int32(workgroups, 7, "Number of workgroups");
 DEFINE_string(kernel_file, "test_suite/connect_four/device/connect_four.cl", "Kernel file name");
 
 // FIXME: size number of pools w.r.t. occupancy
