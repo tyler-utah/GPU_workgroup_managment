@@ -355,8 +355,8 @@ connect_four(
 
       /* register task */
       int pool_id = i % num_task_pool;
-      task_pool[(pool_id * task_pool_size)] = i;
-      task_pool_head[pool_id] = 1;
+      task_pool[(pool_id * task_pool_size) + task_pool_head[pool_id]] = i;
+      task_pool_head[pool_id] += 1;
     }
     atomic_store(node_head, 7);
     atomic_store(root_done, 0);
