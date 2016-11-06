@@ -185,6 +185,10 @@ int main(int argc, char *argv[])
   err = exec.exec_queue.enqueueFillBuffer(d_task_pool_lock, 0, 0, FLAGS_pools * sizeof(cl_int));
   check_ocl(err);
 
+  cl::Buffer d_next_move_value(exec.exec_context, CL_MEM_READ_WRITE, NUM_COL * sizeof(cl_int));
+  err = exec.exec_queue.enqueueFillBuffer(d_next_move_value, 0, 0, NUM_COL * sizeof(cl_int));
+  check_ocl(err);
+
   cl::Buffer d_debug_int;
   d_debug_int = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
 
@@ -204,6 +208,7 @@ int main(int argc, char *argv[])
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_task_pool_head));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_pools));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_pool_size));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_next_move_value));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_debug_int));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_debug_board));
 
@@ -267,6 +272,20 @@ int main(int argc, char *argv[])
     }
     printf("\n");
   }
+
+  // Next move value
+  cl_int *h_next_move_value = (cl_int *)calloc(NUM_COL, sizeof(cl_int));
+  if (h_next_move_value == NULL) {
+    cout << "calloc failed" << endl;
+    exit(EXIT_FAILURE);
+  }
+  err = exec.exec_queue.enqueueReadBuffer(d_next_move_value, CL_TRUE, 0, NUM_COL * sizeof(cl_int), h_next_move_value);
+  check_ocl(err);
+  printf("Next move value:");
+  for (int i = 0; i < NUM_COL; i++) {
+    printf(" %d: %+3.3d", i, h_next_move_value[i]);
+  }
+  printf("\n");
 
   // Timing
   cl_ulong kernel_start_ns, kernel_end_ns, kernel_time_ns;

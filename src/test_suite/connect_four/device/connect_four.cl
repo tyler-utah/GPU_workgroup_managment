@@ -315,16 +315,24 @@ void Task_push(__local Task *task, __global Task *task_pool, __global atomic_int
 
 /* update_parent() propagate the child value to its parent, recursively
    to the top if needed. */
-void update_parent(__global Node *nodes, __global Node *child, int local_id)
+void update_parent(__global Node *nodes, int node_id, int local_id, __global int *next_move_value)
 {
   if (local_id == 0) {
     while (true) {
-      if (child->level == 1) {
-        /* reached the top */
+      __global Node *node = &(nodes[node_id]);
+
+      if (node->level == 1) {
+        /* reached the top, update next_move_value if all children have
+           responded */
+        int num_answer = atomic_load(&(node->num_child_answer));
+        if (num_answer == 7) {
+          next_move_value[node_id] = atomic_load(&(node->value));
+        }
         break;
       }
-      int value = atomic_load(&(child->value));
-      __global Node *parent = &(nodes[child->parent]);
+
+      int value = atomic_load(&(node->value));
+      __global Node *parent = &(nodes[node->parent]);
       if ((parent->level % 2) == 0) {
         /* odd level: human, take lowest value of children */
         atomic_fetch_min(&(parent->value), value);
@@ -334,9 +342,13 @@ void update_parent(__global Node *nodes, __global Node *child, int local_id)
       }
       /* in all case, increase counter of answer */
       int prev_num_answer = atomic_fetch_add(&(parent->num_child_answer), 1);
-      /* when prev_num_answer == 6, it means that our answer was the
-         last and that we must propagate the answer upward */
-      child = parent;
+
+      /* if we were the last child to update, move upward */
+      if (prev_num_answer == 6) {
+        node_id = node->parent;
+      } else {
+        break;
+      }
     }
   }
   barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
@@ -355,8 +367,9 @@ connect_four(
              __global int *task_pool_head,
              const int num_task_pool,
              const int task_pool_size,
+             __global int *next_move_value,
              /* for debugging */
-             __global int *debug_int,
+             __global atomic_int *debug_int,
              __global uchar *debug_board
              )
 {
@@ -370,25 +383,11 @@ connect_four(
   int group_id = get_group_id(0);
   int global_id = get_global_id(0);
 
-  /* /\* for debug, compuate base board value *\/ */
-  /* if (group_id == 0) { */
-  /*   if (local_id == 0) { */
-  /*     for (int i = 0; i < NUM_CELL; i++) { */
-  /*       board[i] = base_board[i]; */
-  /*     } */
-  /*   } */
-  /*   barrier(CLK_LOCAL_MEM_FENCE); */
-  /*   int v = board_value(&board, val, local_id, local_size); */
-  /*   if (local_id == 0) { */
-  /*     *base_value = v; */
-  /*   } */
-  /*   barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE); */
-  /* } */
-
   /* init */
   if (global_id == 0) {
     /* Initiate with the 7 nodes of the first level */
     for (int i = 0; i < 7; i++) {
+      next_move_value[i] = MINUS_INF;
       /* create node */
       nodes[i].parent = -1;
       nodes[i].level = 1;
@@ -426,19 +425,17 @@ connect_four(
     /* compute value of node */
     int value = compute_node_value(base_board, board, val, node, local_id, local_size);
 
-    if (task == 35 && local_id == 0) {
-      *debug_int = value;
-      for (int i = 0; i < NUM_CELL; i++) {
-        debug_board[i] = board[i];
-      }
-    }
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
     /* if maxlevel is reached, or value is +-INF, we reached a leaf */
     if (node->level >= maxlevel ||
         value == PLUS_INF ||
         value == MINUS_INF) {
-      update_parent(nodes, node, local_id);
+      update_parent(nodes, task, local_id, next_move_value);
+      /* mark node as leaf, i.e. all children have responded */
+      /* if (local_id == 0) { */
+      /*   atomic_store(&(node->num_child_answer), 7); */
+      /* } */
     } else {
       /* create children and associated tasks */
       create_children(child_id, nodes, node_head, task, local_id, local_size);
@@ -449,10 +446,6 @@ connect_four(
         Task_push(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, pool_id);
       }
     }
-  }
-
-  if (global_id == 0) {
-    *debug_int = atomic_load(&(nodes[35].num_child_answer));
   }
 }
 
