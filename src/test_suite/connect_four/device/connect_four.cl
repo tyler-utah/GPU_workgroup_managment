@@ -381,7 +381,12 @@ connect_four(
       task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
       game_over = false;
       if (task == NULL_TASK) {
-        int done = NUM_COL; //atomic_load(root_done);
+        int done;
+        if (group_id < NUM_COL) {
+          done = atomic_load(root_done);
+        } else {
+          done = NUM_COL; //atomic_load(root_done);
+        }
         game_over = (done == NUM_COL);
       }
     }
@@ -433,9 +438,7 @@ connect_four(
           wgm_task_push(child_id, task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
         }
       }
-
     }
-
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
   }
 }
