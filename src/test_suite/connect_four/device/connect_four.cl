@@ -272,22 +272,21 @@ void unlock(__global atomic_int *task_pool_lock, int pool_id)
 
 /*---------------------------------------------------------------------------*/
 
-/* Task_pop() grabs a task from a pool and stores it in the task
-   argument. If the pool is empty, then NULL_TASK is assigned to task. */
-void Task_pop(__local Task *task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int local_id, int pool_id)
+/* wgm_task_pop() MUST be called by local_id 0. This function grabs a
+   task from a pool and stores it in the task argument. If the pool is
+   empty, then NULL_TASK is assigned to task. */
+int wgm_task_pop(__global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
 {
-  if (local_id == 0) {
-    *task = NULL_TASK;
-    /* spinwait on the pool lock */
-    while (!(try_lock(task_pool_lock, pool_id)));
-    /* If pool is not empty, pick up the latest inserted task. */
-    if (task_pool_head[pool_id] > 0) {
-      task_pool_head[pool_id]--;
-      *task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
-    }
-    unlock(task_pool_lock, pool_id);
+  int task = NULL_TASK;
+  /* spinwait on the pool lock */
+  while (!(try_lock(task_pool_lock, pool_id)));
+  /* If pool is not empty, pick up the latest inserted task. */
+  if (task_pool_head[pool_id] > 0) {
+    task_pool_head[pool_id]--;
+    task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
   }
-  barrier(CLK_LOCAL_MEM_FENCE);
+  unlock(task_pool_lock, pool_id);
+  return task;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -416,10 +415,14 @@ connect_four(
 
     int pool_id = group_id % num_task_pool;
 
-    Task_pop(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, group_id);
+    if (local_id == 0) {
+      task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
+    }
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
     if (task == NULL_TASK) {
       break;
     }
+
     __global Node *node = &(nodes[task]);
 
     /* compute value of node */
@@ -427,6 +430,7 @@ connect_four(
 
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
+    /* all updates are done by master thread of workgroup */
     /* if maxlevel is reached, or value is +-INF, we reached a leaf */
     if (node->level >= maxlevel ||
         value == PLUS_INF ||
@@ -446,6 +450,9 @@ connect_four(
         Task_push(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, pool_id);
       }
     }
+
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
   }
 }
 
