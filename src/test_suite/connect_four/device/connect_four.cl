@@ -334,6 +334,7 @@ connect_four(
   __local int val[256];
   __local uchar board[NUM_CELL];
   __local Task task;
+  __local bool game_over;
 
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
@@ -358,6 +359,7 @@ connect_four(
       task_pool_head[pool_id] = 1;
     }
     atomic_store(node_head, 7);
+    atomic_store(root_done, 0);
   }
 
   barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
@@ -377,10 +379,19 @@ connect_four(
 
     if (local_id == 0) {
       task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
+      game_over = false;
+      if (task == NULL_TASK) {
+        int done = NUM_COL; //atomic_load(root_done);
+        game_over = (done == NUM_COL);
+      }
     }
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
     if (task == NULL_TASK) {
-      break;
+      if (game_over) {
+        break;
+      } else {
+        continue;
+      }
     }
 
     /* treat task */

@@ -159,14 +159,17 @@ int main(int argc, char *argv[])
   // nodes
   cl::Buffer d_nodes;
   d_nodes = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, NUM_NODE * sizeof(Node));
+  err = exec.exec_queue.enqueueFillBuffer(d_nodes, 0, 0, NUM_NODE * sizeof(Node));
+  check_ocl(err);
+
   cl::Buffer d_node_head;
   d_node_head = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+  err = exec.exec_queue.enqueueFillBuffer(d_node_head, 0, 0, sizeof(cl_int));
+  check_ocl(err);
 
   // task pools
   cl::Buffer d_task_pool;
   d_task_pool = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, FLAGS_pools * FLAGS_pool_size * sizeof(Task));
-
-  // init the task_pool to force 0 since we print it afterwards
   Task *h_task_pool = (Task *)calloc(FLAGS_pools * FLAGS_pool_size, sizeof(Task));
   if (h_task_pool == NULL) {
     cout << "calloc failed" << endl;
