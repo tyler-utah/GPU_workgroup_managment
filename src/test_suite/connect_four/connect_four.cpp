@@ -189,6 +189,10 @@ int main(int argc, char *argv[])
   err = exec.exec_queue.enqueueFillBuffer(d_next_move_value, 0, 0, NUM_COL * sizeof(cl_int));
   check_ocl(err);
 
+  cl::Buffer d_root_done(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
+  err = exec.exec_queue.enqueueFillBuffer(d_next_move_value, 0, 0, sizeof(cl_int));
+  check_ocl(err);
+
   cl::Buffer d_debug_int;
   d_debug_int = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
 
@@ -209,6 +213,7 @@ int main(int argc, char *argv[])
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_pools));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, FLAGS_pool_size));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_next_move_value));
+  check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_root_done));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_debug_int));
   check_ocl(exec.exec_kernels["connect_four"].setArg(arg_index++, d_debug_board));
 
@@ -286,6 +291,12 @@ int main(int argc, char *argv[])
     printf(" %d: %+3.3d", i, h_next_move_value[i]);
   }
   printf("\n");
+
+  // Root done
+  cl_int h_root_done = 0;
+  err = exec.exec_queue.enqueueReadBuffer(d_root_done, CL_TRUE, 0, sizeof(cl_int), &h_root_done);
+  check_ocl(err);
+  printf("Root done: %d\n", h_root_done);
 
   // Timing
   cl_ulong kernel_start_ns, kernel_end_ns, kernel_time_ns;

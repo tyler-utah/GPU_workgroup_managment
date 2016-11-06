@@ -274,45 +274,41 @@ Task wgm_task_push(Task node_id, __global Task *task_pool, __global atomic_int *
 
 /*---------------------------------------------------------------------------*/
 
-/* update_parent() propagate the child value to its parent, recursively
-   to the top if needed. */
-void update_parent(__global Node *nodes, int node_id, int local_id, __global int *next_move_value)
+/* wgm_update_parent() MUST be called by the workgroup master
+   thread. This function propagates the child value to its parent,
+   recursively to the top if needed. */
+void wgm_update_parent(__global Node *nodes, int node_id, __global int *next_move_value, __global atomic_int *root_done)
 {
-  if (local_id == 0) {
-    while (true) {
-      __global Node *node = &(nodes[node_id]);
+  while (true) {
+    __global Node *node = &(nodes[node_id]);
 
-      if (node->level == 1) {
-        /* reached the top, update next_move_value if all children have
-           responded */
-        int num_answer = atomic_load(&(node->num_child_answer));
-        if (num_answer == 7) {
-          next_move_value[node_id] = atomic_load(&(node->value));
-        }
-        break;
-      }
+    if (node->level == 1) {
+      /* we've reached the top, a root has terminated */
+      next_move_value[node_id] = atomic_load(&(node->value));
+      atomic_fetch_add(root_done, 1);
+      return;
+    }
 
-      int value = atomic_load(&(node->value));
-      __global Node *parent = &(nodes[node->parent]);
-      if ((parent->level % 2) == 0) {
-        /* odd level: human, take lowest value of children */
-        atomic_fetch_min(&(parent->value), value);
-      } else {
-        /* even level: computer, take highest value of children */
-        atomic_fetch_max(&(parent->value), value);
-      }
-      /* in all case, increase counter of answer */
-      int prev_num_answer = atomic_fetch_add(&(parent->num_child_answer), 1);
+    __global Node *parent = &(nodes[node->parent]);
+    int value = atomic_load(&(node->value));
 
-      /* if we were the last child to update, move upward */
-      if (prev_num_answer == 6) {
-        node_id = node->parent;
-      } else {
-        break;
-      }
+    if ((parent->level % 2) == 0) {
+      /* odd level: human, take lowest value of children */
+      atomic_fetch_min(&(parent->value), value);
+    } else {
+      /* even level: computer, take highest value of children */
+      atomic_fetch_max(&(parent->value), value);
+    }
+    /* in all case, increase counter of answer */
+    int prev_num_answer = atomic_fetch_add(&(parent->num_child_answer), 1);
+
+    /* if we were the last child to update, move upward */
+    if (prev_num_answer == 6) {
+      node_id = node->parent;
+    } else {
+      return;
     }
   }
-  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -329,6 +325,7 @@ connect_four(
              const int num_task_pool,
              const int task_pool_size,
              __global int *next_move_value,
+             __global atomic_int *root_done,
              /* for debugging */
              __global atomic_int *debug_int,
              __global uchar *debug_board
@@ -412,43 +409,25 @@ connect_four(
       if (node->level >= maxlevel ||
         value == PLUS_INF ||
         value == MINUS_INF) {
-        ;
+
+        /* we reached a leaf */
+        atomic_store(&(node->num_child_answer), 7);
+        int node_id = task;
+        wgm_update_parent(nodes, node_id, next_move_value, root_done);
+
       } else {
 
-        /* create seven children */
-        for (int i = 0; i < 7; i++) {
+        /* create children */
+        for (int i = 0; i < NUM_COL; i++) {
           Task child_id = wgm_create_children(i, nodes, node_head, task);
           /* fixme: task_push may fail, in which case use task_donate once */
           wgm_task_push(child_id, task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
         }
       }
+
     }
 
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
-
-    /* all updates are done by master thread of workgroup */
-    /* if maxlevel is reached, or value is +-INF, we reached a leaf */
-    /* if (node->level >= maxlevel || */
-    /*     value == PLUS_INF || */
-    /*     value == MINUS_INF) { */
-    /*   update_parent(nodes, task, local_id, next_move_value); */
-    /*   /\* mark node as leaf, i.e. all children have responded *\/ */
-    /*   /\* if (local_id == 0) { *\/ */
-    /*   /\*   atomic_store(&(node->num_child_answer), 7); *\/ */
-    /*   /\* } *\/ */
-    /* } else { */
-    /*   /\* create children and associated tasks *\/ */
-    /*   wgm_create_children(nodes, node_head, task); */
-    /*   for (int i = 0; i < 7; i++) { */
-    /*     task = child_id[i]; */
-    /*     /\* fixme: task_push may fail, in which case use task_donate once */
-    /*        it is implemented *\/ */
-    /*     Task_push(&task, task_pool, task_pool_lock, task_pool_head, task_pool_size, local_id, pool_id); */
-    /*   } */
-    /* } */
-
-    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
-
   }
 }
 
