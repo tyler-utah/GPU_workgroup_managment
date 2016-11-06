@@ -99,9 +99,9 @@ int scan_board(__local uchar *board, int row, int col, Direction direction) {
 /*---------------------------------------------------------------------------*/
 
 /* Only wgmaster return value is meaningful */
-int board_value(__local uchar *board, __local int *val, int local_id, int local_size)
+int board_value(__local uchar *board, int local_id, int local_size)
 {
-  val[local_id] = 0;
+  int value = 0;
 
   for (int i = local_id; i < max_scan_id; i += local_size) {
     int tmpval;
@@ -135,32 +135,17 @@ int board_value(__local uchar *board, __local int *val, int local_id, int local_
       }
     }
 
-    /* update val */
+    /* update value */
     if (tmpval == PLUS_INF || tmpval == MINUS_INF) {
       /* found a winner */
-      val[local_id] = tmpval;
+      value = tmpval;
       break;
     } else {
-      val[local_id] += tmpval;
+      value += tmpval;
     }
   }
 
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  /* wgmaster reduces */
-  if (local_id == 0) {
-    int res = 0;
-    for (int i = 0; i < local_size; i++) {
-      if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
-        return val[i];
-      }
-      res += val[i];
-    }
-    return res;
-  }
-
-  /* only wgmaster return value is meaningful */
-  return 0;
+  return value;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -208,26 +193,6 @@ void update_board(__local uchar *board, __global uchar *base_board, __global Nod
     }
   }
   barrier(CLK_LOCAL_MEM_FENCE);
-}
-
-/*---------------------------------------------------------------------------*/
-
-/* compute_node_value() returns the value of the board given the node
-   moves, this value is also stored in the corresponding node
-   field. This function does not compute values of potential children
-   nodes. */
-int compute_node_value(__global uchar *base_board, __local uchar *board, __local int *val, __global Node *node, int local_id, int local_size)
-{
-  update_board(board, base_board, node, local_id, local_size);
-  int value = board_value(board, val, local_id, local_size);
-  if (local_id == 0) {
-    atomic_store(&(node->value), value);
-    /* broadcast value to all nodes through val */
-    val[0] = value;
-  }
-  barrier(CLK_LOCAL_MEM_FENCE);
-  value = val[0];
-  return value;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -376,6 +341,7 @@ connect_four(
   __local uchar board[NUM_CELL];
   __local Task task;
   __local int child_id[7];
+  __local int value;
 
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
@@ -425,10 +391,27 @@ connect_four(
       break;
     }
 
+    /* treat task */
     __global Node *node = &(nodes[task]);
+    update_board(board, base_board, node, local_id, local_size);
+    val[local_id] = board_value(board, local_id, local_size);
 
-    /* compute value of node */
-    int value = compute_node_value(base_board, board, val, node, local_id, local_size);
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+    /* Update node value */
+    if (local_id == 0) {
+
+      /* Reduce value */
+      value = 0;
+      for (int i = 0; i < local_size; i++) {
+        if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
+          value = val[i];
+          break;
+        }
+        value = value + val[i];
+      }
+      atomic_store(&(node->value), value);
+    }
 
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
