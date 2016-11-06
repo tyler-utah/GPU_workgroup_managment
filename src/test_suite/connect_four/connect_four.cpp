@@ -168,14 +168,15 @@ int main(int argc, char *argv[])
   check_ocl(err);
 
   // task pools
+  const size_t task_pool_size = FLAGS_pools * FLAGS_pool_size * sizeof(Task);
   cl::Buffer d_task_pool;
-  d_task_pool = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, FLAGS_pools * FLAGS_pool_size * sizeof(Task));
+  d_task_pool = cl::Buffer(exec.exec_context, CL_MEM_READ_WRITE, task_pool_size);
   Task *h_task_pool = (Task *)calloc(FLAGS_pools * FLAGS_pool_size, sizeof(Task));
   if (h_task_pool == NULL) {
     cout << "calloc failed" << endl;
     exit(EXIT_FAILURE);
   }
-  err = exec.exec_queue.enqueueWriteBuffer(d_task_pool, CL_TRUE, 0, FLAGS_pools * FLAGS_pool_size * sizeof(Task), h_task_pool);
+  err = exec.exec_queue.enqueueWriteBuffer(d_task_pool, CL_TRUE, 0, task_pool_size, h_task_pool);
   check_ocl(err);
 
   cl::Buffer d_task_pool_lock;
