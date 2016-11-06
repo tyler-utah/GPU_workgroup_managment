@@ -420,8 +420,7 @@ connect_four(
 
         /* we reached a leaf */
         atomic_store(&(node->num_child_answer), 7);
-        int node_id = task;
-        wgm_update_parent(nodes, node_id, next_move_value, root_done);
+        wgm_update_parent(nodes, task, next_move_value, root_done);
 
       } else {
 
