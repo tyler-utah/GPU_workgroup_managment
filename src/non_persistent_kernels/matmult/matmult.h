@@ -18,6 +18,8 @@ size_t c_mem_size;
 cl::Buffer d_C;
 cl_int *h_C;
 
+int h_hash;
+
 /*---------------------------------------------------------------------------*/
 
 const char* non_persistent_app_name() {
@@ -61,6 +63,29 @@ int hash_mat(cl_int *M, int num_row, int num_col)
     col++;
   }
   return hash;
+}
+
+/*---------------------------------------------------------------------------*/
+
+void host_matrix_multiply(cl_int *A, int A_row, int A_col,
+                         cl_int *B, int B_row, int B_col,
+                         cl_int *C)
+{
+  int C_row = A_row;
+  int C_col = B_col;
+
+  if (A_col != B_row) {
+    return;
+  }
+
+  for (int r = 0 ; r < C_row; r++) {
+    for (int c = 0; c < C_col; c++) {
+      C[(r * C_row) + c] = 0;
+      for (int i = 0; i < A_col; i++) {
+        C[(r * C_row) + c] += A[(r * A_row) + i] * B[(i * B_row) + c];
+      }
+    }
+  }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -114,10 +139,22 @@ void init_non_persistent_app(CL_Execution *exec) {
   free(h_B);
 
   /* Allocate and keep host buffer for C */
-  h_C = (cl_int *)malloc(c_mem_size);
+  h_C = (cl_int *)calloc(FLAGS_A_row * FLAGS_B_col, sizeof(cl_int));
   if (h_C == NULL) {
+    cout << "calloc failed" << endl;
     exit(EXIT_FAILURE);
   }
+
+  /* Compute C to obtain hash */
+  host_matrix_multiply(h_A, FLAGS_A_row, FLAGS_A_col,
+                       h_B, FLAGS_B_row, FLAGS_B_col,
+                       h_C);
+
+  h_hash = hash_mat(h_C, FLAGS_A_row, FLAGS_B_col);
+
+  cout << "matmult: host side hash: " << h_hash << endl;
+
+  memset(h_C, 0, c_mem_size);
 }
 
 /*---------------------------------------------------------------------------*/
