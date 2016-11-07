@@ -136,26 +136,27 @@ int set_non_persistent_app_args(int arg_index, cl::Kernel k) {
 
 /*---------------------------------------------------------------------------*/
 
-void reset_non_persistent(CL_Execution *exec) {
-  cl_int err;
-  err = exec->exec_queue.enqueueFillBuffer(d_C, 0, 0, c_mem_size);
-  check_ocl(err);
-  return;
+void reset_non_persistent() {
+  /* cl_int err; */
+  /* err = exec->exec_queue.enqueueFillBuffer(d_C, 0, 0, c_mem_size); */
+  /* check_ocl(err); */
+  /* return; */
 }
 
 /*---------------------------------------------------------------------------*/
 
-bool check_non_persistent_task(CL_Execution *exec) {
-  cl_int err = 0;
-  /* h_C is allocated in init */
-  err = exec->exec_queue.enqueueReadBuffer(d_C, CL_TRUE, 0, c_mem_size, h_C);
-  check_ocl(err);
+bool check_non_persistent_task() {
+  /* cl_int err = 0; */
+  /* /\* h_C is allocated in init *\/ */
+  /* err = exec->exec_queue.enqueueReadBuffer(d_C, CL_TRUE, 0, c_mem_size, h_C); */
+  /* check_ocl(err); */
 
-  int hash = hash_mat(h_C, FLAGS_A_row, FLAGS_B_col);
-  /* The hash for a matrix of 100 with seed 1234 is -161045286 */
-  int ref_hash = -161045286;
+  /* int hash = hash_mat(h_C, FLAGS_A_row, FLAGS_B_col); */
+  /* /\* The hash for a matrix of 100 with seed 1234 is -161045286 *\/ */
+  /* int ref_hash = -161045286; */
 
-  return (hash == ref_hash);
+  /* return (hash == ref_hash); */
+  return 0;
 }
 
 /*---------------------------------------------------------------------------*/

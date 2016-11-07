@@ -49,11 +49,11 @@ int set_non_persistent_app_args(int arg_index, cl::Kernel k) {
 	return arg_index;
 }
 
-void reset_non_persistent(CL_Execution *exec) {
+void reset_non_persistent() {
 	*graphics_result = INT_MAX;
 }
 
-bool check_non_persistent_task(CL_Execution *exec) {
+bool check_non_persistent_task() {
 	return arr_min == *graphics_result;
 }
 

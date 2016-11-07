@@ -188,11 +188,11 @@ void run_non_persistent(CL_Execution *exec) {
 		times.push_back(end - begin);
 
 		// check the result
-		if (!check_non_persistent_task(exec)) {
+		if (!check_non_persistent_task()) {
 			error = 1;
 		}
 
-		reset_non_persistent(exec);
+		reset_non_persistent();
 	}
 
 	clean_non_persistent_task(exec);
@@ -402,13 +402,13 @@ void execute_merged_iteration(CL_Execution *exec, CL_Communicator &cl_comm, int 
 			}
 
 			// Reset non-persistent task
-			reset_non_persistent(exec);
+			reset_non_persistent();
 
 			// Launch the task
 			cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
 
 			// check the result
-			if (!check_non_persistent_task(exec)) {
+			if (!check_non_persistent_task()) {
 				error = 1;
 			}
 			begin = end;
@@ -510,7 +510,7 @@ void run_merged(CL_Execution *exec) {
 		reset_barrier(exec, d_bar);
 		reset_persistent_task(exec);
 		restart_scheduler(&s_ctx);
-		reset_non_persistent(exec);
+		reset_non_persistent();
 		reset_persistent_task(exec);
 		if (i == 0) {
 			cl_comm.set_record_groups_time_data(true);
