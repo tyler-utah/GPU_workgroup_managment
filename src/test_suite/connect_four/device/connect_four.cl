@@ -99,8 +99,10 @@ int scan_board(__local uchar *board, int row, int col, Direction direction) {
 /*---------------------------------------------------------------------------*/
 
 /* Only wgmaster return value is meaningful */
-int board_value(__local uchar *board, __local int *val, int local_id, int local_size)
+int board_value(__local uchar *board, int local_id, int local_size)
 {
+  int value = 0;
+
   for (int i = local_id; i < max_scan_id; i += local_size) {
     int tmpval;
 
@@ -133,32 +135,17 @@ int board_value(__local uchar *board, __local int *val, int local_id, int local_
       }
     }
 
-    /* update val */
+    /* update value */
     if (tmpval == PLUS_INF || tmpval == MINUS_INF) {
       /* found a winner */
-      val[local_id] = tmpval;
+      value = tmpval;
       break;
     } else {
-      val[local_id] += tmpval;
+      value += tmpval;
     }
   }
 
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  /* wgmaster reduces */
-  if (local_id == 0) {
-    int res = 0;
-    for (int i = 0; i < local_size; i++) {
-      if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
-        return val[i];
-      }
-      res += val[i];
-    }
-    return res;
-  }
-
-  /* only wgmaster return value is meaningful */
-  return 0;
+  return value;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -210,21 +197,144 @@ void update_board(__local uchar *board, __global uchar *base_board, __global Nod
 
 /*---------------------------------------------------------------------------*/
 
+/* wgm_create_children() must be called by the workgroup master
+   thread. This function returns the node id of the created child */
+Task wgm_create_children(int move, __global Node *nodes, __global atomic_int *node_head, int parent_id)
+{
+  Task child_id = NULL_TASK;
+  __global Node *parent = &(nodes[parent_id]);
+  child_id = atomic_fetch_add(node_head, 1);
+  /* safety */
+  if (child_id <= NUM_NODE) {
+    Node *child = &(nodes[child_id]);
+    child->parent = parent_id;
+    child->level = parent->level + 1;
+    for (int j = 0; j < parent->level; j++) {
+      child->moves[j] = parent->moves[j];
+    }
+    child->moves[parent->level] = move;
+    atomic_store(&(child->value), 0);
+    atomic_store(&(child->num_child_answer), 0);
+  }
+  return child_id;
+}
+
+/*---------------------------------------------------------------------------*/
+
+bool try_lock(__global atomic_int *task_pool_lock, int pool_id)
+{
+  int expected = false;
+  return atomic_compare_exchange_strong(&(task_pool_lock[pool_id]), &expected, true);
+}
+
+/*---------------------------------------------------------------------------*/
+
+void unlock(__global atomic_int *task_pool_lock, int pool_id)
+{
+  atomic_store(&(task_pool_lock[pool_id]), false);
+}
+
+/*---------------------------------------------------------------------------*/
+
+/* wgm_task_pop() MUST be called by local_id 0. This function grabs a
+   task from a pool and stores it in the task argument. If the pool is
+   empty, then NULL_TASK is assigned to task. */
+int wgm_task_pop(__global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
+{
+  int task = NULL_TASK;
+  /* spinwait on the pool lock */
+  while (!(try_lock(task_pool_lock, pool_id)));
+  /* If pool is not empty, pick up the latest inserted task. */
+  if (task_pool_head[pool_id] > 0) {
+    task_pool_head[pool_id]--;
+    task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
+  }
+  unlock(task_pool_lock, pool_id);
+  return task;
+}
+
+/*---------------------------------------------------------------------------*/
+
+/* Task_push() adds the task argument to the indicated pool. If the pool
+   is full, then the task argument is left untouched, otherwise
+   NULL_TASK is assigned to it. */
+Task wgm_task_push(Task task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
+{
+  /* spinwait on the pool lock */
+  while (!(try_lock(task_pool_lock, pool_id)));
+  /* If pool is not full, insert task */
+  if (task_pool_head[pool_id] < task_pool_size) {
+    task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]] = task;
+    task_pool_head[pool_id]++;
+    task = NULL_TASK;
+  }
+  unlock(task_pool_lock, pool_id);
+  return task;
+}
+
+/*---------------------------------------------------------------------------*/
+
+/* wgm_update_parent() MUST be called by the workgroup master
+   thread. This function propagates the child value to its parent,
+   recursively to the top if needed. */
+void wgm_update_parent(__global Node *nodes, int node_id, __global int *next_move_value, __global atomic_int *root_done)
+{
+  while (true) {
+    __global Node *node = &(nodes[node_id]);
+
+    if (node->level == 1) {
+      /* we've reached the top, a root has terminated */
+      next_move_value[node_id] = atomic_load(&(node->value));
+      atomic_fetch_add(root_done, 1);
+      return;
+    }
+
+    __global Node *parent = &(nodes[node->parent]);
+    int value = atomic_load(&(node->value));
+
+    if ((parent->level % 2) == 0) {
+      /* parent level is even: human takes lowest value */
+      atomic_fetch_min(&(parent->value), value);
+    } else {
+      /* parent level is odd: computer takes highest value */
+      atomic_fetch_max(&(parent->value), value);
+    }
+    /* in all case, increase counter of answer */
+    int prev_num_answer = atomic_fetch_add(&(parent->num_child_answer), 1);
+
+    /* if we were the last child to update, move upward */
+    if (prev_num_answer == 6) {
+      node_id = node->parent;
+    } else {
+      return;
+    }
+  }
+}
+
+/*---------------------------------------------------------------------------*/
+
 __kernel void
 connect_four(
              __global uchar *base_board,
+             const int maxlevel,
              __global Node *nodes,
-             const int max_node,
-             __global atomic_int *node_head
+             __global atomic_int *node_head,
+             __global Task *task_pool,
+             __global atomic_int *task_pool_lock,
+             __global int *task_pool_head,
+             const int num_task_pool,
+             const int task_pool_size,
+             __global int *next_move_value,
+             __global atomic_int *root_done,
+             /* for debugging */
+             __global atomic_int *debug_int,
+             __global uchar *debug_board
              )
 {
   __local int val[256];
   __local uchar board[NUM_CELL];
-  /* Moves are stored in uchar since possible values are in 0..6 */
-  uchar moves[8];
-
-  __local int task_pool[10];
-  __local atomic_int task_pool_head;
+  __local Task task;
+  __local bool game_over;
 
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
@@ -232,47 +342,112 @@ connect_four(
   int global_id = get_global_id(0);
 
   /* init */
-  if (local_id == 0) {
-    atomic_store(&task_pool_head, 0);
-  }
-
   if (global_id == 0) {
-    /* create first nodes */
+    /* Initiate with the 7 nodes of the first level */
     for (int i = 0; i < 7; i++) {
+      next_move_value[i] = MINUS_INF;
+      /* create node */
       nodes[i].parent = -1;
       nodes[i].level = 1;
       nodes[i].moves[0] = i;
       atomic_store(&(nodes[i].value), 0);
       atomic_store(&(nodes[i].num_child_answer), 0);
+
+      /* register task */
+      //int pool_id = i % num_task_pool;
+      int pool_id = 0;
+      task_pool[(pool_id * task_pool_size) + task_pool_head[pool_id]] = i;
+      task_pool_head[pool_id] += 1;
     }
     atomic_store(node_head, 7);
+    atomic_store(root_done, 0);
   }
 
   barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
   /* poor man's global barrier, to replace with proper global_barrier()
      for kernel_merge usage */
-  while (atomic_load(node_head) != 7);
+  if (local_id == 0) {
+    while (atomic_load(node_head) != 7);
+  }
 
-  barrier(CLK_GLOBAL_MEM_FENCE);
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
-  if (group_id < 7) {
+  /* main loop */
+  while (true) {
 
-    /* use group_id as node id */
-    int node_id = group_id;
-
-    /* compute value of node */
-    update_board(board, base_board, &(nodes[node_id]), local_id, local_size);
-    int value = board_value(board, val, local_id, local_size);
+    int pool_id = group_id % num_task_pool;
 
     if (local_id == 0) {
-      /* update value of node */
-      atomic_store(&(nodes[node_id].value), value);
-
-      /* TODO: if value not +- INF, create new nodes */
-
-      /* else propagate value to parent, etc... */
+      task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
+      /* if no more task in own pool, try to steal some from other pools */
+      if (task == NULL_TASK) {
+        for (int i = 1; i < num_task_pool; i++) {
+          int steal_pool_id = (group_id + i) % num_task_pool;
+          task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
+          if (task != NULL_TASK) {
+            break;
+          }
+        }
+      }
+      /* if task is still null, there may be no work left anymore */
+      game_over = false;
+      if (task == NULL_TASK) {
+        game_over = (atomic_load(root_done) == NUM_COL);
+      }
     }
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+    if (task == NULL_TASK) {
+      if (game_over) {
+        break;
+      } else {
+        continue;
+      }
+    }
+
+    /* treat task */
+    __global Node *node = &(nodes[task]);
+    update_board(board, base_board, node, local_id, local_size);
+    val[local_id] = board_value(board, local_id, local_size);
+
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+    /* Update node value */
+    if (local_id == 0) {
+
+      /* Reduce value */
+      int value = 0;
+      for (int i = 0; i < local_size; i++) {
+        if (val[i] == PLUS_INF || val[i] == MINUS_INF) {
+          value = val[i];
+          break;
+        }
+        value = value + val[i];
+      }
+      atomic_store(&(node->value), value);
+
+      if (node->level >= maxlevel ||
+        value == PLUS_INF ||
+        value == MINUS_INF) {
+
+        /* we reached a leaf */
+        atomic_store(&(node->num_child_answer), 7);
+        wgm_update_parent(nodes, task, next_move_value, root_done);
+
+      } else {
+
+        /* create children */
+        for (int i = 0; i < NUM_COL; i++) {
+          Task child_id = wgm_create_children(i, nodes, node_head, task);
+          int push_pool_id = pool_id;
+          /* loop on trying to push the task in a pool */
+          while (wgm_task_push(child_id, task_pool, task_pool_lock, task_pool_head, task_pool_size, push_pool_id) != NULL_TASK) {
+            push_pool_id = (push_pool_id + 1) % num_task_pool;
+          }
+        }
+      }
+    }
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
   }
 }
 
