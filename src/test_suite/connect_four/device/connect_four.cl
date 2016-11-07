@@ -1,5 +1,42 @@
-#include "../rt_common/cl_types.h"
-#include "connect_four_data.h"
+/*---------------------------------------------------------------------------*/
+
+#define EMPTY ((uchar)0)
+#define HUMAN ((uchar)1)
+#define COMPUTER ((uchar)2)
+
+/*---------------------------------------------------------------------------*/
+
+/* Warning: there is still some parts of code where these values are
+ * hardcoded (in particular, diagonals scanning) */
+const int NUM_ROW = 6;
+const int NUM_COL = 7;
+const int NUM_CELL = 6 * 7;
+
+const int PLUS_INF = 666;
+const int MINUS_INF = -666;
+
+/* The actual level of lookahead is controlled by the "maxlevel" flag,
+ * MAX_LOOKAHEAD is a hard-coded upper-bound. */
+const int MAX_LOOKAHEAD = 7;
+const int NUM_NODE = 20000;
+
+/*---------------------------------------------------------------------------*/
+
+typedef struct {
+  int parent;
+  int level;
+  uchar moves[MAX_LOOKAHEAD];
+  atomic_int value;
+  atomic_int num_child_answer;
+} Node;
+
+/*---------------------------------------------------------------------------*/
+
+/* A task is just a node index */
+typedef int Task;
+const Task NULL_TASK = -1;
+
+/*---------------------------------------------------------------------------*/
 
 /**
    The board is indexed this way:
