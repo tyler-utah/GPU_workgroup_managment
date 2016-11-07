@@ -56,6 +56,8 @@ using namespace std;
 #include "../graph_apps/bc/bc.h"
 #elif defined PERSISTENT_OCTREE
 #include "octree.h"
+#elif defined PERSISTENT_CONNECT_FOUR
+#include "connect_four.h"
 #else
 #error "No persistent task macro defined? like PERSISTENT_XYZ (check your CMakeLists.txt)"
 #endif
@@ -183,11 +185,11 @@ void run_non_persistent(CL_Execution *exec) {
 		times.push_back(end - begin);
 
 		// check the result
-		if (!check_non_persistent_task()) {
+		if (!check_non_persistent_task(exec)) {
 			error = 1;
 		}
 
-		reset_non_persistent();
+		reset_non_persistent(exec);
 	}
 
 	clean_non_persistent_task(exec);
@@ -397,13 +399,13 @@ void execute_merged_iteration(CL_Execution *exec, CL_Communicator &cl_comm, int 
 			}
 
 			// Reset non-persistent task
-			reset_non_persistent();
+			reset_non_persistent(exec);
 
 			// Launch the task
 			cl_comm.send_task_synchronous(workgroups_for_non_persistent, "first");
 
 			// check the result
-			if (!check_non_persistent_task()) {
+			if (!check_non_persistent_task(exec)) {
 				error = 1;
 			}
 			begin = end;
@@ -505,7 +507,7 @@ void run_merged(CL_Execution *exec) {
 		reset_barrier(exec, d_bar);
 		reset_persistent_task(exec);
 		restart_scheduler(&s_ctx);
-		reset_non_persistent();
+		reset_non_persistent(exec);
 		reset_persistent_task(exec);
 		if (i == 0) {
 			cl_comm.set_record_groups_time_data(true);
