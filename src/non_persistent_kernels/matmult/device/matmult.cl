@@ -6,6 +6,23 @@
 
 /*---------------------------------------------------------------------------*/
 
+int hash_mat(int *M, int num_row, int num_col)
+{
+  // hash the diagonal using djb2, see
+  // http://www.cse.yorku.ca/~oz/hash.html
+  int hash = 5381;
+  int row = 0;
+  int col = 0;
+  while (row < num_row && col < num_col) {
+    hash = (hash * 33) + M[(row * num_col) + col];
+    row++;
+    col++;
+  }
+  return hash;
+}
+
+/*---------------------------------------------------------------------------*/
+
 __kernel void matmult(
                       __global int *A,
                       const int A_row,
@@ -13,7 +30,10 @@ __kernel void matmult(
                       __global int *B,
                       const int B_row,
                       const int B_col,
-                      __global int *C)
+                      __global int *C,
+                      __global atomic_int *counter,
+                      __global atomic_int *hash
+                      )
 {
   /* safety */
   if (A_col != B_row) {
@@ -32,6 +52,14 @@ __kernel void matmult(
     C[i] = 0;
     for (int j = 0; j < B_row; j++) {
       C[i] += A[a_offset + j] * B[(j * B_col) + c_col];
+    }
+  }
+
+  if (get_local_id(0) == 0) {
+    int finished = atomic_fetch_add(counter, 1);
+    if (finished == (get_num_groups(0) - 1)) {
+      int h = hash_mat(C, A_row, B_col);
+      atomic_store(hash, h);
     }
   }
 }

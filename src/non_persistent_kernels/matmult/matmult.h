@@ -17,7 +17,9 @@ cl::Buffer d_B;
 size_t c_mem_size;
 cl_int *svm_C;
 
-int h_hash;
+int ref_hash;
+cl_int *svm_counter;
+cl_int *svm_hash;
 
 /*---------------------------------------------------------------------------*/
 
@@ -136,18 +138,21 @@ void init_non_persistent_app(CL_Execution *exec) {
     exit(EXIT_FAILURE);
   }
 
-  /* Allocate and keep host buffer for C */
-
   /* Compute C to obtain hash */
   host_matrix_multiply(h_A, FLAGS_A_row, FLAGS_A_col,
                        h_B, FLAGS_B_row, FLAGS_B_col,
                        svm_C);
 
-  h_hash = hash_mat(svm_C, FLAGS_A_row, FLAGS_B_col);
-
-  cout << "matmult: host side hash: " << h_hash << endl;
+  ref_hash = hash_mat(svm_C, FLAGS_A_row, FLAGS_B_col);
 
   memset(svm_C, 0, c_mem_size);
+
+  /* counter and hash */
+  svm_counter = (cl_int *)clSVMAlloc(exec->exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
+  svm_hash = (cl_int *)clSVMAlloc(exec->exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
+
+  *svm_counter = 0;
+  *svm_hash = 0;
 
   free(h_A);
   free(h_B);
@@ -164,37 +169,31 @@ int set_non_persistent_app_args(int arg_index, cl::Kernel k) {
   check_ocl(k.setArg(arg_index++, FLAGS_B_row));
   check_ocl(k.setArg(arg_index++, FLAGS_B_col));
   check_ocl(clSetKernelArgSVMPointer(k(), arg_index++, svm_C));
+  check_ocl(clSetKernelArgSVMPointer(k(), arg_index++, svm_counter));
+  check_ocl(clSetKernelArgSVMPointer(k(), arg_index++, svm_hash));
   return arg_index;
 }
 
 /*---------------------------------------------------------------------------*/
 
 void reset_non_persistent() {
-  /* cl_int err; */
-  /* err = exec->exec_queue.enqueueFillBuffer(d_C, 0, 0, c_mem_size); */
-  /* check_ocl(err); */
-  /* return; */
+  *svm_counter = 0;
+  *svm_hash = 0;
+  memset(svm_C, 0, c_mem_size);
 }
 
 /*---------------------------------------------------------------------------*/
 
 bool check_non_persistent_task() {
-  /* cl_int err = 0; */
-  /* /\* h_C is allocated in init *\/ */
-  /* err = exec->exec_queue.enqueueReadBuffer(d_C, CL_TRUE, 0, c_mem_size, h_C); */
-  /* check_ocl(err); */
-
-  /* int hash = hash_mat(h_C, FLAGS_A_row, FLAGS_B_col); */
-  /* /\* The hash for a matrix of 100 with seed 1234 is -161045286 *\/ */
-  /* int ref_hash = -161045286; */
-
-  /* return (hash == ref_hash); */
-  return 0;
+  return *svm_hash == ref_hash;
 }
 
 /*---------------------------------------------------------------------------*/
 
 void clean_non_persistent_task(CL_Execution *exec) {
+  clSVMFree(exec->exec_context(), svm_C);
+  clSVMFree(exec->exec_context(), svm_hash);
+  clSVMFree(exec->exec_context(), svm_counter);
 }
 
 /*---------------------------------------------------------------------------*/
