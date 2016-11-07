@@ -118,6 +118,9 @@ void reset_barrier(CL_Execution *exec, cl::Buffer d_bar) {
 		h_bar.barrier_flags[i] = 0;
 	}
 	h_bar.phase = 0;
+	h_bar.counter = 0;
+	h_bar.sense = 0;
+
 
 	int err = exec->exec_queue.enqueueWriteBuffer(d_bar, CL_TRUE, 0, sizeof(IW_barrier), &h_bar);
 	check_ocl(err);
@@ -528,6 +531,9 @@ void run_merged(CL_Execution *exec) {
 		cl_comm.print_summary_file((FLAGS_output_summary + it).c_str());
 		cl_comm.print_summary();
 		times.push_back(cl_comm.get_persistent_time());
+		//cout << "Check value: " << *(s_ctx.check_value) << endl;
+		cout << "Persistent Error: " << error_persistent << endl;
+		cout << "Non-persistent Error: " << error_non_persistent << endl;
 		cout << endl;
 		CL_Communicator::my_sleep(1000);
 	}
@@ -537,7 +543,7 @@ void run_merged(CL_Execution *exec) {
 	clean_non_persistent_task(exec);
 
 	cout << endl << "error non persistent: " << error_non_persistent << endl;
-	cout << endl << "error persistent: " << error_non_persistent << endl << endl;
+	cout << endl << "error persistent: " << error_persistent << endl << endl;
 
 	cout << "stats for persistent tasks" << endl;
 	cout << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << endl;

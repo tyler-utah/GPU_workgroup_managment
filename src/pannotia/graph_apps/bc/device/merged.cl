@@ -111,6 +111,8 @@ int mega_bfs_kernel_func(__global IW_barrier *__bar,
       }
     }
 
+    global_barrier_robust_to_resizing(__bar, __sense, __k_ctx);
+
     swap = read_stop;
     read_stop = write_stop;
     write_stop = buff_stop;
@@ -165,7 +167,11 @@ void mega_backtrack_kernel_func(__global IW_barrier *__bar,
 
           // Update the sigma value traversing back
           if (d[w] == local_dist - 2)
-            atomic_add_float(&sigma[w], rho[w] / rho[i] * (1 + sigma[i]));
+            atomic_add_float(&sigma[w],
+                             rho[w] / rho[i] *
+                                 ((1 * 10000) + sigma[i])); // Scaling by 10000
+                                                            // to get correct
+                                                            // results on Intel
         }
 
         // Update the BC value
@@ -173,7 +179,7 @@ void mega_backtrack_kernel_func(__global IW_barrier *__bar,
         // Tyler: This looks like there might be a data-race here, but
         // the original authors assured me that there isn't.
         if (i != s)
-          bc[i] = bc[i] + sigma[i];
+          bc[i] = bc[i] + (sigma[i] / 10000); // Doing unscaling here
       }
     }
     local_dist = local_dist - 1;
@@ -234,7 +240,7 @@ void bc_combined(__global int *row,         // 0
 
         // If source vertex rho = 1, dist = 0
         if (i == s) {
-          rho[i] = 1;
+          rho[i] = 1 * 10000; // Scaling by 10000
           dist[i] = 0;
 
         } else { // If other vertices rho = 0, dist = -1
