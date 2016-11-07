@@ -15,8 +15,7 @@ size_t b_mem_size;
 cl::Buffer d_B;
 
 size_t c_mem_size;
-cl::Buffer d_C;
-cl_int *h_C;
+cl_int *svm_C;
 
 int h_hash;
 
@@ -131,30 +130,27 @@ void init_non_persistent_app(CL_Execution *exec) {
 
   /* Matrix C */
   c_mem_size = sizeof(cl_int) * FLAGS_A_row * FLAGS_B_col;
-  d_C = cl::Buffer(exec->exec_context, CL_MEM_WRITE_ONLY, c_mem_size);
-  err = exec->exec_queue.enqueueFillBuffer(d_C, 0, 0, c_mem_size);
-  check_ocl(err);
-
-  free(h_A);
-  free(h_B);
-
-  /* Allocate and keep host buffer for C */
-  h_C = (cl_int *)calloc(FLAGS_A_row * FLAGS_B_col, sizeof(cl_int));
-  if (h_C == NULL) {
-    cout << "calloc failed" << endl;
+  svm_C = (cl_int *)clSVMAlloc(exec->exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, c_mem_size, 4);
+  if (svm_C == NULL) {
+    printf("clSVMAlloc failed\n");
     exit(EXIT_FAILURE);
   }
+
+  /* Allocate and keep host buffer for C */
 
   /* Compute C to obtain hash */
   host_matrix_multiply(h_A, FLAGS_A_row, FLAGS_A_col,
                        h_B, FLAGS_B_row, FLAGS_B_col,
-                       h_C);
+                       svm_C);
 
-  h_hash = hash_mat(h_C, FLAGS_A_row, FLAGS_B_col);
+  h_hash = hash_mat(svm_C, FLAGS_A_row, FLAGS_B_col);
 
   cout << "matmult: host side hash: " << h_hash << endl;
 
-  memset(h_C, 0, c_mem_size);
+  memset(svm_C, 0, c_mem_size);
+
+  free(h_A);
+  free(h_B);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -167,7 +163,7 @@ int set_non_persistent_app_args(int arg_index, cl::Kernel k) {
   check_ocl(k.setArg(arg_index++, d_B));
   check_ocl(k.setArg(arg_index++, FLAGS_B_row));
   check_ocl(k.setArg(arg_index++, FLAGS_B_col));
-  check_ocl(k.setArg(arg_index++, d_C));
+  check_ocl(clSetKernelArgSVMPointer(k(), arg_index++, svm_C));
   return arg_index;
 }
 
@@ -199,7 +195,6 @@ bool check_non_persistent_task() {
 /*---------------------------------------------------------------------------*/
 
 void clean_non_persistent_task(CL_Execution *exec) {
-  free(h_C);
 }
 
 /*---------------------------------------------------------------------------*/
