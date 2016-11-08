@@ -32,7 +32,7 @@ typedef struct {
 
 /*---------------------------------------------------------------------------*/
 
-/* A task is just a node index */
+/* A task is just a int indicating node index */
 typedef int Task;
 const Task NULL_TASK = -1;
 
@@ -370,8 +370,8 @@ connect_four(
 {
   __local int val[256];
   __local uchar board[NUM_CELL];
-  __local Task task;
-  __local bool game_over;
+  __local Task task[1];
+  __local bool game_over[1];
 
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
@@ -416,26 +416,26 @@ connect_four(
     int pool_id = group_id % num_task_pool;
 
     if (local_id == 0) {
-      task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
+      task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
       /* if no more task in own pool, try to steal some from other pools */
-      if (task == NULL_TASK) {
+      if (task[0] == NULL_TASK) {
         for (int i = 1; i < num_task_pool; i++) {
           int steal_pool_id = (group_id + i) % num_task_pool;
-          task = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
-          if (task != NULL_TASK) {
+          task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
+          if (task[0] != NULL_TASK) {
             break;
           }
         }
       }
       /* if task is still null, there may be no work left anymore */
-      game_over = false;
-      if (task == NULL_TASK) {
-        game_over = (atomic_load(root_done) == NUM_COL);
+      game_over[0] = false;
+      if (task[0] == NULL_TASK) {
+        game_over[0] = (atomic_load(root_done) == NUM_COL);
       }
     }
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
-    if (task == NULL_TASK) {
-      if (game_over) {
+    if (task[0] == NULL_TASK) {
+      if (game_over[0]) {
         break;
       } else {
         continue;
@@ -443,7 +443,7 @@ connect_four(
     }
 
     /* treat task */
-    __global Node *node = &(nodes[task]);
+    __global Node *node = &(nodes[task[0]]);
     update_board(board, base_board, node, local_id, local_size);
     val[local_id] = board_value(board, local_id, local_size);
 
@@ -469,13 +469,13 @@ connect_four(
 
         /* we reached a leaf */
         atomic_store(&(node->num_child_answer), 7);
-        wgm_update_parent(nodes, task, next_move_value, root_done);
+        wgm_update_parent(nodes, task[0], next_move_value, root_done);
 
       } else {
 
         /* create children */
         for (int i = 0; i < NUM_COL; i++) {
-          Task child_id = wgm_create_children(i, nodes, node_head, task);
+          Task child_id = wgm_create_children(i, nodes, node_head, task[0]);
           int push_pool_id = pool_id;
           /* loop on trying to push the task in a pool */
           while (wgm_task_push(child_id, task_pool, task_pool_lock, task_pool_head, task_pool_size, push_pool_id) != NULL_TASK) {
