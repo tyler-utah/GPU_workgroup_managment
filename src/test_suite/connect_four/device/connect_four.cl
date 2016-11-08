@@ -376,10 +376,9 @@ connect_four(
   int local_id = get_local_id(0);
   int local_size = get_local_size(0);
   int group_id = get_group_id(0);
-  int global_id = get_global_id(0);
 
   /* INIT */
-  if (global_id == 0) {
+  if (get_global_id(0) == 0) {
     /* Initiate with the 7 nodes of the first level */
     for (int i = 0; i < 7; i++) {
       next_move_value[i] = MINUS_INF;
