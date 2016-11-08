@@ -6,3 +6,4 @@ typedef struct {
   MY_CL_GLOBAL CL_INT_TYPE * swap;
   CL_INT_TYPE graph_color;
 } Restoration_ctx;
+

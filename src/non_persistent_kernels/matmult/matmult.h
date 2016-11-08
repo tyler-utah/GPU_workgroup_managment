@@ -15,8 +15,11 @@ size_t b_mem_size;
 cl::Buffer d_B;
 
 size_t c_mem_size;
-cl::Buffer d_C;
-cl_int *h_C;
+cl_int *svm_C;
+
+int ref_hash;
+cl_int *svm_counter;
+cl_int *svm_hash;
 
 /*---------------------------------------------------------------------------*/
 
@@ -65,6 +68,29 @@ int hash_mat(cl_int *M, int num_row, int num_col)
 
 /*---------------------------------------------------------------------------*/
 
+void host_matrix_multiply(cl_int *A, int A_row, int A_col,
+                         cl_int *B, int B_row, int B_col,
+                         cl_int *C)
+{
+  int C_row = A_row;
+  int C_col = B_col;
+
+  if (A_col != B_row) {
+    return;
+  }
+
+  for (int r = 0 ; r < C_row; r++) {
+    for (int c = 0; c < C_col; c++) {
+      C[(r * C_row) + c] = 0;
+      for (int i = 0; i < A_col; i++) {
+        C[(r * C_row) + c] += A[(r * A_row) + i] * B[(i * B_row) + c];
+      }
+    }
+  }
+}
+
+/*---------------------------------------------------------------------------*/
+
 void init_non_persistent_app(CL_Execution *exec) {
   cl_int err = 0;
   int seed = FLAGS_seed;
@@ -106,18 +132,30 @@ void init_non_persistent_app(CL_Execution *exec) {
 
   /* Matrix C */
   c_mem_size = sizeof(cl_int) * FLAGS_A_row * FLAGS_B_col;
-  d_C = cl::Buffer(exec->exec_context, CL_MEM_WRITE_ONLY, c_mem_size);
-  err = exec->exec_queue.enqueueFillBuffer(d_C, 0, 0, c_mem_size);
-  check_ocl(err);
+  svm_C = (cl_int *)clSVMAlloc(exec->exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, c_mem_size, 4);
+  if (svm_C == NULL) {
+    printf("clSVMAlloc failed\n");
+    exit(EXIT_FAILURE);
+  }
+
+  /* Compute C to obtain hash */
+  host_matrix_multiply(h_A, FLAGS_A_row, FLAGS_A_col,
+                       h_B, FLAGS_B_row, FLAGS_B_col,
+                       svm_C);
+
+  ref_hash = hash_mat(svm_C, FLAGS_A_row, FLAGS_B_col);
+
+  memset(svm_C, 0, c_mem_size);
+
+  /* counter and hash */
+  svm_counter = (cl_int *)clSVMAlloc(exec->exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
+  svm_hash = (cl_int *)clSVMAlloc(exec->exec_context(), CL_MEM_SVM_FINE_GRAIN_BUFFER, sizeof(cl_int), 4);
+
+  *svm_counter = 0;
+  *svm_hash = 0;
 
   free(h_A);
   free(h_B);
-
-  /* Allocate and keep host buffer for C */
-  h_C = (cl_int *)malloc(c_mem_size);
-  if (h_C == NULL) {
-    exit(EXIT_FAILURE);
-  }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -130,39 +168,32 @@ int set_non_persistent_app_args(int arg_index, cl::Kernel k) {
   check_ocl(k.setArg(arg_index++, d_B));
   check_ocl(k.setArg(arg_index++, FLAGS_B_row));
   check_ocl(k.setArg(arg_index++, FLAGS_B_col));
-  check_ocl(k.setArg(arg_index++, d_C));
+  check_ocl(clSetKernelArgSVMPointer(k(), arg_index++, svm_C));
+  check_ocl(clSetKernelArgSVMPointer(k(), arg_index++, svm_counter));
+  check_ocl(clSetKernelArgSVMPointer(k(), arg_index++, svm_hash));
   return arg_index;
 }
 
 /*---------------------------------------------------------------------------*/
 
 void reset_non_persistent() {
-  /* cl_int err; */
-  /* err = exec->exec_queue.enqueueFillBuffer(d_C, 0, 0, c_mem_size); */
-  /* check_ocl(err); */
-  /* return; */
+  *svm_counter = 0;
+  *svm_hash = 0;
+  memset(svm_C, 0, c_mem_size);
 }
 
 /*---------------------------------------------------------------------------*/
 
 bool check_non_persistent_task() {
-  /* cl_int err = 0; */
-  /* /\* h_C is allocated in init *\/ */
-  /* err = exec->exec_queue.enqueueReadBuffer(d_C, CL_TRUE, 0, c_mem_size, h_C); */
-  /* check_ocl(err); */
-
-  /* int hash = hash_mat(h_C, FLAGS_A_row, FLAGS_B_col); */
-  /* /\* The hash for a matrix of 100 with seed 1234 is -161045286 *\/ */
-  /* int ref_hash = -161045286; */
-
-  /* return (hash == ref_hash); */
-  return 0;
+  return *svm_hash == ref_hash;
 }
 
 /*---------------------------------------------------------------------------*/
 
 void clean_non_persistent_task(CL_Execution *exec) {
-  free(h_C);
+  clSVMFree(exec->exec_context(), svm_C);
+  clSVMFree(exec->exec_context(), svm_hash);
+  clSVMFree(exec->exec_context(), svm_counter);
 }
 
 /*---------------------------------------------------------------------------*/

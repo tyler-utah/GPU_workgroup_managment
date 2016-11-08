@@ -7,6 +7,13 @@
 
 // This kernel is the naive version of the mega-kernel using
 // the global barrier
+
+// Tyler: Notes: Simply adding the scheduler args in the
+// standalone application causes a massive slowdown
+// (~13 seconds to ~24 seconds).
+// But the merged kernel *necessarily* must have
+// the scheduler context, so it isn't really fair
+// to compare without it.
 __kernel void sssp_combined(const int num_rows, __global int *row,
                             __global int *col, __global int *data,
                             __global int *x, __global int *y,
