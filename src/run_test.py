@@ -8,13 +8,14 @@ import glob
 def fake_placeholder(x):
     return
 
-EXE_PATH     = ""
-DATA_PATH    = ""
-STAT_PATH    = ""
-ITERS        = 1
-PRINT        = fake_placeholder
-DATA_PRINT   = fake_placeholder
-NAME_OF_CHIP = ""
+EXE_PATH      = ""
+DATA_PATH     = ""
+STAT_PATH     = ""
+ITERS         = 1
+PRINT         = fake_placeholder
+DATA_PRINT    = fake_placeholder
+NAME_OF_CHIP  = ""
+NON_PRST_FREQ = ""
 
 PROGRAMS = {
     "pannotia_color",
@@ -104,11 +105,14 @@ def run_suite():
             exe = os.path.join(EXE_PATH, p)
             graph_in = os.path.join(DATA_PATH, d["input"])
             graph_sol = os.path.join(DATA_PATH, d["solution"])
-            cmd = [exe, "--graph_file", graph_in, "--graph_solution_file", graph_sol]
-            exec_cmd(cmd, ["--run_persistent", "2", "--threads_per_wg", "128"], "== standalone")
-            # standalone execution does not produce stat files, so nothing to collect here
-            exec_cmd(cmd, ["--skip_tasks", "1", "--merged_iterations", "2", "--threads_per_wg", "128"], "== merged without task")
-            # exec_cmd(cmd, ["--merged_iterations", "1", "--threads_per_wg", "128"], "== merged without task")
+            cmd = [exe, "--non_persistent_frequency", NON_PRST_FREQ, "--graph_file", graph_in, "--graph_solution_file", graph_sol, "--threads_per_wg", "128"]
+            # standalone, which does not produce stat files, so nothing to collect here
+            # exec_cmd(cmd, ["--run_persistent", "2"], "== standalone")
+            # merged without tasks, stats to collect afterwards
+            # exec_cmd(cmd, ["--skip_tasks", "1", "--merged_iterations", "2"], "== merged without task")
+            # collect_stats(d)
+            # merged
+            exec_cmd(cmd, ["--merged_iterations", "1"], "== merged")
             collect_stats(d)
 
 def main():
@@ -119,10 +123,11 @@ def main():
     global PRINT
     global DATA_PRINT
     global NAME_OF_CHIP
+    global NON_PRST_FREQ
 
-    if len(sys.argv) != 6:
+    if len(sys.argv) != 7:
         print("Please provide the following arguments:")
-        print("path to executables, path to data, path to result (where to store them), name of run, name of chip")
+        print("path to executables, path to data, path to result (where to store them), name of run, name of chip, frequency (ms) of non-persistent kernel")
         return 1
 
     EXE_PATH = sys.argv[1]
@@ -134,6 +139,8 @@ def main():
     print("recording all to " + log_file)
     log_file_handle = open(log_file, "w")
     PRINT = lambda x : my_print(log_file_handle,x)
+
+    NON_PRST_FREQ = sys.argv[6]
 
     PRINT("Name of chip:")
     PRINT(NAME_OF_CHIP)
