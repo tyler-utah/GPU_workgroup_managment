@@ -2,12 +2,15 @@ from __future__ import print_function
 import sys
 import os
 import subprocess
+import shutil
+import glob
 
 def fake_placeholder(x):
     return
 
 EXE_PATH     = ""
 DATA_PATH    = ""
+STAT_PATH    = ""
 ITERS        = 1
 PRINT        = fake_placeholder
 DATA_PRINT   = fake_placeholder
@@ -23,24 +26,31 @@ PROGRAMS = {
 PROGRAM_DATA = {
 
     "pannotia_color" : [ { "input" : os.path.join("inputs", "color", "ecology1.graph"),
-                           "solution" : os.path.join("solutions", "color_ecology.txt") },
+                           "solution" : os.path.join("solutions", "color_ecology.txt"),
+                           "stat" : "color_ecology" },
                          { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
-                           "solution" : os.path.join("solutions", "color_G3_circuit.txt") }
+                           "solution" : os.path.join("solutions", "color_G3_circuit.txt"),
+                           "stat" : "color_G3_circuit" }
     ],
 
     "pannotia_mis" : [ { "input" : os.path.join("inputs", "color", "ecology1.graph"),
-                         "solution" : os.path.join("solutions", "color_ecology.txt") },
+                         "solution" : os.path.join("solutions", "color_ecology.txt"),
+                         "stat" : "mis_ecology" },
                        { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
-                         "solution" : os.path.join("solutions", "color_G3_circuit.txt") } ],
+                         "solution" : os.path.join("solutions", "color_G3_circuit.txt"),
+                         "stat" : "mis_G3_circuit" } ],
 
     "pannotia_bc" : [ { "input" : os.path.join("inputs", "bc", "1k_128k.gr"),
-                        "solution" : os.path.join("solutions", "bc_1k_128k.gr") },
+                        "solution" : os.path.join("solutions", "bc_1k_128k.txt"),
+                        "stat" : "bc_1k_128k" },
                       { "input" : os.path.join("inputs", "bc", "2k_1M.gr"),
-                       "solution" : os.path.join("solutions", "bc_2k_1M.gr") }
+                        "solution" : os.path.join("solutions", "bc_2k_1M.txt"),
+                        "stat" : "bc_2k_1M" }
     ],
 
     "pannotia_sssp" : [ { "input" : os.path.join("inputs", "sssp", "USA-road-d.NW.gr"),
-                          "solution" : os.path.join("solutions", "sssp_usa.txt") } ]
+                          "solution" : os.path.join("solutions", "sssp_usa.txt"),
+                          "stat" : "sssp_usa_road" } ]
 }
 
 def my_print(file_handle, data):
@@ -54,7 +64,7 @@ def exec_cmd(cmd, extr_args=[], flag=""):
     for s in finalcmd:
         PRINT(s)
     PRINT("----------------------------------------------------------")
-    p_obj = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p_obj = subprocess.Popen(finalcmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     ret_code = p_obj.wait()
     sout, serr = p_obj.communicate()
     PRINT("* stdout:")
@@ -69,6 +79,25 @@ def exec_cmd(cmd, extr_args=[], flag=""):
         print("Error running " + " ".join(cmd))
         exit(ret_code)
 
+def mv_wildcard(path, dest):
+    for f in glob.glob(path):
+        shutil.move(f, dest)
+
+def collect_stats(d):
+    stat_dir = os.path.join(STAT_PATH, d["stat"])
+    try:
+        os.makedirs(stat_dir)
+    except OSError:
+        PRINT("Note: stats dir already exists: ")
+        PRINT(stat_dir)
+    PRINT("Collect stats of run in directory:")
+    PRINT(stat_dir)
+    # move all potential stat files to the stats dir
+    mv_wildcard("summary_*.txt", stat_dir)
+    mv_wildcard("non_persistent_duration_*.txt", stat_dir)
+    mv_wildcard("timestamp_executing_groups_*.txt", stat_dir)
+    mv_wildcard("timestamp_non_persistent_*.txt", stat_dir)
+
 def run_suite():
     for p in PROGRAMS:
         for d in PROGRAM_DATA[p]:
@@ -76,38 +105,32 @@ def run_suite():
             graph_in = os.path.join(DATA_PATH, d["input"])
             graph_sol = os.path.join(DATA_PATH, d["solution"])
             cmd = [exe, "--graph_file", graph_in, "--graph_solution_file", graph_sol]
-            exec_cmd(cmd, ["--run_persistent", "1", "--threads_per_wg", "128"], "== standalone")
-            exec_cmd(cmd, ["--skip_tasks", "1", "--threads_per_wg", "128"], "== merged without task")
-            # print("WOULD RUN: ", cmd)
-            # p_obj = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            # ret_code = p_obj.wait()
-            # sout, serr = p_obj.communicate()
-            # print("* stdout:")
-            # print(sout)
-            # print("* stderr:")
-            # print(serr)
-            # if (ret_code != 0):
-            #     print("Error running " + " ".join(cmd))
-            #     exit(ret_code)
+            exec_cmd(cmd, ["--run_persistent", "2", "--threads_per_wg", "128"], "== standalone")
+            # standalone execution does not produce stat files, so nothing to collect here
+            exec_cmd(cmd, ["--skip_tasks", "1", "--merged_iterations", "2", "--threads_per_wg", "128"], "== merged without task")
+            # exec_cmd(cmd, ["--merged_iterations", "1", "--threads_per_wg", "128"], "== merged without task")
+            collect_stats(d)
 
 def main():
 
     global EXE_PATH
     global DATA_PATH
+    global STAT_PATH
     global PRINT
     global DATA_PRINT
     global NAME_OF_CHIP
 
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 6:
         print("Please provide the following arguments:")
-        print("path to executables, path to data, name of run, name of chip")
+        print("path to executables, path to data, path to result (where to store them), name of run, name of chip")
         return 1
 
     EXE_PATH = sys.argv[1]
     DATA_PATH = sys.argv[2]
+    STAT_PATH = sys.argv[3]
 
-    NAME_OF_CHIP = sys.argv[4]
-    log_file = sys.argv[3] + ".log"
+    NAME_OF_CHIP = sys.argv[5]
+    log_file = sys.argv[4] + ".log"
     print("recording all to " + log_file)
     log_file_handle = open(log_file, "w")
     PRINT = lambda x : my_print(log_file_handle,x)
@@ -124,15 +147,6 @@ def main():
 
     log_file_handle.close()
     # data_file_handle.close()
-
-# cmd = [os.path.join("pannotia", BUILD_MODE, "pannotia_color")]
-# p_obj = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-# ret_code = p_obj.wait()
-# sout, serr = p_obj.communicate()
-# print("STDOUT:")
-# print(sout)
-# print("STDERR:")
-# print(serr)
 
 if __name__ == '__main__':
     sys.exit(main())
