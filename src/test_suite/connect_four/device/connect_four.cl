@@ -378,7 +378,7 @@ connect_four(
   int group_id = get_group_id(0);
   int global_id = get_global_id(0);
 
-  /* init */
+  /* INIT */
   if (global_id == 0) {
     /* Initiate with the 7 nodes of the first level */
     for (int i = 0; i < 7; i++) {
@@ -400,17 +400,10 @@ connect_four(
     atomic_store(root_done, 0);
   }
 
-  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+  /* BARRIER */
+  global_barrier();
 
-  /* poor man's global barrier, to replace with proper global_barrier()
-     for kernel_merge usage */
-  if (local_id == 0) {
-    while (atomic_load(node_head) != 7);
-  }
-
-  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
-
-  /* main loop */
+  /* MAIN LOOP */
   while (true) {
 
     int pool_id = group_id % num_task_pool;
