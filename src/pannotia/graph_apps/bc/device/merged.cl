@@ -5,42 +5,64 @@
 #include "cl_scheduler.cl"
 #include "iw_barrier.cl"
 
-// Simple min reduce from:
-// http://developer.amd.com/resources/articles-whitepapers/opencl-optimization-case-study-simple-reductions/
-void MY_reduce(__global int *buffer, int length, __global atomic_int *result,
-               __local int *scratch, __global Kernel_ctx *__k_ctx) {
+/*
+  Matrix multiplication: C = A * B
 
-  ;
+  We assume C is big enough to store the result.
+*/
+
+/*---------------------------------------------------------------------------*/
+
+int hash_mat(int *M, int num_row, int num_col) {
+  // hash the diagonal using djb2, see
+  // http://www.cse.yorku.ca/~oz/hash.html
+  int hash = 5381;
+  int row = 0;
+  int col = 0;
+  while (row < num_row && col < num_col) {
+    hash = (hash * 33) + M[(row * num_col) + col];
+    row++;
+    col++;
+  }
+  return hash;
+}
+
+/*---------------------------------------------------------------------------*/
+
+void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
+             const int B_row, const int B_col, __global int *C,
+             __global atomic_int *counter, __global atomic_int *hash,
+             __global Kernel_ctx *__k_ctx) {
+  /* safety */
+  if (A_col != B_row) {
+    return;
+  }
+
   int gid = k_get_global_id(__k_ctx);
-  int local_index = get_local_id(0);
-  int stride = k_get_global_size(__k_ctx);
+  int num_threads = k_get_global_size(__k_ctx);
+  int c_size = A_row * B_col;
 
-  for (int global_index = gid; global_index < length; global_index += stride) {
-    // Load data into local memory
-    if (global_index < length) {
-      scratch[local_index] = buffer[global_index];
-    } else {
-      // Infinity is the identity element for the min operation
-      scratch[local_index] = INT_MAX;
+  /* Multiply matrices */
+  for (int i = gid; i < c_size; i += num_threads) {
+    int c_row = i / B_col;
+    int c_col = i % B_col;
+    int a_offset = c_row * A_col;
+    C[i] = 0;
+    for (int j = 0; j < B_row; j++) {
+      C[i] += A[a_offset + j] * B[(j * B_col) + c_col];
     }
-    barrier(CLK_LOCAL_MEM_FENCE);
+  }
 
-    for (int offset = 1; offset < get_local_size(0); offset <<= 1) {
-      int mask = (offset << 1) - 1;
-      if ((local_index & mask) == 0) {
-        int other = scratch[local_index + offset];
-        int mine = scratch[local_index];
-        scratch[local_index] = (mine < other) ? mine : other;
-      }
-      barrier(CLK_LOCAL_MEM_FENCE);
-    }
-    // Putting an atomic here so we can get a global reduction
-    if (local_index == 0) {
-      atomic_fetch_min((result), scratch[0]);
+  if (get_local_id(0) == 0) {
+    int finished = atomic_fetch_add(counter, 1);
+    if (finished == (k_get_num_groups(__k_ctx) - 1)) {
+      int h = hash_mat(C, A_row, B_col);
+      atomic_store(hash, h);
     }
   }
 }
-//
+
+/*---------------------------------------------------------------------------*/
 
 __global int __junk_global;
 
@@ -321,29 +343,31 @@ void bc_combined(__global int *row,         // 0
 }
 //
 
-kernel void mega_kernel(__global int *buffer, int length,
-                        __global atomic_int *result, __global int *row, // 0
-                        __global int *col,                              // 1
-                        __global int *row_trans,                        // 2
-                        __global int *col_trans,                        // 3
-                        __global int *dist,                             // 4
-                        __global float *rho,                            // 5
-                        __global float *sigma,                          // 6
-                        __global int *p,                                // 7
-                        __global int *stop1,                            // 8
-                        __global int *stop2,                            // 9
-                        __global int *stop3,                            // 10
-                        __global int *global_dist,                      // 11
-                        __global float *bc,                             // 12
-                        const int num_nodes,                            // 13
+kernel void mega_kernel(__global int *A, const int A_row, const int A_col,
+                        __global int *B, const int B_row, const int B_col,
+                        __global int *C, __global atomic_int *counter,
+                        __global atomic_int *hash, __global int *row, // 0
+                        __global int *col,                            // 1
+                        __global int *row_trans,                      // 2
+                        __global int *col_trans,                      // 3
+                        __global int *dist,                           // 4
+                        __global float *rho,                          // 5
+                        __global float *sigma,                        // 6
+                        __global int *p,                              // 7
+                        __global int *stop1,                          // 8
+                        __global int *stop2,                          // 9
+                        __global int *stop3,                          // 10
+                        __global int *global_dist,                    // 11
+                        __global float *bc,                           // 12
+                        const int num_nodes,                          // 13
                         const int num_edges, __global IW_barrier *bar,
                         __global Discovery_ctx *d_ctx,
                         __global Kernel_ctx *non_persistent_kernel_ctx,
                         __global Kernel_ctx *persistent_kernel_ctx,
                         SCHEDULER_ARGS) {
-  __local int scratch[256];
 #define NON_PERSISTENT_KERNEL                                                  \
-  MY_reduce(buffer, length, result, scratch, non_persistent_kernel_ctx)
+  matmult(A, A_row, A_col, B, B_row, B_col, C, counter, hash,                  \
+          non_persistent_kernel_ctx)
 #define PERSISTENT_KERNEL                                                      \
   bc_combined(row, col, row_trans, col_trans, dist, rho, sigma, p, stop1,      \
               stop2, stop3, global_dist, bc, num_nodes, num_edges, bar,        \
