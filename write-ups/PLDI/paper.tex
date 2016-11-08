@@ -394,7 +394,111 @@ straightforward to adopt to our programming model.
   also make our key point: that arbitrary preemption will not work.}
 
 
-\section{The ckill and cfork primitives}
+\section{The Cooperative Kernels Programming Model}
+
+We describe our cooperative kernels programming model as an extension
+to the industry-standard OpenCL programming model for heterogenous
+many-core architectures.  However, the concept behind our programming
+model is more general, and could be applied to extend other GPU
+programming models, such as CUDA and HSA.
+
+\subsection{Semantics of Cooperative Kernels}
+
+As with a regular OpenCL kernel, a cooperative kernel is launched by
+the host application, with a specified number of workgroups, each
+consisting of a specified number of threads.  The kernel's behaviour
+is described by a kernel function, written in OpenCL C but using the
+additional language extensions that we present below, and a number of
+parameters to the kernel function are passed by the host application.
+
+\paragraph{Restored variables}
+
+\ADComment{TODO; perhaps say that kernel parameters are immutable.}
+
+\paragraph{Initial workroups}
+
+If the host application launches a cooperative kernel specifying that
+$N$ workgroups should execute the kernel, then when the kernel
+commences execution it should be executed by some number of workgroups
+$M$, with $1\leq M \leq N$.  The requested number of workgroups is
+called the \emph{workgroup limit} for the cooperative kernel, and $M$
+is the number of \emph{active workgroups}.
+
+The initial workgroups have consecutive workgroup ids in the range
+$[0, M-1]$.
+
+\paragraph{Semantics for $\offerkill$}
+
+Our first additional language primitive, $\offerkill$, is a
+workgroup-level function.  That is, similar to the OpenCL
+intra-workgroup $\mathsf{barrier}$ primitive, if $\offerkill$ appears
+inside conditional code then it must be executed by all threads in a
+workgroup, with all threads having executed the same number of
+iterations of any enclosing loops.
+
+Suppose a workgroup with id $m$ executes $\offerkill$.  If $m < M-1$,
+i.e.\ the workgroup's id is not the largest among the active
+workgroups, then $\offerkill$ is a no-op.  Otherwise, we must have $m
+= M-1$, in which case there is a non-deterministic choice between (a)
+$\offerkill$ executing as a no-op, or (b) execution of the workgroup
+ceasing and the number of active workgroups $M$ being decremented by
+one.  Case (b) corresponds to the scheduler accepting the workgroup's
+offer to cease execution, allowing the scheduler to schedule some
+other task.
+
+The semantics of $\offerkill$ is atomic.  That is, if multiple
+workgroups reach $\offerkill$ simultaneously, the semantics is that
+the workgroups should each execute $\offerkill$ in some well-defined
+but arbitrary sequential order.  \ADComment{Should we say something
+  about linearisability?}
+
+\paragraph{Semantics for $\offerfork$}
+
+Our second language primitive, $\offerfork$, is also a workgroup-level
+function.
+
+Suppose a workgroup with id $m\leq M$ executes $\offerfork$.  An
+integer $k$ in the range $[0, N-M]$ is chosen nondeterministically,
+$k$ new workgroups are spawned with consecutive ids in the range $[M,
+  M+k-1]$, and the active workgroup count $M$ is incremented by $k$.
+The $k$ new workgroups commence execution at the program point
+immediately following the $\offerfork$ call.  Each thread in each new
+workgroup has an arbitrary local state, except that:
+
+\begin{itemize}
+
+\item the threads have access to the parameters originally passed to
+  the cooperative kernel by the host application (recall that these
+  are immutable);
+
+\item for each variable $v$ in the set of restored variables
+  identified for the cooperative kernel, every thread's copy of $v$ is
+  initialised to the value that thread 0 in workgroup $m$ held for $v$
+  at the point of the $\offerfork$ call.
+
+\end{itemize}
+
+Notice that $k=0$ is always a legitimate choice for the number of
+workgroups to be spawned by an $\offerfork$ call, and in particular
+that if the number of active workgrouups $M$ is equal to the workgroup
+limit $N$, $k=0$ is guaranteed.
+
+\ADComment{Remark on our decision to have every thread inherit the state of the master thread from workgroup $m$.}
+
+
+
+\subsection{Non-functional Requirements of Cooperative Kernels}
+
+If a cooperative kernel is launched with $M$ workgroups, the
+
+
+However, unlike a regular kernel, if $M$ workgroups are requested for execution of a cooperative kernel.
+
+A \emph{cooperative kernel} is launched with a desired workgroup
+count, $M$, where $M > 0$.
+
+
+
 
 \ADComment{Remind the reader that these are inspired by work stealing
   and barrier synchonization.  In \mysec\ref{ } we describe the
