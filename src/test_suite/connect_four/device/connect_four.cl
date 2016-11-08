@@ -373,10 +373,6 @@ connect_four(
   __local Task task[1];
   __local bool game_over[1];
 
-  int local_id = get_local_id(0);
-  int local_size = get_local_size(0);
-  int group_id = get_group_id(0);
-
   /* INIT */
   if (get_global_id(0) == 0) {
     /* Initiate with the 7 nodes of the first level */
@@ -404,14 +400,23 @@ connect_four(
   /* MAIN LOOP */
   while (true) {
 
+    int group_id = get_group_id(0);
+
+    if (group_id > 0) {
+      offer_kill();
+    }
+
+    int local_id = get_local_id(0);
+    int local_size = get_local_size(0);
     int pool_id = group_id % num_task_pool;
 
+    /* get task */
     if (local_id == 0) {
       task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
       /* if no more task in own pool, try to steal some from other pools */
       if (task[0] == NULL_TASK) {
         for (int i = 1; i < num_task_pool; i++) {
-          int steal_pool_id = (group_id + i) % num_task_pool;
+          int steal_pool_id = (pool_id + i) % num_task_pool;
           task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
           if (task[0] != NULL_TASK) {
             break;
