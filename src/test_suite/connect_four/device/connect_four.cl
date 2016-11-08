@@ -258,7 +258,7 @@ Task wgm_create_children(int move, __global Node *nodes, __global atomic_int *no
 
 /*---------------------------------------------------------------------------*/
 
-bool try_lock(__global atomic_int *task_pool_lock, int pool_id)
+bool pool_try_lock(__global atomic_int *task_pool_lock, int pool_id)
 {
   int expected = false;
   return atomic_compare_exchange_strong(&(task_pool_lock[pool_id]), &expected, true);
@@ -266,7 +266,7 @@ bool try_lock(__global atomic_int *task_pool_lock, int pool_id)
 
 /*---------------------------------------------------------------------------*/
 
-void unlock(__global atomic_int *task_pool_lock, int pool_id)
+void pool_unlock(__global atomic_int *task_pool_lock, int pool_id)
 {
   atomic_store(&(task_pool_lock[pool_id]), false);
 }
@@ -280,13 +280,13 @@ int wgm_task_pop(__global Task *task_pool, __global atomic_int *task_pool_lock, 
 {
   int task = NULL_TASK;
   /* spinwait on the pool lock */
-  while (!(try_lock(task_pool_lock, pool_id)));
+  while (!(pool_try_lock(task_pool_lock, pool_id)));
   /* If pool is not empty, pick up the latest inserted task. */
   if (task_pool_head[pool_id] > 0) {
     task_pool_head[pool_id]--;
     task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
   }
-  unlock(task_pool_lock, pool_id);
+  pool_unlock(task_pool_lock, pool_id);
   return task;
 }
 
@@ -298,14 +298,14 @@ int wgm_task_pop(__global Task *task_pool, __global atomic_int *task_pool_lock, 
 Task wgm_task_push(Task task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
 {
   /* spinwait on the pool lock */
-  while (!(try_lock(task_pool_lock, pool_id)));
+  while (!(pool_try_lock(task_pool_lock, pool_id)));
   /* If pool is not full, insert task */
   if (task_pool_head[pool_id] < task_pool_size) {
     task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]] = task;
     task_pool_head[pool_id]++;
     task = NULL_TASK;
   }
-  unlock(task_pool_lock, pool_id);
+  pool_unlock(task_pool_lock, pool_id);
   return task;
 }
 
