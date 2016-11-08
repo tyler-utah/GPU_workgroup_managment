@@ -15,17 +15,17 @@ NAME_OF_CHIP = ""
 
 PROGRAMS = {
     "pannotia_color",
-    #"pannotia_mis",
-    #"pannotia_bc",
-    #"pannotia_sssp"
+    "pannotia_mis",
+    "pannotia_bc",
+    "pannotia_sssp"
 }
 
 PROGRAM_DATA = {
 
     "pannotia_color" : [ { "input" : os.path.join("inputs", "color", "ecology1.graph"),
                            "solution" : os.path.join("solutions", "color_ecology.txt") },
-                         # { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
-                         #   "solution" : os.path.join("solutions", "color_G3_circuit.txt") }
+                         { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
+                           "solution" : os.path.join("solutions", "color_G3_circuit.txt") }
     ],
 
     "pannotia_mis" : [ { "input" : os.path.join("inputs", "color", "ecology1.graph"),
@@ -35,8 +35,8 @@ PROGRAM_DATA = {
 
     "pannotia_bc" : [ { "input" : os.path.join("inputs", "bc", "1k_128k.gr"),
                         "solution" : os.path.join("solutions", "bc_1k_128k.gr") },
-                      #{ "input" : os.path.join("inputs", "bc", "2k_1M.gr"),
-                      #  "solution" : os.path.join("solutions", "bc_2k_1M.gr") }
+                      { "input" : os.path.join("inputs", "bc", "2k_1M.gr"),
+                       "solution" : os.path.join("solutions", "bc_2k_1M.gr") }
     ],
 
     "pannotia_sssp" : [ { "input" : os.path.join("inputs", "sssp", "USA-road-d.NW.gr"),
