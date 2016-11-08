@@ -107,6 +107,8 @@ void init_non_persistent_app(CL_Execution *exec) {
   /* Matrix C */
   c_mem_size = sizeof(cl_int) * FLAGS_A_row * FLAGS_B_col;
   d_C = cl::Buffer(exec->exec_context, CL_MEM_WRITE_ONLY, c_mem_size);
+  err = exec->exec_queue.enqueueFillBuffer(d_C, 0, 0, c_mem_size);
+  check_ocl(err);
 
   free(h_A);
   free(h_B);
@@ -129,28 +131,32 @@ int set_non_persistent_app_args(int arg_index, cl::Kernel k) {
   check_ocl(k.setArg(arg_index++, FLAGS_B_row));
   check_ocl(k.setArg(arg_index++, FLAGS_B_col));
   check_ocl(k.setArg(arg_index++, d_C));
-
   return arg_index;
 }
 
 /*---------------------------------------------------------------------------*/
 
 void reset_non_persistent() {
-  return;
+  /* cl_int err; */
+  /* err = exec->exec_queue.enqueueFillBuffer(d_C, 0, 0, c_mem_size); */
+  /* check_ocl(err); */
+  /* return; */
 }
 
 /*---------------------------------------------------------------------------*/
 
 bool check_non_persistent_task() {
-  cl_int err = 0;
-  /* h_C is allocated in init */
-  /* err = exec.exec_queue.enqueueReadBuffer(d_C, CL_TRUE, 0, c_mem_size, h_C); */
+  /* cl_int err = 0; */
+  /* /\* h_C is allocated in init *\/ */
+  /* err = exec->exec_queue.enqueueReadBuffer(d_C, CL_TRUE, 0, c_mem_size, h_C); */
   /* check_ocl(err); */
 
   /* int hash = hash_mat(h_C, FLAGS_A_row, FLAGS_B_col); */
-  cout << "Cannot compute Hash since cannot read buffer :( see with Tyler to add exec argument in check_non_persistent " << endl;
+  /* /\* The hash for a matrix of 100 with seed 1234 is -161045286 *\/ */
+  /* int ref_hash = -161045286; */
 
-  return 1;
+  /* return (hash == ref_hash); */
+  return 0;
 }
 
 /*---------------------------------------------------------------------------*/

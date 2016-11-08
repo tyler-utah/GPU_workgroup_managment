@@ -7,7 +7,7 @@
 /*---------------------------------------------------------------------------*/
 
 /* Warning: there is still some parts of code where these values are
-   hardcoded */
+ * hardcoded (in particular, diagonals scanning) */
 const CL_INT_TYPE NUM_ROW = 6;
 const CL_INT_TYPE NUM_COL = 7;
 const CL_INT_TYPE NUM_CELL = 6 * 7;
@@ -15,7 +15,10 @@ const CL_INT_TYPE NUM_CELL = 6 * 7;
 const CL_INT_TYPE PLUS_INF = 666;
 const CL_INT_TYPE MINUS_INF = -666;
 
-const CL_INT_TYPE MAX_LOOKAHEAD = 3;
+/* The actual level of lookahead is controlled by the "maxlevel" flag,
+ * MAX_LOOKAHEAD is a hard-coded upper-bound. */
+const CL_INT_TYPE MAX_LOOKAHEAD = 7;
+const CL_INT_TYPE NUM_NODE = 20000;
 
 /*---------------------------------------------------------------------------*/
 
@@ -26,5 +29,11 @@ typedef struct {
   ATOMIC_CL_INT_TYPE value;
   ATOMIC_CL_INT_TYPE num_child_answer;
 } Node;
+
+/*---------------------------------------------------------------------------*/
+
+/* A task is just a node index */
+typedef CL_INT_TYPE Task;
+const Task NULL_TASK = -1;
 
 /*---------------------------------------------------------------------------*/

@@ -140,6 +140,7 @@ class CL_Execution {
     //Include the rt_device sources
     options << "-I" << kernel_include << " ";
 
+
 	if (strcmp(extra_include, "") != 0) {
 		options << "-I" << extra_include << " ";
 	}
