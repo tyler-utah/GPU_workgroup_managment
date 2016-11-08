@@ -390,8 +390,7 @@ connect_four(
       atomic_store(&(nodes[i].num_child_answer), 0);
 
       /* register task */
-      //int pool_id = i % num_task_pool;
-      int pool_id = 0;
+      int pool_id = i % num_task_pool;
       task_pool[(pool_id * task_pool_size) + task_pool_head[pool_id]] = i;
       task_pool_head[pool_id] += 1;
     }
