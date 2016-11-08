@@ -122,10 +122,13 @@
 \newcommand{\NumApplications}{ten\xspace}
 \newcommand{\NumApplicationsUnique}{seven\xspace}
 
+\newcommand{\offerfork}{\mathsf{offer\_fork}}
+\newcommand{\offerkill}{\mathsf{offer\_kill}}
+
+
 \begin{document}
 
-\title{Responsive GPU Workgroup Management in the Presence of
-  Persistent Kernels}
+\title{Cooperative Kernels: Safe Multitasking for Blocking Algorithms on GPUs}
 
 %
 % any author declaration will be ignored  when using 'pldi' option (for double blind review)
@@ -156,206 +159,347 @@
     
 \section{Introduction}\label{sec:intro}
 
-\ADComment{Be sure to say that a GPU \emph{kernel} is.}
+\paragraph{The needs of irregular data-parallel algorithms}
+Acceleration of general-purpose computations on graphics processing
+units (GPUs) has tended to focus on \emph{regular} data-parallel
+algorithms, for which work to be processed can be evenly split between
+the workgroups that execute a GPU kernel ahead of time.  However, many
+interesting data-parallel algorithms are \emph{irregular}: the amount
+of work to be processed is unknown ahead of time and may be determined
+by the computation itself.  There is growing interest in accelerating irregular
+data-parallel algorithms on GPUs, particularly algorithms that
+traverse and manipulate graphs, with several recent notable
+successes~\cite{...}.
 
-Although GPU acceleration of general-purpose computation has focused
-on regular data-parallel algorithms, many data-parallel algorithms are
-\emph{irregular} \ADComment{say what that means}.  There is growing
-interest in accelerating irregular data parallel algorithms on GPUs,
-including \ADComment{name some algorithms and say why they matter},
-with several recent notable successes~\cite{...}.
-
-By their very nature, irregular algorithms demand synchronization
-between the workgroups that execute a GPU kernel.  For example, work
-stealing algorithms require the ability for one workgroup to steal
-from the queue of another workgroup, which can be safely achieved by
-protecting the queue of each workgroup using a mutex.  Breadth-first
-graph traversal uses a frontier-based approach that requires a barrier
-synchronization between all workgroups to allow computation to proceed
-from one frontier to the next.  Inter-workgroup synchronization
-involves \emph{blocking} between workgroups, e.g.\ workgroup A may be
-blocked until workgroup B releases a mutex, or blocked until all other
-workgroups arrive at an inter-workgroup barrier.  Thus, irregular data
-parallel algorithms that rely on inter-workgroup synchronization are
-\emph{blocking algorithms}.\footnote{\ADComment{Perhaps make the point
-    that inter-workgroup synchronization is possible in very rare
-    cases without blocking, e.g. threadfence reduction.}}
+Irregular algorithms usually require \emph{blocking synchronization}
+between workgroups, to balance load and communicate intermediate
+results.  For example, work stealing algorithms require each workgroup
+to maintain a queue, which is typically protected by a mutex to enable
+stealing by other workgroups.  As another example, breadth-first graph
+traversal uses a frontier-based approach that requires a barrier
+synchronization between all workgroups to achieve consensus that
+exploration of a frontier has been accomplished.  \ADComment{Perhaps
+  make the point that inter-workgroup synchronization is possible in
+  very rare cases without blocking, e.g. threadfence reduction.}
 
 To operate correctly, a blocking concurrent algorithm requires
-\emph{fair} scheduling of threads.  In the context of irregular data
-parallel algorithms accelerated on a GPU, this translates to requiring
-fair scheduling of workgroups.  Without fairness, a workgroup may fail
-to make progress, leading to starvation.  For example, if workgroup A
-holds a mutex and workgroup B is spin-waiting for the mutex to be
-released, an unfair scheduler can forever schedule B, so that A never
-releases the mutex.  Similarly, an unfair scheduler can induce
-starvation if workgroup A is at an inter-workgroup barrier awaiting
-the arrival of other workgroups, by allowing A to spin forever so that
-the other workgroups do not progress to the barrier.
+\emph{fair} scheduling of threads.  In the context of irregular
+data-parallel algorithms accelerated on a GPU, this translates to
+requiring fair scheduling of workgroups.  Without fairness, a
+workgroup may fail to make progress, leading to starvation.  For
+example, if workgroup $A$ holds a mutex and workgroup $B$ is
+spin-waiting for the mutex to be released, an unfair scheduler can
+forever schedule $B$, so that $A$ never releases the mutex.
+Similarly, an unfair scheduler can induce starvation if workgroup $A$
+is at an inter-workgroup barrier awaiting the arrival of other
+workgroups, by allowing A to spin forever so that the other workgroups
+do not progress to the barrier.
 
+\paragraph{Occupancy-bound execution}
 Current GPU programming models---CUDA~\cite{...}, OpenCL~\cite{...}
 and HSA~\cite{...}---specify very few constraints on the manner in
 which workgroups are scheduled.  In particular, they do \emph{not}
-guarantee fair scheduling, and fair scheduling is not observed in
+specify that workgroups must be fairly scheduled, and implementations
+of these programming models do not provide fair scheduling in
 practice.  Roughly speaking, each workgroup executing a GPU kernel is
 mapped to a hardware \emph{compute unit}.  If a kernel is executed
 with more workgroups than there are compute units then at least two
 workgroups must share a single compute unit.  The simplest way to
-handle this is an \emph{occupancy-bound} execution model, whereby once
-a workgroup has commenced execution on a compute unit (is has become
-\emph{occupant}), the workgroup has exclusive access to the compute
-unit until it has finished execution, after which a subsequent
-workgroup can be bound to the compute unit.  There is empirical
-evidence that the occupancy-bound execution model is widely
-implemented by today's GPU devices and drivers~\cite{...}, and it is
-evidently a simple model to implement efficiently.
+handle this is via an \emph{occupancy-bound} execution model, whereby
+once a workgroup has commenced execution on a compute unit (is has
+become \emph{occupant}), the workgroup has exclusive access to the
+compute unit until it has finished execution, after which a subsequent
+workgroup can be bound to the compute unit.  Experiments suggest that
+the occupancy-bound execution model is widely implemented by today's
+GPU devices and drivers~\cite{...}, and it is evidently a simple model
+for device vendors to implement efficiently.
 
-Clearly, the occupancy-bound execution model does not provide fair
-scheduling between workgroups in general: if all compute units are
-occupied then a not-yet-occupant workgroup will not be scheduled until
-some occupant workgroup completes execution.  Yet the execution
-model \emph{does} provide fair scheduling between \emph{occupant} workgroups,
-because they are bound to separate compute units that operate in parallel.
+The occupancy-bound execution model does not guarantee fair scheduling
+between workgroups: if all compute units are occupied then a
+not-yet-occupant workgroup will not be scheduled until some occupant
+workgroup completes execution.  Yet the execution model \emph{does}
+provide fair scheduling between \emph{occupant} workgroups, because
+they are bound to separate compute units that operate in parallel.
 Current implementations of irregular data parallel algorithms on GPUs
-assume this occupancy-bound execution model, exploiting it by
-scheduling no more workgroups than there are available compute units.
-Because current GPUs do provide the occupancy-bound execution model in
-practice, this strategy allows starvation-free blocking
-synchronization between workgroups.
+assume that the target GPU device provides the occupancy-bound
+execution model, which they exploit by scheduling no more workgroups
+than there are available compute units~\cite{...}.  This works today
+because \emph{today}'s GPUs seem to provide the occupancy-bound
+execution model.
 
-However, none of the current GPU programming models actually mandate
-the occupancy-bound execution model, and there are clear reasons why
-this model is not actually desirable from the point-of-view of GPU
-vendors nor end users.  First, the execution model does not enable
+\paragraph{Resistance to occupancy-bound execution}
+
+Despite its practical prevalence, none of the current GPU programming
+models actually mandate occupancy-bound execution.  Further, there are
+clear reasons why this model is undesirable from the point-of-view of
+GPU vendors and end users.  First, the execution model does not enable
 multi-tasking, because a workgroup effectively \emph{owns} a compute
 unit until the workgroup has completed execution.  If a long-running
 kernel occupies all workgroups, the GPU cannot be used for other
-tasks, such as graphics rendering or shorter, higher-priority
-computations, in the meantime.  Precisely because of this problem,
-operating systems employ a GPU \emph{watchdog} to heuristically detect
-and kill long-running computations on the GPU that is being used for
-rendering.  If one disables this watchdog and launches a long-running
-kernel, the display becomes unresponsive for the duration of kernel
-execution.  Second, \emph{energy throttling} is an important concern
-for battery-powered devices, such as smartphones and tablets.  It is
-desirable for a mobile GPU driver to be able to power down one or more
-compute units if the battery level is low or if the user puts the
-device into a low power state.  Implementing energy throttling
-requires being able to suspend the execution of a workgroup, power
-down the compute unit to which the workgroup was bound, and schedule
-the workgroup for later execution on a different compute unit.
+tasks, such as graphics rendering, in the meantime.  Precisely because
+of this problem, operating systems employ a GPU \emph{watchdog} to
+heuristically detect and kill long-running computations on the GPU
+being used for display rendering.  If this watchdog is disabled,
+execution of a long-running kernel causes the display to freeze for
+the duration of kernel execution.  Second, \emph{energy throttling} is
+an important concern for battery-powered devices, such as smartphones
+and tablets.  It is desirable for a mobile GPU driver to be able to
+power down one or more compute units if the battery level is low or if
+the user puts the device into a low power state.  Implementing energy
+throttling requires being able to suspend the execution of a
+workgroup, power down the compute unit to which the workgroup was
+bound, and schedule the workgroup for later execution on a different
+compute unit.
 
 Our assessment, informed by discussions with a number of industrial
 practitioners who have been involved in the OpenCL and/or HSA
-standardisation efforts~\cite{CitePersonalCommunication}, is that GPU
-vendors are reluctant to commit to the occupancy-bound execution model
-that they currently implement, due to the need for multi-tasking and
-energy throttling, yet do not wish to guarantee fair scheduling, due
-to the runtime overhead associated with supporting full preemption of
-workgroups, e.g.\ based on time-slicing.  Vendors instead wish to
-retain the essence of the occupancy-bound execution model, which is
-simple to implement efficiently, but provide preemption for the special
-cases associated with multi-tasking for high-priority jobs (most crucially
-graphics) and energy throttling.  In particular, they do not want to
-commit to fair scheduling of a workgroup once it has been preempted.
-As argued above, without fairness it is not possible to implement
-non-blocking algorithms, including data parallel irregular algorithms,
-safely.
+standardisation efforts~\cite{CitePersonalCommunication}, is that
+\textbf{(1)} GPU vendors will not commit to the occupancy-bound
+execution model that they currently implement, due to the need for
+multi-tasking and energy throttling, yet \textbf{(2)} GPU vendors will
+not guarantee fair scheduling, due to the runtime overhead associated
+with supporting full preemption of workgroups, e.g.\ based on
+time-slicing.  Vendors instead wish to retain the essence of the
+occupancy-bound execution model, which is simple to implement
+efficiently, and provide preemption for the special cases associated
+with multi-tasking for high-priority jobs (most crucially graphics)
+and energy throttling.  In particular, they do not want to commit to
+fair scheduling of a workgroup once it has been preempted.
 
 \paragraph{Our proposal}
+%
+To summarise: blocking algorithms, such as most irregular algorithms,
+demand a degree of fair scheduling of workgroups, but for good reasons
+GPU vendors will not commit to the guarantees of even the
+occupancy-bound execution model.
 
-  Our Proposal: Non-blocking GPU programs (majority of kernels today)
-  can be exucuted however the GPU scheduler sees fit. Algorithm that
-  require a degree of fairness (e.g. blocking algorithms) must be
-  written a small set of language extensions, and launched in a
-  cooperative mode. This indicates that the scheduler must interact
-  with these kernels in a special manner via the language
-  extensionts. These kernels are written with language extensions that
-  allow designated points at which a workgroup can be de-scheduled or
-  re-scheduled to be identified.
+We propose \emph{cooperative kernels}, an extension to the GPU
+programming model that aims to resolve this impasse.  A GPU kernel
+that requires workgroups to be fairly scheduled is identified as a
+\emph{cooperative} kernel, and written using two additional language
+primitives, $\offerkill$ and $\offerfork$, which must be placed
+carefully by the programmer.
 
-  In traditonal co-operative multi-tasking, a task reliquishes control
-  and regains control in a stateful manner. We propose a lighter
-  weight model we believe to suitible for the type of blocking
-  algorithms we are aware of for GPUs. At a point where the algorithm
-  could proceed with fewer workgroups, a workgroup can offer itself
-  to be killed. This indicates to the scheduler that the algorithm
-  would happily proceed with the workgroup continuing, but is prepared
-  for the workgroup to be destroyed for good. In addition, the programmer
-  identifies designated points where it would be beneificial to join the
-  computation if available. On offering to fork, the algorithm indicates
-  that it is prepared to proceed with the existing workgroups, but is able
-  to take advantage of one or more additional workgroups commencing at the
-  given program point. Inheriting the state of the invoking workgroup.
+At a point where the cooperative kernel could proceed with fewer
+workgroups, a workgroup can execute $\offerkill$ to sacrifice itself to
+the scheduler.  This indicates to the scheduler that the workgroup
+would ideally continue with its execution, but that if required the
+scheduler may destroy the workgroup for good: the cooperative kernel
+is prepared to deal with either scenario.
 
-  The scheduler agrees to scheduler the workgroups fairly, but is at
-  liberty to eliminate workgroups for good when they offer themselves
-  to be killed. This allows the schduler to repond to changing depands
-  on the GPU, e.g. to implement energy throttling.
+At a point where the cooperative kernel could benefit from having
+additional workgroups join the computation, a workgroup can execute
+$\offerfork$.  This indicates to the scheduler that the cooperative
+kernel is prepared to proceed with the existing set of workgroups, but
+is able to take advantage of having one or more additional workgroups
+commencing execution at the $\offerfork$ program point, inheriting the
+state of the workgroup that executed $\offerfork$.
 
-  *Note: its not really completely fair, its occupancy bound
+The use of $\offerfork$ and $\offerkill$ creates a contract between
+the scheduler and (the programmer of the) cooperative kernel, with
+both functional and non-functional requirements.  Functionally: the
+scheduler must guarantee that the workgroups executing a cooperative
+kernel are fairly scheduled; the cooperative kernel must be robust to
+workgroups leaving and joining the computation when the $\offerkill$
+and $\offerfork$ functions, respectively, are called.
+Non-functionally: a cooperative kernel must ensure that $\offerkill$
+is executed frequently enough that the scheduler can accommodate
+soft-real time constraints, e.g.\ allowing a smooth frame-rate for
+graphics or allowing compute units to be powered down quickly when
+required; the scheduler should respond to $\offerkill$ and
+$\offerfork$ calls in a manner that avoids under-utilisation of
+hardware resources by the cooperative kernel, e.g.\ the scheduler
+should not kill workgroups unless they are required for another
+purpose.
 
-  This programming model creates a contract between the scheduler
-  and cooperative kernel:
+Cooperative kernels have several appealing properties.  First, they
+accommodate the needs of blocking algorithms, including irregular
+data-parallel algorithms: such algorithms can be implemented naturally
+as cooperative kernels \ADComment{boast that we did a good set}, so
+that fair scheduling between workgroups is guaranteed.  Second, they
+have no impact on the development of regular (non-cooperative
+kernels): these can be programmed exactly as they are now.  Third, the
+programming model is backwards compatible: a non-blocking algorithm
+implementation that works on today's GPU platforms can be upgraded to
+use our language extensions for cooperative scheduling, and will
+behave exactly as it does at present if the new $\offerkill$ and
+$\offerfork$ functions are simply ignored.  Fourth, the programming
+model is easy to implement on top of the occupancy-bound execution
+model that current GPU platforms provide; we present a
+proof-of-concept implementation on top of OpenCL 2.0 that requires no
+special-purpose hardware or driver support.  Fifth, our results
+suggest that cooperative kernels can provide efficient multi-tasking
+of cooperative and non-cooperative tasks: our experiments across a
+range of GPUs from two vendors show very good response times for
+scheduling short, non-cooperative kernels concurrently with
+long-running cooperative kernels.  These performance results are with
+respect to our proof-of-concept, portable implementation; a vendor
+specific implementation of cooperative kernels could likely yield
+better performance still through device-specific driver and compiler
+support.
 
-  Functional requirements: Scheduler agrees that cooperative kernels
-  have fairly scheduled workgroups. The Cooperative kernel is written
-  in a way that can tolerate threads leaving or joining at the
-  designated areas (e.g. a thread should not opt to be killed if it
-  contains local work to do, and a programmer should be prepared for
-  the number of executing workgroups to change dynamically during
-  computation).
+In summary, our main contributions are:
 
-  Non-Functional: The cooperative kernel must ensure that offer\_kill
-  is executed frequently enough such that the system can accomodate
-  soft-real time constraints (e.g. allowing a smooth framerate for
-  graphics or throttling the energy before the mobile battery drains).
-  To enable the cooperative execute efficiently, the scheduler should
-  adopt a policy that avoids under utililasion of hardware resources
-  for the cooperative kernel (e.g. the scheduler should not kill
-  workgroups unless they are required).
+\begin{enumerate}
 
-  The programming model is backwards compatible because semantically
-  it is fine for these things to be ignored and GPUs already give
-  occupant bound fairness. 
+\item \emph{Cooperative kernels}, an extension to the GPU programming model to support the scheduling requirements of blocking algorithms  \ADComment{Maybe big up to say that we give semantics to the new operations.}
 
-  Our contributions:
+\item A portable implementation of cooperative kernels on top of the OpenCL 2.0 programming model
 
-  - Programming model in detail (semantics of new operations)
+\item The porting of \ADComment{TODO} irregular graph algorithms \ADComment{tighten} to the cooperative kernels model
 
-  - Prototype implementation of the programming model using OpenCL 2.0
-    advance features to build the scheudler and implement a clang
-    based compiler to transform input programs using the language
-    extensions to lower-level programs that interact with the
-    scheduler. Our prototype simulates multiple independent kernels
-    into a mega-kernel. A vendor specific implementation could achieve
-    higher efficiency through modications to the GPU driver that may
-    take advantage of hardware features. (e.g. mega kernel might not
-    be good to compile). Its reasonable to think our proof of concept
-    provides a lower bound on how well we can do.
+\item \ADComment{The experiments}
 
-  - We ported a large set of blocking algorithms to our programming
-    model. We evaluate co-operative scheduling with a cooperative
-    kernel and non-coperative kernel. GPUs from multiple vendors and
-    access various things. 
+\end{enumerate}
 
-  - Our results are promising.
+\ADComment{Text to maybe work in.}
 
-  - In the evaluation, make a note that the applications we worked on
-    Namely if they use only a barrier or work-stealing idiom, are
-    straightforward to adopt to our programming model.
+In traditional co-operative multi-tasking, a task relinquishes control
+and regains control in a stateful manner. We propose a lighter weight
+model we believe to suitible for the type of blocking algorithms we
+are aware of for GPUs.
 
+The scheduler agrees to scheduler the workgroups fairly, but is at
+liberty to eliminate workgroups for good when they offer themselves
+to be killed. This allows the schduler to repond to changing depands
+on the GPU, e.g. to implement energy throttling.
 
+Prototype implementation of the programming model using OpenCL 2.0
+advance features to build the scheudler and implement a clang based
+compiler to transform input programs using the language extensions to
+lower-level programs that interact with the scheduler. Our prototype
+simulates multiple independent kernels into a mega-kernel. A vendor
+specific implementation could achieve higher efficiency through
+modications to the GPU driver that may take advantage of hardware
+features. (e.g. mega kernel might not be good to compile). Its
+reasonable to think our proof of concept provides a lower bound on how
+well we can do.
 
+We ported a large set of blocking algorithms to our programming
+model. We evaluate co-operative scheduling with a cooperative kernel
+and non-coperative kernel. GPUs from multiple vendors and access
+various things.
 
-  Doesn't fascilitate energy throttling or
-  multi-tasking. Multi-tasking is important esp. for responsive
-  systems. (Say something colourful here, its an enabler. A use case
-  for today and many use cases for tomorrow.)
+Our results are promising.
+
+In the evaluation, make a note that the applications we worked on
+Namely if they use only a barrier or work-stealing idiom, are
+straightforward to adopt to our programming model.
 
 
 
+\section{Motivating example: work stealing}
 
+\ADComment{Use the work stealing example to both introduce OpenCL and
+  also make our key point: that arbitrary preemption will not work.}
+
+
+\section{The ckill and cfork primitives}
+
+\ADComment{Remind the reader that these are inspired by work stealing
+  and barrier synchonization.  In \mysec\ref{ } we describe the
+  semantics of kernels that use these primitives.  In \mysec\ref{ } we
+  show how work stealing can be implemented.  In \mysec\ref{ } we show
+  how a barrier can be implemented.}
+
+\subsection{Semantics of the new primitives}
+
+\ADComment{General semantics: let $N$ be the maximum number of
+  workgroups the GPU of interest can support [gloss over or deal with
+    issue that this is kernel-dependent].  A kernel is launched with
+  $M$ workgroups, for some $0 < M \leq N$.  Initially these are all
+  scheduled, and are guaranteed to make independent forward progress.}
+
+\ADComment{The purpose of ckill is for a workgroup to volunteer to
+  quit execution of the kernel if the resources that it is using
+  (e.g.\ the associated compute unit) are required for other tasks.  A
+  ckill statement must be reached under workgroup-uniform control
+  flow.  When a workgroup reaches ckill, the workgroup either
+  terminates execution (because the environment requires the
+  workgroup's resources), or continues execution as if the ckill
+  statement were a no=op).  From a semantics perspective this is a
+  non-deterministic choice: an application that invokes ckill should
+  be prepared for either outcome.  In practice, the effect of ckill
+  depends on environmental conditions.}
+
+\ADComment{The purpose of cfork is for a workgroup to indicate that it
+  would be useful to have additional workgroups join the computation,
+  and to specify that the program point associated with the cfork
+  statement would be a suitable place for a new workgroup to start
+  executing.  A cfork statement must also be reached under
+  workgroup-uniform control flow.  If $C$ workgroups are executing
+  when a workgroup reaches a cfork statement, with $0 < C \leq M$,
+  then between 0 and $M-C$ new workgroups commence execution from the
+  following statement.  From a semantics perspective, the number of
+  workgroups that join the computation is nondeterministic, within the
+  permitted range.  In practice, how many workgroups join depends on
+  environmental conditions.}
+
+\ADComment{TODO: describe persistent variables.}
+
+\ADComment{TODO: explain that ckill and cfork atomically update the
+  kernel context (ids).}
+
+\ADComment{TODO: somewhere we need to explain the constraints this
+  places on programming: how ids work, what one can assume about them,
+  etc.}
+
+\ADComment{Now describe the more refined semantics where IDs are
+  relinquished in decreasing order; explain that from a formal
+  perspective thie refines the original semantics.}
+
+\ADComment{In the above, explain at some point how a scheduler can
+  exploit cfork and ckill to utilise the GPU resources.}
+
+\subsection{Preemption-aware work stealing}
+
+\ADComment{Show how work stealing can now be made safe.}
+
+\subsection{A preemption-aware global barrier}
+
+\ADComment{Show how the global barrier can be written in a manner that
+  maintains contiguous ids using the refined semantics.}
+
+
+\section{Application-specific optimisations}
+
+\ADComment{Explain that for global barriers, we explain how some new
+  primitives can lead to a better implementation.  Explain that for
+  work stealing there are various ways the existing ckill and cfork
+  primitives can be used.}
+
+\subsection{An optimised barrier implementation}
+
+\ADComment{Remark that the barrier of \mysec\ref{sec:naivebarrier} may
+  be inefficient, discuss the use of query primitives to make this
+  more efficient.}
+
+\subsection{Variations on work stealing}
+
+\ADComment{Three cases here: always ckill/cfork, ckill/cfork only when
+  queue is empty, and have a ``mediator'' workgroup to manage things.}
+
+
+\section{A mega kernel-based prototype}
+
+\ADComment{Explain carefully that doing this properly would require
+  driver support, etc., and then explain what we've actually done.}
+
+
+\section{Experimental evaluation}
+
+\ADComment{TODO: write up notes from whiteboard chat.}
+
+
+\section{Related work}
+
+\section{Conclusions and future work}
+
+\ADComment{Next-generation GPUs and drivers for evaluation,
+  implementation in a real driver, migration of work between multiple
+  GPUs.}
+
+\section{Old intro}
 
 
 \ADComment{Points to make: It is important to be able to execute
@@ -549,115 +693,5 @@ available on current GPUs. This allows us to test the feasibility of
 our approach and as well get upper bounds for the performance cost and
 the responsiveness of multi-tasking.
 
-\section{Motivating example: work stealing}
-
-\ADComment{Use the work stealing example to both introduce OpenCL and
-  also make our key point: that arbitrary preemption will not work.}
-
-
-\section{The ckill and cfork primitives}
-
-\ADComment{Remind the reader that these are inspired by work stealing
-  and barrier synchonization.  In \mysec\ref{ } we describe the
-  semantics of kernels that use these primitives.  In \mysec\ref{ } we
-  show how work stealing can be implemented.  In \mysec\ref{ } we show
-  how a barrier can be implemented.}
-
-\subsection{Semantics of the new primitives}
-
-\ADComment{General semantics: let $N$ be the maximum number of
-  workgroups the GPU of interest can support [gloss over or deal with
-    issue that this is kernel-dependent].  A kernel is launched with
-  $M$ workgroups, for some $0 < M \leq N$.  Initially these are all
-  scheduled, and are guaranteed to make independent forward progress.}
-
-\ADComment{The purpose of ckill is for a workgroup to volunteer to
-  quit execution of the kernel if the resources that it is using
-  (e.g.\ the associated compute unit) are required for other tasks.  A
-  ckill statement must be reached under workgroup-uniform control
-  flow.  When a workgroup reaches ckill, the workgroup either
-  terminates execution (because the environment requires the
-  workgroup's resources), or continues execution as if the ckill
-  statement were a no=op).  From a semantics perspective this is a
-  non-deterministic choice: an application that invokes ckill should
-  be prepared for either outcome.  In practice, the effect of ckill
-  depends on environmental conditions.}
-
-\ADComment{The purpose of cfork is for a workgroup to indicate that it
-  would be useful to have additional workgroups join the computation,
-  and to specify that the program point associated with the cfork
-  statement would be a suitable place for a new workgroup to start
-  executing.  A cfork statement must also be reached under
-  workgroup-uniform control flow.  If $C$ workgroups are executing
-  when a workgroup reaches a cfork statement, with $0 < C \leq M$,
-  then between 0 and $M-C$ new workgroups commence execution from the
-  following statement.  From a semantics perspective, the number of
-  workgroups that join the computation is nondeterministic, within the
-  permitted range.  In practice, how many workgroups join depends on
-  environmental conditions.}
-
-\ADComment{TODO: describe persistent variables.}
-
-\ADComment{TODO: explain that ckill and cfork atomically update the
-  kernel context (ids).}
-
-\ADComment{TODO: somewhere we need to explain the constraints this
-  places on programming: how ids work, what one can assume about them,
-  etc.}
-
-\ADComment{Now describe the more refined semantics where IDs are
-  relinquished in decreasing order; explain that from a formal
-  perspective thie refines the original semantics.}
-
-\ADComment{In the above, explain at some point how a scheduler can
-  exploit cfork and ckill to utilise the GPU resources.}
-
-\subsection{Preemption-aware work stealing}
-
-\ADComment{Show how work stealing can now be made safe.}
-
-\subsection{A preemption-aware global barrier}
-
-\ADComment{Show how the global barrier can be written in a manner that
-  maintains contiguous ids using the refined semantics.}
-
-
-\section{Application-specific optimisations}
-
-\ADComment{Explain that for global barriers, we explain how some new
-  primitives can lead to a better implementation.  Explain that for
-  work stealing there are various ways the existing ckill and cfork
-  primitives can be used.}
-
-\subsection{An optimised barrier implementation}
-
-\ADComment{Remark that the barrier of \mysec\ref{sec:naivebarrier} may
-  be inefficient, discuss the use of query primitives to make this
-  more efficient.}
-
-\subsection{Variations on work stealing}
-
-\ADComment{Three cases here: always ckill/cfork, ckill/cfork only when
-  queue is empty, and have a ``mediator'' workgroup to manage things.}
-
-
-\section{A mega kernel-based prototype}
-
-\ADComment{Explain carefully that doing this properly would require
-  driver support, etc., and then explain what we've actually done.}
-
-
-\section{Experimental evaluation}
-
-\ADComment{TODO: write up notes from whiteboard chat.}
-
-
-\section{Related work}
-
-\section{Conclusions and future work}
-
-\ADComment{Next-generation GPUs and drivers for evaluation,
-  implementation in a real driver, migration of work between multiple
-  GPUs.}
 
 \end{document}
