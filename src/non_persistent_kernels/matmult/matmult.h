@@ -102,6 +102,9 @@ void init_non_persistent_app(CL_Execution *exec) {
     FLAGS_B_col = FLAGS_matdim;
   }
 
+  printf("Matrix multiply input dimensions: A (%d * %d), B (%d * %d)\n",
+         FLAGS_A_row, FLAGS_A_col, FLAGS_B_row, FLAGS_B_col);
+
   if (FLAGS_A_col != FLAGS_B_row) {
     cout << "Error: incompatile matrix size (A col: " << FLAGS_A_col;
     cout << ", B row: " << FLAGS_B_row << ")" << endl;
