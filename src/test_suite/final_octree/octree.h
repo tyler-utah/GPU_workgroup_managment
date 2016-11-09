@@ -122,62 +122,27 @@ void init_persistent_app_for_real(CL_Execution *exec, int occupancy) {
 
 }
 
+/*---------------------------------------------------------------------------*/
+
 void set_persistent_app_args_for_real(int arg_index, cl::Kernel k) {
   // Set args for persistent kernel
-  int err = 0;
-
-  err = k.setArg(arg_index, randdata);
-  arg_index++;
-  check_ocl(err);
-
-  err = k.setArg(arg_index, particles);
-  arg_index++;
-  check_ocl(err);
-
-  err = k.setArg(arg_index, newParticles);
-  arg_index++;
-  check_ocl(err);
-  err = k.setArg(arg_index, tree);
-  arg_index++;
-  check_ocl(err);
-  err = k.setArg(arg_index, FLAGS_numParticles);
-  arg_index++;
-  check_ocl(err);
-  err = k.setArg(arg_index, treeSize);
-  arg_index++;
-  check_ocl(err);
-  err = k.setArg(arg_index, particlesDone);
-  arg_index++;
-  check_ocl(err);
-  err = k.setArg(arg_index, FLAGS_maxChildren);
-  arg_index++;
-  check_ocl(err);
-
-  err = k.setArg(arg_index, max_workgroups);
-  arg_index++;
-  check_ocl(err);
-  err = k.setArg(arg_index, deq);
-  arg_index++;
-  check_ocl(err);
-  err = k.setArg(arg_index, dh);
-  arg_index++;
-  check_ocl(err);
-  err = k.setArg(arg_index, maxlength);
-  arg_index++;
-  check_ocl(err);
-
-  /* frompart */
-  err = k.setArg(arg_index, NULL);
-  arg_index++;
-  check_ocl(err);
-
-  /* topart */
-  err = k.setArg(arg_index, NULL);
-  arg_index++;
-  check_ocl(err);
-
+  check_ocl(k.setArg(arg_index++, randdata));
+  check_ocl(k.setArg(arg_index++, particles));
+  check_ocl(k.setArg(arg_index++, newParticles));
+  check_ocl(k.setArg(arg_index++, tree));
+  check_ocl(k.setArg(arg_index++, FLAGS_numParticles));
+  check_ocl(k.setArg(arg_index++, treeSize));
+  check_ocl(k.setArg(arg_index++, particlesDone));
+  check_ocl(k.setArg(arg_index++, FLAGS_maxChildren));
+  check_ocl(k.setArg(arg_index++, max_workgroups));
+  check_ocl(k.setArg(arg_index++, deq));
+  check_ocl(k.setArg(arg_index++, dh));
+  check_ocl(k.setArg(arg_index++, maxlength));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
 }
 
+/*---------------------------------------------------------------------------*/
 
 void init_persistent_app_for_occupancy(CL_Execution *exec)
 {
