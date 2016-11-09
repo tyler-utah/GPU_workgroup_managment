@@ -22,3 +22,5 @@ add_subdirectory(tyler_handwritten_tests)
 add_subdirectory(test_suite)
 add_subdirectory(pannotia)
 add_subdirectory(non_persistent_kernels)
+add_subdirectory(lonestar)
+

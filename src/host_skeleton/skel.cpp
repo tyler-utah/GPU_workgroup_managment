@@ -54,6 +54,10 @@ using namespace std;
 #include "../graph_apps/sssp/sssp.h"
 #elif defined PERSISTENT_PANNOTIA_BC
 #include "../graph_apps/bc/bc.h"
+#elif defined PERSISTENT_LONESTAR_BFS
+#include "../lonestar/graph_apps/bfs/bfs.h"
+#elif defined PERSISTENT_LONESTAR_SSSP
+#include "../lonestar/graph_apps/sssp/sssp.h"
 #elif defined PERSISTENT_OCTREE
 #include "octree.h"
 #elif defined PERSISTENT_CONNECT_FOUR
@@ -242,6 +246,8 @@ void run_persistent(CL_Execution *exec) {
 		                           file::Path(FLAGS_scheduler_rt_path),
 		                           file::Path(FLAGS_restoration_ctx_path),
 		                           FLAGS_use_query_barrier);
+
+	
 	check_ocl(err);
 	exec->exec_kernels["persistent"] = cl::Kernel(exec->exec_program, persistent_kernel_name(), &err);
 	check_ocl(err);
@@ -253,12 +259,15 @@ void run_persistent(CL_Execution *exec) {
 	arg_index = set_persistent_app_args_for_occupancy(arg_index, exec->exec_kernels["persistent"]);
 	err = exec->exec_queue.flush();
 	check_ocl(err);
-
+	
 	cl::Buffer d_bar(exec->exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
 	reset_barrier(exec, d_bar);
+	
 	err = exec->exec_kernels["persistent"].setArg(arg_index, d_bar);
 	arg_index++;
 	check_ocl(err);
+
+	
 
 	cl::Buffer d_ctx_mem(exec->exec_context, CL_MEM_READ_WRITE, sizeof(Discovery_ctx));
 	reset_discovery(exec, d_ctx_mem, true);
