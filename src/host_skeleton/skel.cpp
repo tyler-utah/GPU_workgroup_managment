@@ -35,7 +35,7 @@ DEFINE_int32(use_query_barrier, 0, "flag to use regular ckill barrier or query c
 
 
 DEFINE_int32(run_non_persistent, 0, "Run only the non persistent task (solo run). If greater than 0, specifies the iterations");
-DEFINE_int32(threads_per_wg, 256, "Threads per workgroup for non persistent task solo runs");
+DEFINE_int32(threads_per_wg, 128, "Threads per workgroup for non persistent task solo runs");
 DEFINE_int32(num_wgs, 8, "Workgroups for non persistent task solo runs");
 DEFINE_int32(merged_iterations, 1, "Iterations to run the merged kernel for");
 
