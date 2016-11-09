@@ -408,9 +408,13 @@ connect_four(
       offer_kill();
     }
 
+    if (group_id == 0) {
+      offer_fork();
+    }
+
     int local_id = get_local_id(0);
     int local_size = get_local_size(0);
-    int pool_id = group_id % num_task_pool;
+    int pool_id = get_group_id(0) % num_task_pool;
 
     /* get task */
     if (local_id == 0) {

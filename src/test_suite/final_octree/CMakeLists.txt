@@ -18,4 +18,4 @@ target_link_libraries(final_octree
   base_file
 )
 
-add_definitions(-DPERSISTENT_OCTREE -DNON_PERSISTENT_REDUCE)
+add_definitions(-DPERSISTENT_OCTREE -DNON_PERSISTENT_MATMULT)

@@ -105,6 +105,7 @@ def run_suite():
             exe = os.path.join(EXE_PATH, p)
             graph_in = os.path.join(DATA_PATH, d["input"])
             graph_sol = os.path.join(DATA_PATH, d["solution"])
+			# TODO: run merged skip task, grab occupancy result, and run standalone with as many wgs as the occupancy found
             cmd = [exe, "--non_persistent_frequency", NON_PRST_FREQ, "--graph_file", graph_in, "--graph_solution_file", graph_sol, "--threads_per_wg", "128"]
             # standalone, which does not produce stat files, so nothing to collect here
             # exec_cmd(cmd, ["--run_persistent", "2"], "== standalone")

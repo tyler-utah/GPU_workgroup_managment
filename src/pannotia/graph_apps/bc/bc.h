@@ -1,3 +1,4 @@
+#include <algorithm>		// for stable_sort in bc_parse.h
 #include "bc_parse.h"
 
 // Could probably go into a pannotia header

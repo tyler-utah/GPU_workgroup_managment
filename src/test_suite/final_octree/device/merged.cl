@@ -13,8 +13,25 @@
 
 /*---------------------------------------------------------------------------*/
 
+int hash_mat(int *M, int num_row, int num_col) {
+  // hash the diagonal using djb2, see
+  // http://www.cse.yorku.ca/~oz/hash.html
+  int hash = 5381;
+  int row = 0;
+  int col = 0;
+  while (row < num_row && col < num_col) {
+    hash = (hash * 33) + M[(row * num_col) + col];
+    row++;
+    col++;
+  }
+  return hash;
+}
+
+/*---------------------------------------------------------------------------*/
+
 void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
              const int B_row, const int B_col, __global int *C,
+             __global atomic_int *counter, __global atomic_int *hash,
              __global Kernel_ctx *__k_ctx) {
   /* safety */
   if (A_col != B_row) {
@@ -35,11 +52,22 @@ void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
       C[i] += A[a_offset + j] * B[(j * B_col) + c_col];
     }
   }
+
+  if (get_local_id(0) == 0) {
+    int finished = atomic_fetch_add(counter, 1);
+    if (finished == (k_get_num_groups(__k_ctx) - 1)) {
+      int h = hash_mat(C, A_row, B_col);
+      atomic_store(hash, h);
+    }
+  }
 }
 
 /*---------------------------------------------------------------------------*/
 
 __global int __junk_global;
+
+/* Hugues: octree_common.h hard-coded-included since kernel_merge does
+   not provide option to indicate additionnal include dirs/files */
 
 /*---------------------------------------------------------------------------*/
 
@@ -429,9 +457,12 @@ void octree_main(
   } // end of main loop
 }
 
+/*---------------------------------------------------------------------------*/
+
 kernel void
 mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
             const int B_row, const int B_col, __global int *C,
+            __global atomic_int *counter, __global atomic_int *hash,
             __global int *randdata, __global float4 *particles,
             __global float4 *newparticles, __global unsigned int *tree,
             const unsigned int numParticles, __global unsigned int *treeSize,
@@ -449,7 +480,8 @@ mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
   __local Task newTask[1];
   __local volatile int rval[1];
 #define NON_PERSISTENT_KERNEL                                                  \
-  matmult(A, A_row, A_col, B, B_row, B_col, C, non_persistent_kernel_ctx)
+  matmult(A, A_row, A_col, B, B_row, B_col, C, counter, hash,                  \
+          non_persistent_kernel_ctx)
 #define PERSISTENT_KERNEL                                                      \
   octree_main(randdata, particles, newparticles, tree, numParticles, treeSize, \
               particlesDone, maxchilds, num_pools, deq, dh, maxlength,         \
