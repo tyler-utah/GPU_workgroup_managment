@@ -33,8 +33,7 @@ typedef struct {
 /*---------------------------------------------------------------------------*/
 
 /* A task is just a int indicating node index */
-typedef int Task;
-const Task NULL_TASK = -1;
+const int NULL_TASK = -1;
 
 /*---------------------------------------------------------------------------*/
 
@@ -236,9 +235,9 @@ void update_board(__local uchar *board, __global uchar *base_board, __global Nod
 
 /* wgm_create_children() must be called by the workgroup master
    thread. This function returns the node id of the created child */
-Task wgm_create_children(int move, __global Node *nodes, __global atomic_int *node_head, int parent_id)
+int wgm_create_children(int move, __global Node *nodes, __global atomic_int *node_head, int parent_id)
 {
-  Task child_id = NULL_TASK;
+  int child_id = NULL_TASK;
   __global Node *parent = &(nodes[parent_id]);
   child_id = atomic_fetch_add(node_head, 1);
   /* safety */
@@ -276,7 +275,7 @@ void pool_unlock(__global atomic_int *task_pool_lock, int pool_id)
 /* wgm_task_pop() MUST be called by local_id 0. This function grabs a
    task from a pool and stores it in the task argument. If the pool is
    empty, then NULL_TASK is assigned to task. */
-int wgm_task_pop(__global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
+int wgm_task_pop(__global int *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
 {
   int task = NULL_TASK;
   /* spinwait on the pool lock */
@@ -295,7 +294,7 @@ int wgm_task_pop(__global Task *task_pool, __global atomic_int *task_pool_lock, 
 /* Task_push() adds the task argument to the indicated pool. If the pool
    is full, then the task argument is left untouched, otherwise
    NULL_TASK is assigned to it. */
-Task wgm_task_push(Task task, __global Task *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
+int wgm_task_push(int task, __global int *task_pool, __global atomic_int *task_pool_lock, __global int *task_pool_head, const int task_pool_size, int pool_id)
 {
   /* spinwait on the pool lock */
   while (!(pool_try_lock(task_pool_lock, pool_id)));
@@ -356,7 +355,7 @@ connect_four(
              const int maxlevel,
              __global Node *nodes,
              __global atomic_int *node_head,
-             __global Task *task_pool,
+             __global int *task_pool,
              __global atomic_int *task_pool_lock,
              __global int *task_pool_head,
              const int num_task_pool,
@@ -370,7 +369,10 @@ connect_four(
 {
   __local int val[256];
   __local uchar board[NUM_CELL];
-  __local Task task[1];
+  /* Hugues: when using kernel_merge we got a strange clang warning if
+     we name the __local task variable "task" ... maybe some name
+     clashing ? That's why it's called "local_task" */
+  __local int local_task[1];
   __local bool game_over[1];
 
   /* INIT */
@@ -412,25 +414,25 @@ connect_four(
 
     /* get task */
     if (local_id == 0) {
-      task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
+      local_task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
       /* if no more task in own pool, try to steal some from other pools */
-      if (task[0] == NULL_TASK) {
+      if (local_task[0] == NULL_TASK) {
         for (int i = 1; i < num_task_pool; i++) {
           int steal_pool_id = (pool_id + i) % num_task_pool;
-          task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
-          if (task[0] != NULL_TASK) {
+          local_task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
+          if (local_task[0] != NULL_TASK) {
             break;
           }
         }
       }
       /* if task is still null, there may be no work left anymore */
       game_over[0] = false;
-      if (task[0] == NULL_TASK) {
+      if (local_task[0] == NULL_TASK) {
         game_over[0] = (atomic_load(root_done) == NUM_COL);
       }
     }
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
-    if (task[0] == NULL_TASK) {
+    if (local_task[0] == NULL_TASK) {
       if (game_over[0]) {
         break;
       } else {
@@ -439,7 +441,7 @@ connect_four(
     }
 
     /* treat task */
-    __global Node *node = &(nodes[task[0]]);
+    __global Node *node = &(nodes[local_task[0]]);
     update_board(board, base_board, node, local_id, local_size);
     val[local_id] = board_value(board, local_id, local_size);
 
@@ -465,13 +467,13 @@ connect_four(
 
         /* we reached a leaf */
         atomic_store(&(node->num_child_answer), 7);
-        wgm_update_parent(nodes, task[0], next_move_value, root_done);
+        wgm_update_parent(nodes, local_task[0], next_move_value, root_done);
 
       } else {
 
         /* create children */
         for (int i = 0; i < NUM_COL; i++) {
-          Task child_id = wgm_create_children(i, nodes, node_head, task[0]);
+          int child_id = wgm_create_children(i, nodes, node_head, local_task[0]);
           int push_pool_id = pool_id;
           /* loop on trying to push the task in a pool */
           while (wgm_task_push(child_id, task_pool, task_pool_lock, task_pool_head, task_pool_size, push_pool_id) != NULL_TASK) {
