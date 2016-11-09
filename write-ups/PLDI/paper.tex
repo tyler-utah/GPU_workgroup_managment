@@ -91,6 +91,7 @@
   escapeinside={(*@}{@*)}
 }
 
+\newcommand{\restore}{\texttt{restore}}
 
 
 \newcommand{\code}[1]{\lstset{basicstyle=\tt}\lstinline!#1!\lstset{basicstyle=\scriptsize\tt}}
@@ -163,6 +164,14 @@
     
 \section{Introduction}\label{sec:intro}
 
+\ADComment{Think about whether ``restore'' is best name.}
+
+
+\ADComment{Address issue of placing constructs manually --
+  transactional semantics and barriers.  Argue why it's easy to do this.}
+
+\ADComment{Mention dynamic parallelism ane explain why it's no good.}
+
 \paragraph{The needs of irregular data-parallel algorithms}
 Acceleration of general-purpose computations on graphics processing
 units (GPUs) has tended to focus on \emph{regular} data-parallel
@@ -172,24 +181,22 @@ interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
 by the computation itself.  There is growing interest in accelerating irregular
 data-parallel algorithms on GPUs, particularly algorithms that
-traverse and manipulate graphs, with several recent notable
+traverse and manipulate linked data structures, with several recent notable
 successes~\cite{...}.
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
-results.  For example, work stealing algorithms require each workgroup
+results.  For example, many graph algorithms employ a level-by-level strategy, requiring a global barrier between each level.
+As another example, work stealing algorithms require each workgroup
 to maintain a queue, which is typically protected by a mutex to enable
-stealing by other workgroups.  As another example, breadth-first graph
-traversal uses a frontier-based approach that requires a barrier
-synchronization between all workgroups to achieve consensus that
-exploration of a frontier has been accomplished.  \ADComment{Perhaps
+stealing by other workgroups.  \ADComment{Perhaps
   make the point that inter-workgroup synchronization is possible in
   very rare cases without blocking, e.g. threadfence reduction.}
 
 To operate correctly, a blocking concurrent algorithm requires
 \emph{fair} scheduling of threads.  In the context of irregular
 data-parallel algorithms accelerated on a GPU, this translates to
-requiring fair scheduling of workgroups.  Without fairness, a
+requiring fair scheduling of workgroups.  \ADComment{Shorten} Without fairness, a
 workgroup may fail to make progress, leading to starvation.  For
 example, if workgroup $A$ holds a mutex and workgroup $B$ is
 spin-waiting for the mutex to be released, an unfair scheduler can
@@ -200,6 +207,8 @@ workgroups, by allowing A to spin forever so that the other workgroups
 do not progress to the barrier.
 
 \paragraph{Occupancy-bound execution}
+\ADComment{Add footnote to acknowledge multiple wgs per cu}
+\ADComment{Say that current GPU schedulers are not required to be fair.}
 Current GPU programming models---CUDA~\cite{...}, OpenCL~\cite{...}
 and HSA~\cite{...}---specify very few constraints on the manner in
 which workgroups are scheduled.  In particular, they do \emph{not}
@@ -210,7 +219,7 @@ mapped to a hardware \emph{compute unit}.  If a kernel is executed
 with more workgroups than there are compute units then at least two
 workgroups must share a single compute unit.  The simplest way to
 handle this is via an \emph{occupancy-bound} execution model, whereby
-once a workgroup has commenced execution on a compute unit (is has
+once a workgroup has commenced execution on a compute unit (it has
 become \emph{occupant}), the workgroup has exclusive access to the
 compute unit until it has finished execution, after which a subsequent
 workgroup can be bound to the compute unit.  Experiments suggest that
@@ -227,11 +236,11 @@ they are bound to separate compute units that operate in parallel.
 Current implementations of irregular data parallel algorithms on GPUs
 assume that the target GPU device provides the occupancy-bound
 execution model, which they exploit by scheduling no more workgroups
-than there are available compute units~\cite{...}.  This works today
+than there are available compute units~\cite{...}.  This works
 because \emph{today}'s GPUs seem to provide the occupancy-bound
 execution model.
 
-\paragraph{Resistance to occupancy-bound execution}
+\paragraph{Resistance to guaranteeing occupancy-bound execution}
 
 Despite its practical prevalence, none of the current GPU programming
 models actually mandate occupancy-bound execution.  Further, there are
@@ -239,18 +248,18 @@ clear reasons why this model is undesirable from the point-of-view of
 GPU vendors and end users.  First, the execution model does not enable
 multi-tasking, because a workgroup effectively \emph{owns} a compute
 unit until the workgroup has completed execution.  If a long-running
-kernel occupies all workgroups, the GPU cannot be used for other
-tasks, such as graphics rendering, in the meantime.  Precisely because
+kernel occupies all compute units, the GPU cannot be used for other
+tasks, such as graphics rendering, in the meantime.  \ADComment{Could cut or move to later:} Precisely because
 of this problem, operating systems employ a GPU \emph{watchdog} to
 heuristically detect and kill long-running computations on the GPU
 being used for display rendering.  If this watchdog is disabled,
 execution of a long-running kernel causes the display to freeze for
 the duration of kernel execution.  Second, \emph{energy throttling} is
 an important concern for battery-powered devices, such as smartphones
-and tablets.  It is desirable for a mobile GPU driver to be able to
+and tablets.  In the future, it will be desirable for a mobile GPU driver to be able to
 power down one or more compute units if the battery level is low or if
 the user puts the device into a low power state.  Implementing energy
-throttling requires being able to suspend the execution of a
+throttling would require being able to suspend the execution of a
 workgroup, power down the compute unit to which the workgroup was
 bound, and schedule the workgroup for later execution on a different
 compute unit.
@@ -262,13 +271,14 @@ standardisation efforts~\cite{CitePersonalCommunication}, is that
 execution model that they currently implement, due to the need for
 multi-tasking and energy throttling, yet \textbf{(2)} GPU vendors will
 not guarantee fair scheduling, due to the runtime overhead associated
-with supporting full preemption of workgroups, e.g.\ based on
-time-slicing.  Vendors instead wish to retain the essence of the
+with supporting full preemption of workgroups~\cite{ISCAPAPER}.  Vendors instead wish to retain the essence of the
 occupancy-bound execution model, which is simple to implement
-efficiently, and provide preemption for the special cases associated
+efficiently, and provide preemption for \ADComment{shorten} the special cases associated
 with multi-tasking for high-priority jobs (most crucially graphics)
 and energy throttling.  In particular, they do not want to commit to
 fair scheduling of a workgroup once it has been preempted.
+
+\ADComment{Kepler preemption support?}
 
 \paragraph{Our proposal}
 %
@@ -296,42 +306,53 @@ additional workgroups join the computation, a workgroup can execute
 $\offerfork$.  This indicates to the scheduler that the cooperative
 kernel is prepared to proceed with the existing set of workgroups, but
 is able to take advantage of having one or more additional workgroups
-commencing execution at the $\offerfork$ program point, inheriting the
-state of the workgroup that executed $\offerfork$.
+commencing execution at the $\offerfork$ program point.
 
 The use of $\offerfork$ and $\offerkill$ creates a contract between
 the scheduler and (the programmer of the) cooperative kernel, with
-both functional and non-functional requirements.  Functionally: the
+both functional and non-functional requirements.  Functionally, the
 scheduler must guarantee that the workgroups executing a cooperative
-kernel are fairly scheduled; the cooperative kernel must be robust to
-workgroups leaving and joining the computation when the $\offerkill$
-and $\offerfork$ functions, respectively, are called.
-Non-functionally: a cooperative kernel must ensure that $\offerkill$
+kernel are fairly scheduled, while the cooperative kernel must be robust to
+workgroups leaving and joining the computation in response to $\offerkill$
+and $\offerfork$.
+Non-functionally, a cooperative kernel must ensure that $\offerkill$
 is executed frequently enough that the scheduler can accommodate
 soft-real time constraints, e.g.\ allowing a smooth frame-rate for
 graphics or allowing compute units to be powered down quickly when
-required; the scheduler should respond to $\offerkill$ and
+required.  The scheduler should respond to $\offerkill$ and
 $\offerfork$ calls in a manner that avoids under-utilisation of
 hardware resources by the cooperative kernel, e.g.\ the scheduler
 should not kill workgroups unless they are required for another
 purpose.
 
-Cooperative kernels have several appealing properties.  First, they
-accommodate the needs of blocking algorithms, including irregular
-data-parallel algorithms: such algorithms can be implemented naturally
+Cooperative kernels have several appealing properties:
+
+\begin{enumerate}
+
+\item They
+accommodate the needs of the irregular
+data-parallel algorithms that have been successfully accelerated using GPUs: such algorithms can be implemented naturally
 as cooperative kernels \ADComment{boast that we did a good set}, so
-that fair scheduling between workgroups is guaranteed.  Second, they
+that fair scheduling between workgroups is guaranteed.
+
+\item They
 have no impact on the development of regular (non-cooperative
-kernels): these can be programmed exactly as they are now.  Third, the
+kernels): these can be programmed exactly as they are now.
+
+\item The
 programming model is backwards compatible: a non-blocking algorithm
 implementation that works on today's GPU platforms can be upgraded to
 use our language extensions for cooperative scheduling, and will
 behave exactly as it does at present if the new $\offerkill$ and
-$\offerfork$ functions are simply ignored.  Fourth, the programming
+$\offerfork$ functions are simply ignored.
+
+\item The programming
 model is easy to implement on top of the occupancy-bound execution
 model that current GPU platforms provide; we present a
 proof-of-concept implementation on top of OpenCL 2.0 that requires no
-special-purpose hardware or driver support.  Fifth, our results
+special-purpose hardware or driver support.
+
+\item Our results
 suggest that cooperative kernels can provide efficient multi-tasking
 of cooperative and non-cooperative tasks: our experiments across a
 range of GPUs from two vendors show very good response times for
@@ -341,6 +362,8 @@ respect to our proof-of-concept, portable implementation; a vendor
 specific implementation of cooperative kernels could likely yield
 better performance still through device-specific driver and compiler
 support.
+
+\end{enumerate}
 
 In summary, our main contributions are:
 
@@ -408,6 +431,8 @@ models, such as CUDA and HSA.  \ADComment{However, unclear that we could impleme
 
 \subsection{Semantics of Cooperative Kernels}
 
+\ADComment{A natural exit does not decrement $M$.}
+
 As with a regular OpenCL kernel, a cooperative kernel is launched by
 the host application, with a specified number of workgroups, each
 consisting of a specified number of threads.  The kernel's behaviour
@@ -419,6 +444,7 @@ The parameters to a cooperative kernel are \emph{immutable}, as if
 they were qualified with the \texttt{const} keyword (though pointer
 parameters can refer to mutable data).
 
+\ADComment{Perhaps remove this because a driver-based approach could handle this.}
 A regular OpenCL kernel can be executed by a multi-dimensional grid of
 workgroups, called an ND-range.  In our current proposal, the ND-range
 for a cooperative kernel must be one-dimensional.  \ADComment{Say why?
@@ -427,22 +453,22 @@ for a cooperative kernel must be one-dimensional.  \ADComment{Say why?
 
 As in regular OpenCL, each workgroup can be multi-dimensional.
 
-
 \paragraph{Restored variables}
 
 A variable declared in the root scope of the cooperative kernel can
-optionally be annotated with a new \texttt{restore} qualifier.  By
-annotating a variable with \texttt{restore}, the programmer indicates
-that when new workgroups are spawned via $\offerkill$, the threads in
+optionally be annotated with a new \restore qualifier.  By
+annotating a variable with \restore, the programmer indicates
+that when new workgroups are spawned via $\offerfork$, the threads in
 these workgroups should obtain a well-defined initial value for the
-variable, obtained from the workgroup that executed $\offerkill$.  We
-detail the semantics for this when we describe $\offerkill$ below.
+variable, obtained from the workgroup that executed $\offerfork$.  We
+detail the semantics for this when we describe $\offerfork$ below.
 
-Only private memory variables can be annotated with \texttt{restore},
+\ADComment{Remove?}
+Only private memory variables can be annotated with \restore,
 which may include pointers to local or global memory so long as the
 pointer variables themselves are stored in private memory.  In
 particular, variables and arrays in local memory cannot be annotated
-with \texttt{restore}.  \ADComment{The preceding is what we have
+with \restore.  \ADComment{The preceding is what we have
   implemented, but actually it is pretty clear how we could handle
   local memory restoration if we wanted to; it's just that none of our
   examples needed it.}
@@ -486,6 +512,10 @@ $\getnumgroups{\mathit{i}}$ return 0 and 1, respectively, for $i >
   interval?  An alternative is to say that there is an implicit global barrier at kernel exit.}
 
 \paragraph{Semantics for $\offerkill$}
+
+\ADComment{Don't allow zero to be killed.}
+
+\ADComment{Explain that the ``last one dies'' semantics is convenient because it maintains contiguous ids, but other options are possible and may be more efficient sometimes.}
 
 Our first additional language primitive, $\offerkill$, is a
 workgroup-level function: similar to the OpenCL intra-workgroup
@@ -533,22 +563,15 @@ are two exceptions to this:
   the new threads have access to these parameters and can safely read
   from them;
 
-\item for each variable $v$ annoated with \texttt{restore}, every new
+\item for each variable $v$ annoated with \restore, every new
   thread's copy of $v$ is initialised to the value that thread 0 in
   workgroup $m$ held for $v$ at the point of the $\offerfork$ call.
 
 \end{itemize}
 
-The second exception, for restored variables, can be stated more
-formally as follows.  Let $\mathit{WG}[x][y].v$ denote the value
-stored in variable $v$ of thread $y$ in workgroup $x$.  Then for each
-new workgroup $i \in [M, M+k-1]$ and each thread $j$ in workgroup $i$,
-$\mathit{WG}[i][j].v$ is initialised to $\mathit{WG}[m][0].v$ for each
-variable $v$ annotated with \texttt{restore}.
-
 Notice that $k=0$ is always a legitimate choice for the number of
 workgroups to be spawned by an $\offerfork$ call, and if the number of
-active workgrouups $M$ is equal to the workgroup limit $N$, $k=0$ is
+active workgroups $M$ is equal to the workgroup limit $N$, $k=0$ is
 guaranteed.
 
 \ADComment{Remark on our decision to have every thread inherit the
@@ -560,12 +583,7 @@ Many irregular algorithms require synchronisation across workgroups.
 This can be achieved via a \emph{global barrier}, but a global barrier
 is not provided as a primitive in OpenCL, CUDA or HSA.  This is
 because, as discussed in Section~\ref{ }, an inter-workgroup barrier
-requires fair scheduling of workgroups.  As a result, past works have
-either split computation into multiple separate kernels, so that the
-end of one kernel and the start of the next kernel implicitly provides
-a global barrier~\cite{ }, or have assumed the occupancy-bound
-execution model to build a global barrier that works reliably on
-today's GPU platforms.
+requires fair scheduling of workgroups.
 
 Because workgroups of a cooperative kernel are fairly scheduled, a
 global barrier primitive can be provided.  We specify two such primitives: $\globalbarrier()$
@@ -599,25 +617,12 @@ as a primitive.  As noted above, the $\resizingglobalbarrier()$
 primitive is, semantically, synactic sugar for a sequence of other
 primitive calls.  We include it as a primitive because (a) we have
 found that global barriers often provide a natural point for
-cooperation with the scheduler, and (b) identifying a known point at
-which workgroups are required to synchronize and at which workgroups
-can be safely killed and forked enables a custom implementation of
+cooperation with the scheduler, and (b) a custom implementation of
 $\resizingglobalbarrier()$ that provides the semantics described
-above, but is significantly more efficient than the above sequence of
+above can be made significantly more efficient than the above sequence of
 calls.  We discuss our efficient implementation of
 $\resizingglobalbarrier$ in detail in Section~\ref{...}.
 
-\subsection{Backwards compatibility}
-
-\ADComment{Perhaps this would fit better under ``programming guidelines'' -- not sure.}
-
-\ADComment{Make the point here that if an irregular algorithm is
-  written as a cooperative kernel then it will execute just as safely
-  as it does today on current hardware if: (1) the \texttt{restore}
-  annotation and $\offerkill$/$\offerfork$ calls are defined away to
-  nothing, (2) $\resizingglobalbarrier$ is redefined to
-  $\globalbarrier$, (3) a standard implementation of $\globalbarrier$
-  that assumes the occupancy-bound execution model is provided.  If the kernel uses blocking features---the global barrier, mutexes, etc., then it may not execute safely due to the possibility of unfair scheduling, but it will execute no less safely than it would if the cooperative kernels style were not used.}
 
 \subsection{Programming guidelines}
 
@@ -630,7 +635,7 @@ The programer is responsible for keeping at least one workgroup alive.  In parti
 
 \lstset{basicstyle=\tt}
 \begin{lstlisting}
-  if($\getgroupid{0}$ != 0) $\offerkill$;
+  if($\getgroupid{0}$ != 0) $\offerkill$();
 \end{lstlisting}
 \lstset{basicstyle=\scriptsize\tt}
 
@@ -652,12 +657,6 @@ $\resizingglobalbarrier$.  The programmer must therefore write their
 cooperative kernel in a manner that is robust to changes in the value
 returned by $\getnumgroups{0}$.
 
-The main impact of this relates to partitioning of data to be
-processed.
-
-\ADComment{Tyler, can we give an example of a data processing loop
-  that would have to be changed?}
-
 \paragraph{Cooperative kernels that only use barriers}
 
 \ADComment{Need to account for the issue that $M$ might decrease as
@@ -667,6 +666,7 @@ If a cooperative kernel does not directly issue $\offerkill$ and
 $\offerfork$ calls then the only possibilty for the number of
 workgroups to change is due to $\resizingglobalbarrier$ being invoked.
 
+\ADComment{Shorten sentences.}
 In this case, because the resizing barrier is a kernel-level function,
 the statements executed by the cooperative kernel can be divided into
 \emph{resizing barrier intervals}: a resizing barrier interval starts
@@ -676,10 +676,12 @@ all threads are guaranteed to be executing within the same resizing
 barrier interval.  As a result, the number of workgroups executing the
 kernel is guaratneed to remain unchanged within each resizing barrier
 interval, so the result returned by $\getnumgroups{0}$ is guaratneed
-to be identical on repeated calls during such an interval.  This
-guarantee may be exploited for efficiently when writing a cooperative
-kernel that uses global barriers but does not call $\offerfork$ and
-$\offerkill$ directly.
+to be identical on repeated calls during such an interval.
+
+This guarantee may be exploited by algorithms that peform strided data
+processing.  \ADComment{Tyler, can we give an example of a data
+  processing loop that would have to be changed?}
+
 
 \subsection{Non-functional Requirements of Cooperative Kernels}
 
@@ -699,6 +701,8 @@ kernels model, and the programmer of a cooperative kernel, must strive
 to meet a number of non-functional requirements, which we outline
 here.
 
+\ADComment{Sree mentioned TimeGraph paper.}
+
 \paragraph{Sufficient $\offerkill$ calls}
 
 Recall that the purpose of $\offerkill$ is to provide the scheduler
@@ -708,7 +712,32 @@ graphics rendering, may have soft real-time constraints, the scheduler
 relies on the cooperative kernel to execute $\offerkill$ sufficiently
 frequently that the scheduler can meet such real-time constraints.
 
+\ADComment{Forward reference to experiments with display freezing.}
+
 \ADComment{Got here.}
+
+\ADComment{Generosity: initial number of workgroups, and responding to offer fork.}
+
+\subsection{Alternative Semantic Choices}
+
+\ADComment{Explain here where we could have done things differently.}
+
+\ADComment{What are difficultiese with other alternatives and why we didn't use them.}
+
+\ADComment{Allowing zero to be killed.}
+
+\subsection{Backwards Compatibility}
+
+\ADComment{Perhaps this would fit better under ``programming guidelines'' -- not sure.}
+
+\ADComment{Make the point here that if an irregular algorithm is
+  written as a cooperative kernel then it will execute just as safely
+  as it does today on current hardware if: (1) the \restore
+  annotation and $\offerkill$/$\offerfork$ calls are defined away to
+  nothing, (2) $\resizingglobalbarrier$ is redefined to
+  $\globalbarrier$, (3) a standard implementation of $\globalbarrier$
+  that assumes the occupancy-bound execution model is provided.  If the kernel uses blocking features---the global barrier, mutexes, etc., then it may not execute safely due to the possibility of unfair scheduling, but it will execute no less safely than it would if the cooperative kernels style were not used.}
+
 
 
 
