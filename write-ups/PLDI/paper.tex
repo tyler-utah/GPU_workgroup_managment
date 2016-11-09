@@ -124,6 +124,10 @@
 
 \newcommand{\offerfork}{\mathsf{offer\_fork}}
 \newcommand{\offerkill}{\mathsf{offer\_kill}}
+\newcommand{\globalbarrier}{\mathsf{global\_barrier}}
+\newcommand{\resizingglobalbarrier}{\mathsf{resizing\_global\_barrier}}
+\newcommand{\getgroupid}[1]{\mathsf{get\_group\_id(#1)}}
+\newcommand{\getnumgroups}[1]{\mathsf{get\_num\_groups(#1)}}
 
 
 \begin{document}
@@ -398,9 +402,9 @@ straightforward to adopt to our programming model.
 
 We describe our cooperative kernels programming model as an extension
 to the industry-standard OpenCL programming model for heterogenous
-many-core architectures.  However, the concept behind our programming
-model is more general, and could be applied to extend other GPU
-programming models, such as CUDA and HSA.
+many-core architectures.  However, the cooperative kernels concept is
+more general, and could be applied to extend other GPU programming
+models, such as CUDA and HSA.  \ADComment{However, unclear that we could implement it on top of these, but that's not really the point.}
 
 \subsection{Semantics of Cooperative Kernels}
 
@@ -411,151 +415,311 @@ is described by a kernel function, written in OpenCL C but using the
 additional language extensions that we present below, and a number of
 parameters to the kernel function are passed by the host application.
 
+The parameters to a cooperative kernel are \emph{immutable}, as if
+they were qualified with the \texttt{const} keyword (though pointer
+parameters can refer to mutable data).
+
+A regular OpenCL kernel can be executed by a multi-dimensional grid of
+workgroups, called an ND-range.  In our current proposal, the ND-range
+for a cooperative kernel must be one-dimensional.  \ADComment{Say why?
+  And mention that none of the applications that we deem would benefit
+  from cooperative kernels need a multi-dimensional ND-range.}
+
+As in regular OpenCL, each workgroup can be multi-dimensional.
+
+
 \paragraph{Restored variables}
 
-\ADComment{TODO; perhaps say that kernel parameters are immutable.}
+A variable declared in the root scope of the cooperative kernel can
+optionally be annotated with a new \texttt{restore} qualifier.  By
+annotating a variable with \texttt{restore}, the programmer indicates
+that when new workgroups are spawned via $\offerkill$, the threads in
+these workgroups should obtain a well-defined initial value for the
+variable, obtained from the workgroup that executed $\offerkill$.  We
+detail the semantics for this when we describe $\offerkill$ below.
 
-\paragraph{Initial workroups}
+Only private memory variables can be annotated with \texttt{restore},
+which may include pointers to local or global memory so long as the
+pointer variables themselves are stored in private memory.  In
+particular, variables and arrays in local memory cannot be annotated
+with \texttt{restore}.  \ADComment{The preceding is what we have
+  implemented, but actually it is pretty clear how we could handle
+  local memory restoration if we wanted to; it's just that none of our
+  examples needed it.}
+
+\paragraph{Active workroups}
 
 If the host application launches a cooperative kernel specifying that
 $N$ workgroups should execute the kernel, then when the kernel
 commences execution it should be executed by some number of workgroups
 $M$, with $1\leq M \leq N$.  The requested number of workgroups is
 called the \emph{workgroup limit} for the cooperative kernel, and $M$
-is the number of \emph{active workgroups}.
+is the number of \emph{active workgroups}.  As explained below, the
+number $M$ of active workgroups may change during the lifetime of a
+cooperative kernel.
+
+Fair scheduling is guaranteed between active workgroups.  That is, if
+some thread in an active workgroup is enabled then eventually some
+thread in the active workgroup is guaranteed to execute an
+instruction.  Note that our programming model does not mandate that
+threads within a workgroup must be fairly scheduled, and indeed this
+is often not the case in GPU programming models, because threads are
+often organised into \emph{warps} or \emph{wavefronts} within a
+workgroup, exhibiting lock-step predicated execution that is
+inherently unfair.
 
 The initial workgroups have consecutive workgroup ids in the range
 $[0, M-1]$.
 
+The OpenCL primitive $\getgroupid{0}$ retrieves the id of a
+workgroup as usual.  When executed by a cooperative kernel, the OpenCL
+primitive $\getnumgroups{0}$ returns $M$, the current number
+of active workgroups.  Because the ND-ranges of cooperative kernels
+are one-dimensional, $\getgroupid{\mathit{i}}$ and
+$\getnumgroups{\mathit{i}}$ return 0 and 1, respectively, for $i >
+0$.
+
+\ADComment{What happens to $M$ when a workgroup reaches the end of a
+  cooperative kernel?  Feels like $M$ should decrease, but what does
+  this mean for barrier-only kernels?  Do they need to account for the
+  number of active workgroups changing during the final barrier
+  interval?  An alternative is to say that there is an implicit global barrier at kernel exit.}
+
 \paragraph{Semantics for $\offerkill$}
 
 Our first additional language primitive, $\offerkill$, is a
-workgroup-level function.  That is, similar to the OpenCL
-intra-workgroup $\mathsf{barrier}$ primitive, if $\offerkill$ appears
-inside conditional code then it must be executed by all threads in a
+workgroup-level function: similar to the OpenCL intra-workgroup
+$\mathsf{barrier}$ primitive, if $\offerkill$ appears inside
+conditional code then it must be executed by \emph{all} threads in a
 workgroup, with all threads having executed the same number of
 iterations of any enclosing loops.
 
 Suppose a workgroup with id $m$ executes $\offerkill$.  If $m < M-1$,
 i.e.\ the workgroup's id is not the largest among the active
-workgroups, then $\offerkill$ is a no-op.  Otherwise, we must have $m
-= M-1$, in which case there is a non-deterministic choice between (a)
-$\offerkill$ executing as a no-op, or (b) execution of the workgroup
-ceasing and the number of active workgroups $M$ being decremented by
-one.  Case (b) corresponds to the scheduler accepting the workgroup's
-offer to cease execution, allowing the scheduler to schedule some
-other task.
+workgroups, then $\offerkill$ is a no-op.  If instead $m = M-1$, there
+is a non-deterministic choice between (a) $\offerkill$ executing as a
+no-op, or (b) execution of the workgroup ceasing and the number of
+active workgroups $M$ being decremented by one.  Case (b) corresponds
+to the scheduler accepting the workgroup's offer to cease execution,
+allowing the scheduler to schedule some other task on the compute unit
+on which the workgroup was executing.
 
 The semantics of $\offerkill$ is atomic.  That is, if multiple
-workgroups reach $\offerkill$ simultaneously, the semantics is that
-the workgroups should each execute $\offerkill$ in some well-defined
-but arbitrary sequential order.  \ADComment{Should we say something
-  about linearisability?}
+workgroups reach $\offerkill$ simultaneously, the semantics is as if
+each workgroup executes $\offerkill$ in some arbitrary sequential
+order.  \ADComment{Should we say something about linearisability?}
 
 \paragraph{Semantics for $\offerfork$}
 
-Our second language primitive, $\offerfork$, is also a workgroup-level
+Our second new language primitive, $\offerfork$, is also a workgroup-level
 function.
 
 Suppose a workgroup with id $m\leq M$ executes $\offerfork$.  An
 integer $k$ in the range $[0, N-M]$ is chosen nondeterministically,
-$k$ new workgroups are spawned with consecutive ids in the range $[M,
-  M+k-1]$, and the active workgroup count $M$ is incremented by $k$.
+$k$ new workgroups are spawned with consecutive ids in the range
+$[M, M+k-1]$, and the active workgroup count $M$ is incremented by
+$k$.
+
 The $k$ new workgroups commence execution at the program point
-immediately following the $\offerfork$ call.  Each thread in each new
-workgroup has an arbitrary local state, except that:
+immediately following the $\offerfork$ call.  The private variables of
+each thread in a new workgroup are all uninitialised, as are any local
+variables and arrays shared across the workgroup; reading from these
+locations without initialising them is an undefined behaviour.  There
+are two exceptions to this:
 
 \begin{itemize}
 
-\item the threads have access to the parameters originally passed to
-  the cooperative kernel by the host application (recall that these
-  are immutable);
+\item because the parameters to a cooperative kernel are immutable,
+  the new threads have access to these parameters and can safely read
+  from them;
 
-\item for each variable $v$ in the set of restored variables
-  identified for the cooperative kernel, every thread's copy of $v$ is
-  initialised to the value that thread 0 in workgroup $m$ held for $v$
-  at the point of the $\offerfork$ call.
+\item for each variable $v$ annoated with \texttt{restore}, every new
+  thread's copy of $v$ is initialised to the value that thread 0 in
+  workgroup $m$ held for $v$ at the point of the $\offerfork$ call.
 
 \end{itemize}
 
+The second exception, for restored variables, can be stated more
+formally as follows.  Let $\mathit{WG}[x][y].v$ denote the value
+stored in variable $v$ of thread $y$ in workgroup $x$.  Then for each
+new workgroup $i \in [M, M+k-1]$ and each thread $j$ in workgroup $i$,
+$\mathit{WG}[i][j].v$ is initialised to $\mathit{WG}[m][0].v$ for each
+variable $v$ annotated with \texttt{restore}.
+
 Notice that $k=0$ is always a legitimate choice for the number of
-workgroups to be spawned by an $\offerfork$ call, and in particular
-that if the number of active workgrouups $M$ is equal to the workgroup
-limit $N$, $k=0$ is guaranteed.
+workgroups to be spawned by an $\offerfork$ call, and if the number of
+active workgrouups $M$ is equal to the workgroup limit $N$, $k=0$ is
+guaranteed.
 
-\ADComment{Remark on our decision to have every thread inherit the state of the master thread from workgroup $m$.}
+\ADComment{Remark on our decision to have every thread inherit the
+  state of the master thread from workgroup $m$.}
 
+\paragraph{Global barriers}
 
+Many irregular algorithms require synchronisation across workgroups.
+This can be achieved via a \emph{global barrier}, but a global barrier
+is not provided as a primitive in OpenCL, CUDA or HSA.  This is
+because, as discussed in Section~\ref{ }, an inter-workgroup barrier
+requires fair scheduling of workgroups.  As a result, past works have
+either split computation into multiple separate kernels, so that the
+end of one kernel and the start of the next kernel implicitly provides
+a global barrier~\cite{ }, or have assumed the occupancy-bound
+execution model to build a global barrier that works reliably on
+today's GPU platforms.
+
+Because workgroups of a cooperative kernel are fairly scheduled, a
+global barrier primitive can be provided.  We specify two such primitives: $\globalbarrier()$
+and $\resizingglobalbarrier()$.
+
+A $\globalbarrier()$ is a kernel-level function: if it appears in
+conditional code then it must be reached by \emph{all} threads
+executing the cooperative kernel.  On reaching a $\globalbarrier()$, a
+thread waits until all threads have arrived at the barrier.  Once all
+threads have arrived, the threads may proceed past the barrier with
+the guarantee that all global memory accesses issued before the
+barrier have completed.
+
+A $\resizingglobalbarrier()$ is identical to a global barrier, except
+that, semantically, every workgroup executes $\offerkill$ on reaching
+the barrier, and every workgroup executes $\offerfork$ on leaving the
+barrier.  Thus $\resizingglobalbarrier()$ is semantically equivalent to:
+%
+\lstset{basicstyle=\tt}
+\begin{lstlisting}
+  $\offerkill()$;
+  $\globalbarrier()$;
+  $\offerfork()$;
+\end{lstlisting}
+\lstset{basicstyle=\scriptsize\tt}
+
+The $\globalbarrier()$ primitive can be implemented directly using the
+atomic operations provided by the OpenCL 2.0 memory model~\cite{...},
+but the implementation is involved, hence why we include this function
+as a primitive.  As noted above, the $\resizingglobalbarrier()$
+primitive is, semantically, synactic sugar for a sequence of other
+primitive calls.  We include it as a primitive because (a) we have
+found that global barriers often provide a natural point for
+cooperation with the scheduler, and (b) identifying a known point at
+which workgroups are required to synchronize and at which workgroups
+can be safely killed and forked enables a custom implementation of
+$\resizingglobalbarrier()$ that provides the semantics described
+above, but is significantly more efficient than the above sequence of
+calls.  We discuss our efficient implementation of
+$\resizingglobalbarrier$ in detail in Section~\ref{...}.
+
+\subsection{Backwards compatibility}
+
+\ADComment{Perhaps this would fit better under ``programming guidelines'' -- not sure.}
+
+\ADComment{Make the point here that if an irregular algorithm is
+  written as a cooperative kernel then it will execute just as safely
+  as it does today on current hardware if: (1) the \texttt{restore}
+  annotation and $\offerkill$/$\offerfork$ calls are defined away to
+  nothing, (2) $\resizingglobalbarrier$ is redefined to
+  $\globalbarrier$, (3) a standard implementation of $\globalbarrier$
+  that assumes the occupancy-bound execution model is provided.  If the kernel uses blocking features---the global barrier, mutexes, etc., then it may not execute safely due to the possibility of unfair scheduling, but it will execute no less safely than it would if the cooperative kernels style were not used.}
+
+\subsection{Programming guidelines}
+
+An OpenCL programmer writing a cooperative kernel should pay careful
+attention to the following details.
+
+\paragraph{Keeping at least one workgroup alive}
+
+The programer is responsible for keeping at least one workgroup alive.  In particular, if all workgroups execute $\offerkill$, the scheduler is at liberty to destroy all workgroups, causing the cooperative kernel to exit.  This can be guarded against by wrapping each $\offerkill$ call in a conditional statement:
+
+\lstset{basicstyle=\tt}
+\begin{lstlisting}
+  if($\getgroupid{0}$ != 0) $\offerkill$;
+\end{lstlisting}
+\lstset{basicstyle=\scriptsize\tt}
+
+We could, alternatively, have formulated the semantics of $\offerkill$
+so that workgroup 0 is never killed.  However, there might be a use
+case for a cooperative kernel reaching a point where it would be
+acceptable for the kernel to exit, although desirable for some
+remaining computation to be performed if competing workloads allow it.
+
+\paragraph{A changing number of workgroups}
+
+In regular OpenCL, $\getnumgroups{0}$ returns a runtime-constant
+value: once the number of executing workgroups has been identified, it
+is guaranteed not to change.
+
+In contrast, the number of workgroups executing a cooperative kernel
+can vary due to workgroups executing $\offerkill$, $\offerfork$ and
+$\resizingglobalbarrier$.  The programmer must therefore write their
+cooperative kernel in a manner that is robust to changes in the value
+returned by $\getnumgroups{0}$.
+
+The main impact of this relates to partitioning of data to be
+processed.
+
+\ADComment{Tyler, can we give an example of a data processing loop
+  that would have to be changed?}
+
+\paragraph{Cooperative kernels that only use barriers}
+
+\ADComment{Need to account for the issue that $M$ might decrease as
+  workgroups actually exit the kernel.}
+
+If a cooperative kernel does not directly issue $\offerkill$ and
+$\offerfork$ calls then the only possibilty for the number of
+workgroups to change is due to $\resizingglobalbarrier$ being invoked.
+
+In this case, because the resizing barrier is a kernel-level function,
+the statements executed by the cooperative kernel can be divided into
+\emph{resizing barrier intervals}: a resizing barrier interval starts
+at a resizing barrier or the kernel entry point, and ends at a
+resizing barrier or a kernel exit point.  At any moment of execution,
+all threads are guaranteed to be executing within the same resizing
+barrier interval.  As a result, the number of workgroups executing the
+kernel is guaratneed to remain unchanged within each resizing barrier
+interval, so the result returned by $\getnumgroups{0}$ is guaratneed
+to be identical on repeated calls during such an interval.  This
+guarantee may be exploited for efficiently when writing a cooperative
+kernel that uses global barriers but does not call $\offerfork$ and
+$\offerkill$ directly.
 
 \subsection{Non-functional Requirements of Cooperative Kernels}
 
-If a cooperative kernel is launched with $M$ workgroups, the
+The semantics presented in Section~\ref{...} describe the envelope of
+behaviour that a developer of a cooperative kernel should be prepared
+for.
+
+However, the aim of cooperative kernels is to find a balance that
+allows \emph{efficient execution} of long-running kernels
+(e.g.\ implementing irregular data-parallel algorithms), and
+\emph{responsive multi-tasking} so that the GPU can be shared between
+one or more cooperative kernels and a number of short, high-priority
+tasks with soft real-time constraints.
+
+To achieve this balance, both an implementation of the ooperative
+kernels model, and the programmer of a cooperative kernel, must strive
+to meet a number of non-functional requirements, which we outline
+here.
+
+\paragraph{Sufficient $\offerkill$ calls}
+
+Recall that the purpose of $\offerkill$ is to provide the scheduler
+with an opportunity to destroy a workgroup in order to schedule
+higher-priority tasks.  Because these higher-priority tasks, such as
+graphics rendering, may have soft real-time constraints, the scheduler
+relies on the cooperative kernel to execute $\offerkill$ sufficiently
+frequently that the scheduler can meet such real-time constraints.
+
+\ADComment{Got here.}
 
 
-However, unlike a regular kernel, if $M$ workgroups are requested for execution of a cooperative kernel.
-
-A \emph{cooperative kernel} is launched with a desired workgroup
-count, $M$, where $M > 0$.
 
 
-
+\subsection{Preemption-aware work stealing}
 
 \ADComment{Remind the reader that these are inspired by work stealing
   and barrier synchonization.  In \mysec\ref{ } we describe the
   semantics of kernels that use these primitives.  In \mysec\ref{ } we
   show how work stealing can be implemented.  In \mysec\ref{ } we show
   how a barrier can be implemented.}
-
-\subsection{Semantics of the new primitives}
-
-\ADComment{General semantics: let $N$ be the maximum number of
-  workgroups the GPU of interest can support [gloss over or deal with
-    issue that this is kernel-dependent].  A kernel is launched with
-  $M$ workgroups, for some $0 < M \leq N$.  Initially these are all
-  scheduled, and are guaranteed to make independent forward progress.}
-
-\ADComment{The purpose of ckill is for a workgroup to volunteer to
-  quit execution of the kernel if the resources that it is using
-  (e.g.\ the associated compute unit) are required for other tasks.  A
-  ckill statement must be reached under workgroup-uniform control
-  flow.  When a workgroup reaches ckill, the workgroup either
-  terminates execution (because the environment requires the
-  workgroup's resources), or continues execution as if the ckill
-  statement were a no=op).  From a semantics perspective this is a
-  non-deterministic choice: an application that invokes ckill should
-  be prepared for either outcome.  In practice, the effect of ckill
-  depends on environmental conditions.}
-
-\ADComment{The purpose of cfork is for a workgroup to indicate that it
-  would be useful to have additional workgroups join the computation,
-  and to specify that the program point associated with the cfork
-  statement would be a suitable place for a new workgroup to start
-  executing.  A cfork statement must also be reached under
-  workgroup-uniform control flow.  If $C$ workgroups are executing
-  when a workgroup reaches a cfork statement, with $0 < C \leq M$,
-  then between 0 and $M-C$ new workgroups commence execution from the
-  following statement.  From a semantics perspective, the number of
-  workgroups that join the computation is nondeterministic, within the
-  permitted range.  In practice, how many workgroups join depends on
-  environmental conditions.}
-
-\ADComment{TODO: describe persistent variables.}
-
-\ADComment{TODO: explain that ckill and cfork atomically update the
-  kernel context (ids).}
-
-\ADComment{TODO: somewhere we need to explain the constraints this
-  places on programming: how ids work, what one can assume about them,
-  etc.}
-
-\ADComment{Now describe the more refined semantics where IDs are
-  relinquished in decreasing order; explain that from a formal
-  perspective thie refines the original semantics.}
-
-\ADComment{In the above, explain at some point how a scheduler can
-  exploit cfork and ckill to utilise the GPU resources.}
-
-\subsection{Preemption-aware work stealing}
 
 \ADComment{Show how work stealing can now be made safe.}
 
