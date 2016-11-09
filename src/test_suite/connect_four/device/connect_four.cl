@@ -18,7 +18,6 @@ const int MINUS_INF = -666;
 /* The actual level of lookahead is controlled by the "maxlevel" flag,
  * MAX_LOOKAHEAD is a hard-coded upper-bound. */
 const int MAX_LOOKAHEAD = 7;
-const int NUM_NODE = 20000;
 
 /*---------------------------------------------------------------------------*/
 
@@ -235,13 +234,13 @@ void update_board(__local uchar *board, __global uchar *base_board, __global Nod
 
 /* wgm_create_children() must be called by the workgroup master
    thread. This function returns the node id of the created child */
-int wgm_create_children(int move, __global Node *nodes, __global atomic_int *node_head, int parent_id)
+int wgm_create_children(int move, int parent_id, __global Node *nodes, __global atomic_int *node_head, int num_nodes)
 {
   int child_id = NULL_TASK;
   __global Node *parent = &(nodes[parent_id]);
   child_id = atomic_fetch_add(node_head, 1);
   /* safety */
-  if (child_id <= NUM_NODE) {
+  if (child_id <= num_nodes) {
     Node *child = &(nodes[child_id]);
     child->parent = parent_id;
     child->level = parent->level + 1;
@@ -355,6 +354,7 @@ connect_four(
              const int maxlevel,
              __global Node *nodes,
              __global atomic_int *node_head,
+             const int num_nodes,
              __global int *task_pool,
              __global atomic_int *task_pool_lock,
              __global int *task_pool_head,
@@ -473,7 +473,7 @@ connect_four(
 
         /* create children */
         for (int i = 0; i < NUM_COL; i++) {
-          int child_id = wgm_create_children(i, nodes, node_head, local_task[0]);
+          int child_id = wgm_create_children(i, local_task[0], nodes, node_head, num_nodes);
           int push_pool_id = pool_id;
           /* loop on trying to push the task in a pool */
           while (wgm_task_push(child_id, task_pool, task_pool_lock, task_pool_head, task_pool_size, push_pool_id) != NULL_TASK) {
