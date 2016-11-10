@@ -12,7 +12,7 @@ def fake_placeholder(x):
 EXE_PATH      = ""
 DATA_PATH     = ""
 STAT_PATH     = ""
-ITERS         = 1
+ITERATIONS    = "10"
 PRINT         = fake_placeholder
 DATA_PRINT    = fake_placeholder
 NAME_OF_CHIP  = ""
@@ -134,6 +134,7 @@ def run_suite():
             # indicate very high number of workgroups to finally obtain occupancy
             cmd = cmd + ["--num_wgs", "1000"]
             cmd = cmd + ["--skip_tasks", "1"]
+            cmd = cmd + ["--merged_iterations", ITERATIONS]
             prefix = d["stat"] + "_skiptask"
             record_stdout = prefix + "_stdout.txt"
             exec_cmd(cmd, prefix, record_stdout)
@@ -149,7 +150,7 @@ def run_suite():
             cmd = cmd + ["--graph_file", graph_in]
             cmd = cmd + ["--graph_solution_file", graph_sol]
             cmd = cmd + ["--threads_per_wg", "128"]
-            cmd = cmd + ["--run_persistent", "1"]
+            cmd = cmd + ["--run_persistent", ITERATIONS]
             cmd = cmd + ["--num_wgs", finalsize]
             prefix = d["stat"] + "_standalone"
             record_stdout = prefix + "_stdout.txt"
@@ -162,6 +163,7 @@ def run_suite():
                     cmd = cmd + ["--graph_file", graph_in]
                     cmd = cmd + ["--graph_solution_file", graph_sol]
                     cmd = cmd + ["--threads_per_wg", "128"]
+                    cmd = cmd + ["--merged_iterations", ITERATIONS]
                     # indicate very high number of workgroups to finally obtain occupancy
                     cmd = cmd + ["--num_wgs", "1000"]
                     cmd = cmd + ["--non_persistent_frequency", c["freq"]]
@@ -186,6 +188,7 @@ def main():
     global DATA_PATH
     global STAT_PATH
     global PRINT
+    global ITERATIONS
     global DATA_PRINT
     global NAME_OF_CHIP
     global MATMULT_CONFIG
