@@ -1057,11 +1057,44 @@ remaining computation to be performed if competing workloads allow it.
 
 \section{Related Work}\label{sec:relatedwork}
 
+
+\cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
+  SMs, not to workgroups, so that tasks taht would benefit from being
+  processed by the same SM can be scheduled to the same SM.  Has
+  little to do with preemption, but more to do with irregular
+  computation.}
+
+\cite{DBLP:conf/isca/TanasicGCRNV14} \ADComment{I have not read, but
+  it's about enabling preemptive multiprogramming, so we should read
+  it carefully.}
+
+\cite{DBLP:conf/ppopp/Muyan-OzcelikO16} \ADComment{I have not read; we
+  should understand this one carefully.}
+
+\cite{DBLP:conf/asplos/ParkPM15} \ADComment{Investigates how one might
+  implement preemption, i.e.\ shows that it can be achieved.
+  Simulator only preemption.  Not sure whether their approach would
+  give fair scheduling.}
+
+\cite{DBLP:journals/tog/SteinbergerKBKDS14} \ADComment{Shows how to
+  keep a GPU busy by flooding it with work.  Would absolutely not
+  stand up to preemption.}
+
+\cite{DBLP:conf/usenix/KatoLRI11} \ADComment{Idea seems to be to
+  accept that GPUs do not offer epreemption, but find a reasonable way
+  to schedule tasks to maximise responsiveness or throughput.}
+
+
 \section{Conclusions and Future Work}\label{sec:conclusion}
 
 \ADComment{Next-generation GPUs and drivers for evaluation,
   implementation in a real driver, migration of work between multiple
   GPUs.}
+
+\clearpage
+
+\bibliographystyle{abbrvnat}
+\bibliography{tyler}
 
 \appendix
 
