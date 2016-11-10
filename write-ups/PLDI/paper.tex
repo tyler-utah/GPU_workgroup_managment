@@ -462,27 +462,26 @@ identical arguments, but a thread may query its unique thread id in
 order to access different data or follow different control flow paths
 to other threads.
 
-
-
-Figure~\ref{fig:workstealing} shows a simplified version of an OpenCL
-kernel that uses a work stealing queue.  \ADComment{Describe some
+\paragraph{Work stealing example}
+  \ADComment{Describe some
   aspects of the example, saying that the mutex is not a primitive,
   and can be coded up using the memory model but is not safe due to
   the execution model.  Make it clear that the lock function uses
   busy-waiting.}  
-
-\paragraph{Work stealing}
-Work stealing is generally used for computational work that can be
-splitted into independently processable tasks. The processing of a given
-task may create an arbitrary number of new tasks in such a way that it
-is typically hard to know the total number of tasks in advance. Work
-stealing enables the dynamic balance of task processing over several
-processing units, OpenCL workgroups in our case. Each workgroup has an
-associated task pool from which it obtains tasks to process and to where
-it stores newly created tasks. When a workgroup's pool becomes empty, a
-workgroup---rather than terminating---tries to \emph{steal} a task from
-an other pool. Hence, workgroups keep on processing tasks until all the
-work is done.
+Figure~\ref{fig:workstealing} shows a simplified version of an OpenCL
+kernel that uses a work stealing queue.
+%
+Work stealing is useful when a computation can be split into multiple
+tasks that can be processed independently, but where the number of
+tasks is not known ahead of time because processing a given task may
+create an arbitrary number of new tasks. Work stealing enables dynamic
+balancing of tasks across several processing units, OpenCL workgroups
+in our case. Each workgroup has an associated task pool from which it
+obtains tasks to process, and to which it stores newly created
+tasks. When a workgroup's pool becomes empty, a workgroup---rather
+than terminating---tries to \emph{steal} a task from an other
+pool. Hence, workgroups keep on processing tasks until all the work is
+done.
 
 \myfiglong\ref{fig:workstealing} illustrates an OpenCL implementation of
 a work stealing application. All threads start their execution at the
@@ -606,7 +605,7 @@ stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
   for values written by work-group B without deadlock provided ... A
   comes after B in work-group flattened ID order}. However, this
 one-way communication is not sufficient so support either the
-work-stealing or graph application examples of
+work stealing or graph application examples of
 Figure~\ref{fig:graphsearch} and \ref{fig:workstealing}. As described
 above, both require \emph{symmetric} communication between
 threads. \ADComment{Tyler, can you state the HSA guarantee?},
@@ -1542,7 +1541,7 @@ For example, many applications using the inter-workgroup barrier
 paradigm do not carry workgroup-local information across calls to the
 inter-workgroup barrier. Thus the number of workgroups can be adjusted
 at every call to the inter-workgroup barrier. Many applications using
-the work-stealing paradigm do not carry state between task
+the work stealing paradigm do not carry state between task
 computation; thus workgroups can be created or terminated immediately
 after ever task computation.
 
