@@ -693,13 +693,18 @@ Because workgroups of a cooperative kernel are fairly scheduled, a
 global barrier primitive can be provided.  We specify two such primitives: $\globalbarrier$
 and $\resizingglobalbarrier$.
 
-Our $\globalbarrier$ primitive is a kernel-level function: if it appears in
-conditional code then it must be reached by \emph{all} threads
-executing the cooperative kernel.  On reaching a $\globalbarrier()$, a
-thread waits until all threads have arrived at the barrier.  Once all
-threads have arrived, the threads may proceed past the barrier with
-the guarantee that all global memory accesses issued before the
-barrier have completed.
+Our $\globalbarrier$ primitive is a kernel-level function: if it
+appears in conditional code then it must be reached by \emph{all}
+threads executing the cooperative kernel.  On reaching a
+$\globalbarrier()$, a thread waits until all threads have arrived at
+the barrier.  Once all threads have arrived, the threads may proceed
+past the barrier with the guarantee that all global memory accesses
+issued before the barrier have completed.  The $\globalbarrier$
+primitive can be implemented following any inter-workgroup barrier
+design, e.g.~\cite{...}, and the atomic operations provided by the
+OpenCL 2.0 memory model enable a memory-safe
+implementation~\cite{...}.  However, implementing such a barrier is
+involved, hence why we include this function as a primitive.
 
 The $\resizingglobalbarrier$ primitive is also a kernel-level
 function.  It is identical to $\globalbarrier$, except that it caters
@@ -707,34 +712,39 @@ for cooperation with the scheduler: by issuing a
 $\resizingglobalbarrier$ the programmer indicates that the cooperative
 kernel is prepared to proceed after the barrier with fewer workgroups,
 or with additional workgroups joining the computation.
-Semantically, it is as if every workgroup executes $\offerkill$ on reaching the
-barrier, and every workgroup executes $\offerfork$ on leaving the
-barrier.  Thus $\resizingglobalbarrier()$ is semantically equivalent
-to: \ADComment{Does the order of these three calls matter, semantically?}
-%
+
+Semantically, when all threads have reached $\resizingglobalbarrier$,
+the number of active workgroups, $M$, is set to a new value, $M'$ say.
+If $M' = M$ then the active workgroups remain unchanged and proceed to
+execute after the barrier.  If $M' < M$, workgroups $[M', M-1]$ are
+killed.  If $M' > M$ then $M'-M$ new workgroups join the computation,
+as if they were forked from workgroup 0.  In particular, the
+$\transmit$-annotated local state of thread 0 in workgroup 0 is
+transmitted to the threads of the new workgroups.  The change in
+number of active workgroups from $M$ to $M'$ is atomic.
+
+The semantics of $\resizingglobalbarrier$ can be modelled via the following sequence of calls:
+
 \lstset{basicstyle=\tt}
 \begin{lstlisting}
+  $\globalbarrier()$;
+  if($\getgroupid{0}$ != 0) $\offerfork$();
+  $\globalbarrier()$;
   $\offerkill()$;
   $\globalbarrier()$;
-  $\offerfork()$;
 \end{lstlisting}
 \lstset{basicstyle=\scriptsize\tt}
 
-The $\globalbarrier$ primitive can be implemented following any
-inter-workgroup barrier design, e.g.~\cite{...}, and the atomic
-operations provided by the OpenCL 2.0 memory model enable a
-memory-safe implementation~\cite{...}.  However, implementing such a
-barrier is involved, hence why we include this function as a
-primitive.  As noted above, the $\resizingglobalbarrier$ primitive
-is, semantically, syntactic sugar for a sequence of other primitive
-calls.  We include it as a primitive because (a) we have found that
-global barriers often provide a natural point for cooperation with the
-scheduler, and (b) a custom implementation of
-$\resizingglobalbarrier()$ that provides the semantics described above
-can be made significantly more efficient than the above sequence of
-calls.  We discuss our efficient implementation of
-$\resizingglobalbarrier$ in detail in
-Section~\ref{sec:resizingbarrier}.
+The enclosing $\globalbarrier$ calls make the operation appear to be
+atomic.  The middle $\globalbarrier$ is required to ensure that if
+$M'\geq M$, the workgroups with ids smaller than $M$ are left intact.
+
+Because $\resizingglobalbarrier$ can be implemented in the above
+manner, we do not regard it conceptually as a primitive of the
+cooperative kernels programming model.  However, we discuss in
+Section~\ref{sec:resizingbarrier} how $\resizingglobalbarrier$ can be
+implemented significantly more efficiently if it is treated as a
+primitive operation that interacts directly with the scheduler.
 
 \paragraph{Examples}
 
@@ -743,28 +753,26 @@ Section~\ref{sec:resizingbarrier}.
 
 \subsection{Programming Guidelines}\label{sec:programmingguidelines}
 
-An OpenCL programmer writing a cooperative kernel should pay careful
-attention to the following details.
+We remark on some issues that programmer working with cooperative
+kernels should be aware of.
 
-\paragraph{A changing number of workgroups}
-
-In regular OpenCL, $\getnumgroups{0}$ returns a runtime-constant
-value: once the number of executing workgroups has been identified, it
-is guaranteed not to change.
-
-In contrast, the number of workgroups executing a cooperative kernel
-can vary due to workgroups executing $\offerkill$, $\offerfork$ and
-$\resizingglobalbarrier$.  The programmer must therefore write their
-cooperative kernel in a manner that is robust to changes in the value
-returned by $\getnumgroups{0}$.
+\paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
+the value returned by $\getnumgroups()$ is not fixed during the
+lifetime of a cooperative kernel.  Although $\getnumgroups()$ has
+atomic semantics, and so can be called at any time to yield a
+well-defined value, the value returned by two successive calls may
+differ if workgroups have executed $\offerkill$, $\offerfork$ or
+$\resizingglobalbarrier$ in-between.  The programmer must therefore
+write their cooperative kernel in a manner that is robust to changes
+in the value returned by $\getnumgroups()$.
 
 \paragraph{Cooperative kernels that only use barriers}
 
-\ADComment{Need to account for the issue that $M$ might decrease as
-  workgroups actually exit the kernel.}
+The situation is more stable if a cooperative kernel does not directly
+issue $\offerkill$ and $\offerfork$ calls directly.
 
-If a cooperative kernel does not directly issue $\offerkill$ and
-$\offerfork$ calls then the only possibility for the number of
+
+ then the only possibility for the number of
 workgroups to change is due to $\resizingglobalbarrier$ being invoked.
 
 \ADComment{Shorten sentences.}
@@ -917,25 +925,23 @@ program statements that the thread remains to execute.
 Workgroup state: $((l_1, \mathit{ss}_1), \dots, (l_d,
 \mathit{ss}_d))$, where each $(l_i, \mathit{ss}_i)$ is a thread state.
 
-Kernel state: an $N$-tuple $(\sigma, (w_1, w_2, \dots, w_M, \bot,
-\dots, \bot))$, where each $w_i$ is a workgroup state, which are
+Kernel state: a pair $(\sigma, (w_1, w_2, \dots, w_M, \bot, \dots, \bot))$, where $\sigma$ is the shared state,
+each $w_i$ is a workgroup state, which are
 followed by $N-M$ occurrences of $\bot$ to indicate absent workgroups.
 
 We treat thread-level semantics abstractly by assuming a transition
 relation $(\sigma, (l, \mathit{ss})) \rightarrow_{\tau} (\sigma', (l',
 \mathit{ss}'))$ that is defined unless $\mathit{ss} =
-\mathsf{special}(); \mathit{tt}$, where $\mathit{special}$ is one of
+\mathsf{special}(); \mathit{tt}$, where $\mathsf{special}$ is one of
 $\offerkill$, $\offerfork$, $\globalbarrier$ or
 $\resizingglobalbarrier$.
 
 To abstractly account for the interaction between global barrier
-synchronization and the GPU memory model, we assume a $\mathsf{sync}$
-that can be applied to the shared state $\sigma$, or to the shared
-state and a thead local state.  In the first case,
-$\mathsf{sync}(\sigma)$ returns an updated shared state that reflects
-all in-flight memory stores having completed.  In the second case,
-$\mathsf{sync}(\sigma, l)$ returns a thread local state reflecting all
-in-flight memory loads issued by the thread having completed.
+synchronization and the GPU memory model, we assume a function
+$\mathsf{sync}$ that is applied to a global state.  This returns a new
+global state in which the shared state and thread local states have
+been updated to reflect the fact that all stores to memory and loads
+from memory to thread-local storate have completed.
 
 \begin{figure*}
 \begin{center}
@@ -987,20 +993,6 @@ w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
 \forall j \;.\; w_i(j) = (l_j, \offerfork();\mathit{ss})
 \\
 w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
-}
-{
-(\sigma, (\dots, w_i, \dots)) \rightarrow (\sigma, (\dots, w_i', \dots))
-}
-(\textsc{Fork-No-Op})
-\]
-
-\medskip
-
-\[
-\inferrule{
-\forall j \;.\; w_i(j) = (l_j, \offerfork();\mathit{ss})
-\\
-w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
 \\
 k \in [0, N - M]
 \\
@@ -1018,14 +1010,10 @@ k \in [0, N - M]
 \inferrule{
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \globalbarrier();\mathit{ss})
 \\
-\forall i \;.\;\forall j\;.\; l_{i,j}' = \mathsf{sync}(\sigma, l_{i,j})
-\\
-\forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}', \mathit{ss})
-\\
-\sigma' = \mathsf{sync}(\sigma)
+\forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \mathit{ss})
 }
 {
-(\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma', (w_1', \dots, w_M', \bot, \dots, \bot))
+(\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow \mathsf{sync}(\sigma', (w_1', \dots, w_M', \bot, \dots, \bot))
 }
 (\textsc{Barrier})
 \]
@@ -1036,7 +1024,9 @@ k \in [0, N - M]
 \inferrule{
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \resizingglobalbarrier();\mathit{ss})
 \\
-\forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \offerkill(); \globalbarrier(); \offerfork();\mathit{ss})
+\forall i \neq 0 \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \globalbarrier(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
+\\
+\forall j\;.\;w_0'(j) = (l_{0,j}, \globalbarrier(); \offerfork(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
 }
 {
 (\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (w_1', \dots, w_M', \bot, \dots, \bot))
