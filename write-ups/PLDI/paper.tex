@@ -1024,9 +1024,9 @@ k \in [0, N - M]
 \inferrule{
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \resizingglobalbarrier();\mathit{ss})
 \\
-\forall i \neq 0 \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \globalbarrier(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
-\\
 \forall j\;.\;w_0'(j) = (l_{0,j}, \globalbarrier(); \offerfork(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
+\\
+\forall i \neq 0 \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \globalbarrier(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
 }
 {
 (\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (w_1', \dots, w_M', \bot, \dots, \bot))
