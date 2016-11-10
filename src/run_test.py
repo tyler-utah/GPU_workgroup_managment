@@ -6,13 +6,6 @@ import shutil
 import glob
 import re
 
-###############################################################################
-# TODO:
-# - remove printing to file since we have summary
-# - use regexp to grab occupancy of mergedskiptask
-# - reuse occupancy when running standalone
-###############################################################################
-
 def fake_placeholder(x):
     return
 
@@ -25,10 +18,10 @@ DATA_PRINT    = fake_placeholder
 NAME_OF_CHIP  = ""
 
 PROGRAMS = {
-    # "pannotia_color",
-    # "pannotia_mis",
+    "pannotia_color",
+    "pannotia_mis",
     "pannotia_bc",
-    # "pannotia_sssp"
+    "pannotia_sssp"
 }
 
 PROGRAM_DATA = {
@@ -46,14 +39,15 @@ PROGRAM_DATA = {
                          "stat" : "mis_ecology" },
                        { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
                          "solution" : os.path.join("solutions", "color_G3_circuit.txt"),
-                         "stat" : "mis_G3_circuit" } ],
+                         "stat" : "mis_G3_circuit" }
+    ],
 
     "pannotia_bc" : [ { "input" : os.path.join("inputs", "bc", "1k_128k.gr"),
                         "solution" : os.path.join("solutions", "bc_1k_128k.txt"),
                         "stat" : "bc_1k_128k" },
-                      # { "input" : os.path.join("inputs", "bc", "2k_1M.gr"),
-                      #   "solution" : os.path.join("solutions", "bc_2k_1M.txt"),
-                      #   "stat" : "bc_2k_1M" }
+                      { "input" : os.path.join("inputs", "bc", "2k_1M.gr"),
+                        "solution" : os.path.join("solutions", "bc_2k_1M.txt"),
+                        "stat" : "bc_2k_1M" }
     ],
 
     "pannotia_sssp" : [ { "input" : os.path.join("inputs", "sssp", "USA-road-d.NW.gr"),
@@ -61,7 +55,7 @@ PROGRAM_DATA = {
                           "stat" : "sssp_usa_road" } ]
 }
 
-# TODO: make it per machine ?
+# TODO: make it per machine
 MATMULT_CONFIG = [
     # This is for Hugues laptop
     { "freq" : "70", "matdim" : "160", "name" : "light" },
@@ -163,21 +157,28 @@ def run_suite():
             collect_stats(d, prefix)
 
             for c in MATMULT_CONFIG:
-                # Merged
-                cmd = [exe]
-                cmd = cmd + ["--graph_file", graph_in]
-                cmd = cmd + ["--graph_solution_file", graph_sol]
-                cmd = cmd + ["--threads_per_wg", "128"]
-                # indicate very high number of workgroups to finally obtain occupancy
-                cmd = cmd + ["--num_wgs", "1000"]
-                cmd = cmd + ["--non_persistent_frequency", c["freq"]]
-                cmd = cmd + ["--matdim", c["matdim"]]
-                prefix = c["name"] + "_" + d["stat"] + "_merged"
-                exec_cmd(cmd, prefix)
-                collect_stats(d, prefix)
-
-# There is a summary when we run skiptask, but there is no summary when
-# we run in standalone. Add one ?
+                for npconfig in ["npwg_one", "npwg_all_but_one", "npwg_half", "npwg_quarter"]:
+                    cmd = [exe]
+                    cmd = cmd + ["--graph_file", graph_in]
+                    cmd = cmd + ["--graph_solution_file", graph_sol]
+                    cmd = cmd + ["--threads_per_wg", "128"]
+                    # indicate very high number of workgroups to finally obtain occupancy
+                    cmd = cmd + ["--num_wgs", "1000"]
+                    cmd = cmd + ["--non_persistent_frequency", c["freq"]]
+                    npwg = "0"
+                    if npconfig == "npwg_one":
+                        npwg = "-2"
+                    elif npconfig == "npwg_all_but_one":
+                        npwg = "-1"
+                    elif npconfig == "npwg_half":
+                        npwg = "2"
+                    elif npconfig == "npwg_quarter":
+                        npwg = "4"
+                    cmd = cmd + ["--non_persistent_wgs", npwg]
+                    cmd = cmd + ["--matdim", c["matdim"]]
+                    prefix = d["stat"] + "_" + c["name"] + "_" + npconfig + "_merged"
+                    exec_cmd(cmd, prefix)
+                    collect_stats(d, prefix)
 
 def main():
 
