@@ -26,7 +26,7 @@ PROGRAMS = {
 #    "pannotia_color",
 #    "pannotia_mis",
 #    "pannotia_bc",
-#    "pannotia_sssp" 
+#    "pannotia_sssp"
 }
 
 PROGRAM_DATA = {
@@ -66,7 +66,7 @@ PROGRAM_DATA = {
                           "stat" : "sssp_usa_road",
                           "suite" : "pannotia"}
     ],
-    
+
     "lonestar_sssp" : [ { "input" : os.path.join("lonestar", "inputs","rmat22.gr"),
                         "solution" : os.path.join("lonestar","solutions", "sssp_rmat22.txt"),
                         "stat" : "sssp_rmat22",
@@ -92,7 +92,7 @@ PROGRAM_DATA = {
                         "solution" : os.path.join("lonestar","solutions", "bfs_USA_W.txt"),
                         "stat" : "bfs_USA-road-d.W",
                         "suite" : "lonestar"}
-                        
+
     ],
 }
 
@@ -180,7 +180,7 @@ def optional_debug():
     if platform.system() == "Windows":
         return "Debug"
     return ""
-    
+
 
 def run_suite():
     for p in PROGRAMS:
@@ -286,7 +286,7 @@ def main():
     if NAME_OF_CHIP == "HD5500":
         MATMULT_CONFIG = MATMULT_CONFIG_HD5500
     elif NAME_OF_CHIP == "HD520":
-	    MATMULT_CONFIG = MATMULT_CONFIG_HD5500
+	    MATMULT_CONFIG = MATMULT_CONFIG_HD520
 	else:
 	    print("Cannot find a matmult for your chip! Exiting")
 		exit(0)
