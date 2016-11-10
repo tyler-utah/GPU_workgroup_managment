@@ -5,6 +5,13 @@ import subprocess
 import shutil
 import glob
 
+###############################################################################
+# TODO:
+# - remove printing to file since we have summary
+# - use regexp to grab occupancy of mergedskiptask
+# - reuse occupancy when running standalone
+###############################################################################
+
 def fake_placeholder(x):
     return
 
@@ -17,9 +24,9 @@ DATA_PRINT    = fake_placeholder
 NAME_OF_CHIP  = ""
 
 PROGRAMS = {
-    "pannotia_color",
+    # "pannotia_color",
     # "pannotia_mis",
-    # "pannotia_bc",
+    "pannotia_bc",
     # "pannotia_sssp"
 }
 
@@ -28,9 +35,9 @@ PROGRAM_DATA = {
     "pannotia_color" : [ { "input" : os.path.join("inputs", "color", "ecology1.graph"),
                            "solution" : os.path.join("solutions", "color_ecology.txt"),
                            "stat" : "color_ecology" },
-                         # { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
-                         #   "solution" : os.path.join("solutions", "color_G3_circuit.txt"),
-                         #   "stat" : "color_G3_circuit" }
+                         { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
+                           "solution" : os.path.join("solutions", "color_G3_circuit.txt"),
+                           "stat" : "color_G3_circuit" }
     ],
 
     "pannotia_mis" : [ { "input" : os.path.join("inputs", "color", "ecology1.graph"),
@@ -43,9 +50,9 @@ PROGRAM_DATA = {
     "pannotia_bc" : [ { "input" : os.path.join("inputs", "bc", "1k_128k.gr"),
                         "solution" : os.path.join("solutions", "bc_1k_128k.txt"),
                         "stat" : "bc_1k_128k" },
-                      { "input" : os.path.join("inputs", "bc", "2k_1M.gr"),
-                        "solution" : os.path.join("solutions", "bc_2k_1M.txt"),
-                        "stat" : "bc_2k_1M" }
+                      # { "input" : os.path.join("inputs", "bc", "2k_1M.gr"),
+                      #   "solution" : os.path.join("solutions", "bc_2k_1M.txt"),
+                      #   "stat" : "bc_2k_1M" }
     ],
 
     "pannotia_sssp" : [ { "input" : os.path.join("inputs", "sssp", "USA-road-d.NW.gr"),
@@ -65,18 +72,25 @@ def my_print(file_handle, data):
     print(data)
     file_handle.write(data + os.linesep)
 
-def exec_cmd(cmd, extr_args=[], flag=""):
-    finalcmd = cmd + extr_args
+def exec_cmd(cmd, prefix="", record_file=""):
+    cmd = cmd + ["--output_summary", prefix + "_summary"]
+    cmd = cmd + ["--output_non_persistent_duration", prefix + "_non_persistent_duration"]
+    cmd = cmd + ["--output_timestamp_executing_groups", prefix + "_timestamp_executing_groups"]
+    cmd = cmd + ["--output_timestamp_non_persistent", prefix + "_timestamp_non_persistent"]
     PRINT("====================== RUN START =========================")
-    PRINT(flag)
-    for s in finalcmd:
+    PRINT(prefix)
+    for s in cmd:
         PRINT(s)
     PRINT("----------------------------------------------------------")
-    p_obj = subprocess.Popen(finalcmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p_obj = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     ret_code = p_obj.wait()
     sout, serr = p_obj.communicate()
     PRINT("* stdout:")
     PRINT(sout.decode())
+    if record_file != "":
+        f = open(record_file, "w")
+        f.write(sout.decode())
+        f.close()
     PRINT("* stderr:")
     PRINT(serr.decode())
     PRINT("----------------------------------------------------------")
@@ -91,40 +105,42 @@ def mv_wildcard(path, dest):
     for f in glob.glob(path):
         shutil.move(f, dest)
 
-def collect_stats(d):
+def collect_stats(d, prefix):
     stat_dir = os.path.join(STAT_PATH, d["stat"])
-    try:
+    if not os.path.isdir(stat_dir):
         os.makedirs(stat_dir)
-    except OSError:
-        PRINT("Note: stats dir already exists: ")
-        PRINT(stat_dir)
-    PRINT("Collect stats of run in directory:")
-    PRINT(stat_dir)
+    PRINT("Collect stats for run: " + prefix + " in " + stat_dir)
     # move all potential stat files to the stats dir
-    mv_wildcard("summary_*.txt", stat_dir)
-    mv_wildcard("non_persistent_duration_*.txt", stat_dir)
-    mv_wildcard("timestamp_executing_groups_*.txt", stat_dir)
-    mv_wildcard("timestamp_non_persistent_*.txt", stat_dir)
+    mv_wildcard(prefix + "*", stat_dir)
 
 def run_suite():
     for p in PROGRAMS:
         for d in PROGRAM_DATA[p]:
+            exe = os.path.join(EXE_PATH, p)
+            graph_in = os.path.join(DATA_PATH, d["input"])
+            graph_sol = os.path.join(DATA_PATH, d["solution"])
+
+            # RUN: merged skip tasks
+            cmd = [exe]
+            cmd = cmd + ["--graph_file", graph_in]
+            cmd = cmd + ["--graph_solution_file", graph_sol]
+            cmd = cmd + ["--threads_per_wg", "128"]
+            cmd = cmd + ["--skip_tasks", "1"]
+            prefix = d["stat"] + "_skiptask"
+            exec_cmd(cmd, prefix)
+            # grab occupancy
+
             for c in MATMULT_CONFIG:
-                exe = os.path.join(EXE_PATH, p)
-                graph_in = os.path.join(DATA_PATH, d["input"])
-                graph_sol = os.path.join(DATA_PATH, d["solution"])
+                # Merged
                 cmd = [exe]
                 cmd = cmd + ["--graph_file", graph_in]
                 cmd = cmd + ["--graph_solution_file", graph_sol]
                 cmd = cmd + ["--threads_per_wg", "128"]
                 cmd = cmd + ["--non_persistent_frequency", c["freq"]]
                 cmd = cmd + ["--matdim", c["matdim"]]
-                cmd = cmd + ["--output_summary", "summary_" + c["name"]]
-                cmd = cmd + ["--output_non_persistent_duration", "non_persistent_duration_" + c["name"]]
-                cmd = cmd + ["--output_timestamp_executing_groups", "timestamp_executing_groups_" + c["name"]]
-                cmd = cmd + ["--output_timestamp_non_persistent", "timestamp_non_persistent_" + c["name"]]
-                exec_cmd(cmd, [], c["name"])
-                collect_stats(d)
+                prefix = c["name"] + "_" + d["stat"] + "_merged"
+                exec_cmd(cmd, prefix)
+                collect_stats(d, prefix)
 
                 # in this order:
                 # 1. run merged skip task
