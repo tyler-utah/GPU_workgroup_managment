@@ -35,6 +35,7 @@
 \usepackage{ragged2e}  % for '\RaggedRight' macro (allows hyphenation)
 \usepackage{xcolor,colortbl}
 \usepackage{graphicx}
+\usepackage{mathpartir}
 
 \usepackage{booktabs}
 \usepackage{subfig}
@@ -91,7 +92,7 @@
   escapeinside={(*@}{@*)}
 }
 
-\newcommand{\restore}{\texttt{restore}}
+\newcommand{\transmit}{\mathsf{transmit}}
 
 
 \newcommand{\code}[1]{\lstset{basicstyle=\tt}\lstinline!#1!\lstset{basicstyle=\scriptsize\tt}}
@@ -167,8 +168,6 @@
 \end{abstract}
     
 \section{Introduction}\label{sec:intro}
-
-\ADComment{Think about whether ``restore'' is best name.}
 
 \ADComment{Open to attack: why not just buy another GPU?}
 
@@ -380,9 +379,8 @@ two motivating examples of irregular algorithms (Section~\ref{sec:background}). 
 
 \section{Background and Examples}\label{sec:background}
 
-We use two worked examples---work stealing and breadth-first graph
-search---to provide background on the OpenCL programming model and
-irregular data-parallel algorithms.
+We use two examples of irregular data-parallel algorithms---a work stealing queue and breadth-first graph
+search---to introduce the industry-standard OpenCL programming model on which we base cooperative kernels.
 
 \begin{figure}
 \ADComment{Tyler/Hugues: please insert workstealing example.}
@@ -400,7 +398,8 @@ TODO
 \caption{An OpenCL graph search algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
 \end{figure}
 
-\paragraph{OpenCL}
+\paragraph{OpenCL kernels}
+
 An OpenCL program is divided into \emph{host} and \emph{device}
 components.  A host application runs on the CPU and launches one or
 more \emph{kernels} that run on accelerator devices---GPUs in the
@@ -506,10 +505,9 @@ operations, based on the C11 memory model~\cite{...}.
 \section{The Cooperative Kernels Programming Model}\label{sec:cooperativekernels}
 
 We describe our cooperative kernels programming model as an extension
-to the industry-standard OpenCL programming model for heterogeneous
-many-core architectures.  However, the cooperative kernels concept is
-more general, and could be applied to extend other GPU programming
-models, such as CUDA and HSA.
+to OpenCL.  However, the cooperative kernels concept is more general,
+and could be applied to extend other GPU programming models, such as
+CUDA and HSA.
 
 We describe the semantics of cooperative kernels
 (Section~\ref{sec:semantics}), then summarise the important
@@ -520,8 +518,7 @@ implementer of a scheduler for cooperative kernels, should strive for
 (Section~\ref{sec:nonfunctional}).  The semantics of cooperative
 kernels has been guided by the applications that we have studied
 (described in Section~\ref{sec:portingalgorithms}), and we discuss several cases where we
-have taken particular semantic decisions where other reasonable
-alternatives were possible (Section~\ref{sec:semanticalternatives}).
+might have taken different, equally reasonable, semantic decisions (Section~\ref{sec:semanticalternatives}).
 We conclude the section by discussing the backwards-compatible nature
 of cooperative kernels with respect to blocking algorithms designed to
 run on current GPU platforms
@@ -529,44 +526,42 @@ run on current GPU platforms
 
 \subsection{Semantics of Cooperative Kernels}\label{sec:semantics}
 
-\ADComment{A natural exit does not decrement $M$.}
-
-As with a regular OpenCL kernel, a cooperative kernel is launched by
-the host application, with a specified number of workgroups, each
-consisting of a specified number of threads.  The kernel's behaviour
-is described by a kernel function, written in OpenCL C but using the
-additional language extensions that we present below, and a number of
-parameters to the kernel function are passed by the host application.
-
-The parameters to a cooperative kernel are \emph{immutable}, as if
+As with a regular OpenCL kernel (see Section~\ref{sec:background}), a
+cooperative kernel is launched by the host application.  The host
+application passes parameters to the kernel and specifies a desired
+number of workgroups, each consisting of a specified number of
+threads.  The parameters to a cooperative kernel are \emph{immutable}, as if
 they were qualified with the \texttt{const} keyword (though pointer
 parameters can refer to mutable data).
 
-\ADComment{Perhaps remove this because a driver-based approach could handle this.}
-A regular OpenCL kernel can be executed by a multi-dimensional grid of
-workgroups, called an ND-range.  In our current proposal, the ND-range
-for a cooperative kernel must be one-dimensional.  \ADComment{Say why?
-  And mention that none of the applications that we deem would benefit
-  from cooperative kernels need a multi-dimensional ND-range.}
+A cooperative kernel is written in OpenCL C plus the following
+language extensions: $\transmit$, a
+new qualifier on the local variables of a thread; $\offerkill$ and
+$\offerfork$, the key functions that enable cooperative scheduling;
+$\globalbarrier$ and $\resizingglobalbarrier$, two primitives to allow
+inter-workgroup synchronisation.
 
-As in regular OpenCL, each workgroup can be multi-dimensional.
+We now explain the semantics of these language extensions, after which
+we explain how the work stealing and graph traveral algorithms of
+Section~\ref{sec:background} can be turned into cooperative kernels
+that use the extensions.
 
-\paragraph{Restored variables}
+\paragraph{Transmitted variables}
 
 A variable declared in the root scope of the cooperative kernel can
-optionally be annotated with a new \restore qualifier.  By
-annotating a variable with \restore, the programmer indicates
-that when new workgroups are spawned via $\offerfork$, the threads in
-these workgroups should obtain a well-defined initial value for the
-variable, obtained from the workgroup that executed $\offerfork$.  We
-detail the semantics for this when we describe $\offerfork$ below.
+optionally be annotated with a new $\transmit$ qualifier.  By
+annotating a variable with $\transmit$, the programmer indicates that
+when a workgroup spawns new workgroups by calling $\offerfork$, the
+workgroup should transmit the current value of this variable to serve
+as an initial value for the new workgroups.  We detail the semantics
+for this when we describe $\offerfork$ below.
 
 \ADComment{Remove?}
-Only private memory variables can be annotated with \restore,
+Only private memory variables can be annotated with $\transmit$,
 which may include pointers to local or global memory so long as the
 pointer variables themselves are stored in private memory.  In
 particular, variables and arrays in local memory cannot be annotated
-with \restore.  \ADComment{The preceding is what we have
+with $\transmit$.  \ADComment{The preceding is what we have
   implemented, but actually it is pretty clear how we could handle
   local memory restoration if we wanted to; it's just that none of our
   examples needed it.}
@@ -657,7 +652,7 @@ are two exceptions to this:
   the new threads have access to these parameters and can safely read
   from them;
 
-\item for each variable $v$ annotated with \restore, every new
+\item for each variable $v$ annotated with $\transmit$, every new
   thread's copy of $v$ is initialised to the value that thread 0 in
   workgroup $m$ held for $v$ at the point of the $\offerfork$ call.
 
@@ -716,6 +711,10 @@ $\resizingglobalbarrier()$ that provides the semantics described
 above can be made significantly more efficient than the above sequence of
 calls.  We discuss our efficient implementation of
 $\resizingglobalbarrier$ in detail in Section~\ref{sec:resizingbarrier}.
+
+\paragraph{Examples}
+
+\ADComment{TODO}
 
 
 \subsection{Programming Guidelines}\label{sec:programmingguidelines}
@@ -836,7 +835,7 @@ frequently that the scheduler can meet such real-time constraints.
 
 \ADComment{Make the point here that if an irregular algorithm is
   written as a cooperative kernel then it will execute just as safely
-  as it does today on current hardware if: (1) the \restore
+  as it does today on current hardware if: (1) the $\transmit$
   annotation and $\offerkill$/$\offerfork$ calls are defined away to
   nothing, (2) $\resizingglobalbarrier$ is redefined to
   $\globalbarrier$, (3) a standard implementation of $\globalbarrier$
@@ -874,6 +873,9 @@ frequently that the scheduler can meet such real-time constraints.
   GPUs.}
 
 \section{Notes}
+
+\ADComment{A natural exit does not decrement $M$.  We haven't made a point of this, and I don't think we should right now, but we should remember to think this through carefully.}
+
 
   \ADComment{Perhaps
   make the point that inter-workgroup synchronization is possible in
@@ -1020,6 +1022,152 @@ implementation in software using the strong inter-workgroup FPP
 available on current GPUs. This allows us to test the feasibility of
 our approach and as well get upper bounds for the performance cost and
 the responsiveness of multi-tasking.
+
+
+\section{Semantics}
+
+Thread state: $(l, \mathit{ss})$, where $l \in L$ is the thread's
+local state, and $\mathit{ss}$ is a semi-colon-separated sequence of
+program statements that the thread remains to execute.
+
+Workgroup state: $((l_1, \mathit{ss}_1), \dots, (l_d,
+\mathit{ss}_d))$, where each $(l_i, \mathit{ss}_i)$ is a thread state.
+
+Kernel state: an $N$-tuple $(\sigma, (w_1, w_2, \dots, w_M, \bot,
+\dots, \bot))$, where each $w_i$ is a workgroup state, which are
+followed by $N-M$ occurrences of $\bot$ to indicate absent workgroups.
+
+We treat thread-level semantics abstractly by assuming a transition
+relation $(\sigma, (l, \mathit{ss})) \rightarrow_{\tau} (\sigma', (l',
+\mathit{ss}'))$ that is defined unless $\mathit{ss} =
+\mathsf{special}(); \mathit{tt}$, where $\mathit{special}$ is one of
+$\offerkill$, $\offerfork$, $\globalbarrier$ or
+$\resizingglobalbarrier$.
+
+To abstractly account for the interaction between global barrier
+synchronization and the GPU memory model, we assume a $\mathsf{sync}$
+that can be applied to the shared state $\sigma$, or to the shared
+state and a thead local state.  In the first case,
+$\mathsf{sync}(\sigma)$ returns an updated shared state that reflects
+all in-flight memory stores having completed.  In the second case,
+$\mathsf{sync}(\sigma, l)$ returns a thread local state reflecting all
+in-flight memory loads issued by the thread having completed.
+
+\begin{figure*}
+\begin{center}
+
+\[
+\inferrule{
+w_i(j) = (l, \mathit{ss})
+\\
+(\sigma, (l, \mathit{ss})) \rightarrow_{\tau} (\sigma', (l', \mathit{ss}'))
+\\
+w_i' = w_i[j \mapsto (l', \mathit{ss}')]
+}
+{
+(\sigma, (\dots, w_i, \dots)) \rightarrow (\sigma', (\dots, w_i', \dots))
+}
+(\textsc{Thread-Step})
+\]
+
+\medskip
+
+\[
+\inferrule{
+\forall j \;.\; w_i(j) = (l_j, \offerkill();\mathit{ss})
+\\
+w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
+}
+{
+(\sigma, (\dots, w_i, \dots)) \rightarrow (\sigma, (\dots, w_i', \dots))
+}
+(\textsc{Kill-No-Op})
+\]
+
+\medskip
+
+\[
+\inferrule{
+\forall j \;.\; w_M(j) = (l_j, \offerkill();\mathit{ss})
+}
+{
+(\sigma, (\dots, w_{M-1}, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_{M-1}, \bot, \bot, \dots, \bot))
+}
+(\textsc{Kill})
+\]
+
+\medskip
+
+\[
+\inferrule{
+\forall j \;.\; w_i(j) = (l_j, \offerfork();\mathit{ss})
+\\
+w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
+}
+{
+(\sigma, (\dots, w_i, \dots)) \rightarrow (\sigma, (\dots, w_i', \dots))
+}
+(\textsc{Fork-No-Op})
+\]
+
+\medskip
+
+\[
+\inferrule{
+\forall j \;.\; w_i(j) = (l_j, \offerfork();\mathit{ss})
+\\
+w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
+\\
+k \in [0, N - M]
+\\
+\forall a \in [1, k] \;.\; w_{M+a} = ((l_1, \mathit{ss}), \dots, (l_1, \mathit{ss}))
+}
+{
+(\sigma, (\dots, w_i, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_i', \dots, w_M, w_{M+1}, \dots, w_{M+k}, \bot, \dots, \bot))
+}
+(\textsc{Fork})
+\]
+
+\medskip
+
+\[
+\inferrule{
+\forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \globalbarrier();\mathit{ss})
+\\
+\forall i \;.\;\forall j\;.\; l_{i,j}' = \mathsf{sync}(\sigma, l_{i,j})
+\\
+\forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}', \mathit{ss})
+\\
+\sigma' = \mathsf{sync}(\sigma)
+}
+{
+(\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma', (w_1', \dots, w_M', \bot, \dots, \bot))
+}
+(\textsc{Barrier})
+\]
+
+\medskip
+
+\[
+\inferrule{
+\forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \resizingglobalbarrier();\mathit{ss})
+\\
+\forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \offerkill(); \globalbarrier(); \offerfork();\mathit{ss})
+}
+{
+(\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (w_1', \dots, w_M', \bot, \dots, \bot))
+}
+(\textsc{Resizing-Barrier})
+\]
+
+\end{center}
+
+\caption{Abstract operational semantics for our cooperative kernels language extensions}
+
+\end{figure*}
+
+
+
 
 
 \end{document}
