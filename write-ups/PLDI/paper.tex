@@ -839,6 +839,38 @@ primitive operation that interacts directly with the scheduler.
 
 \ADComment{TODO.  We want to show the examples from Section~\ref{sec:background} ported to use cooperative kernels.  We want to make it clear that it is easy to place the primitives.}
 
+\begin{figure}
+\ADComment{Tyler/Hugues: please insert graph traversal example.}
+\TSComment{Hows this?}
+
+\begin{lstlisting}
+kernel graph_traversal(global graph *g, 
+                       global nodes *n0, global nodes *n1) {
+
+  restore int level = 0;
+  restore global nodes * in_nodes = n0;
+  restore global nodes * out_nodes = n1;
+
+  while(in_nodes.size > 0) {
+
+    int tid = get_global_id();
+    int stride = get_global_size();
+
+    for (int i = tid; i < nodes.size; i += stride) {
+      process_node(g, in_nodes[i], out_nodes, level);
+    }
+
+    level++;
+    swap(in_nodes, out_nodes);
+    reset(out_nodes);
+    resizing_global_barrier();
+  }
+}
+\end{lstlisting}
+\caption{An OpenCL graph traversal algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
+\end{figure}
+
+
 
 \subsection{Programming Guidelines}\label{sec:programmingguidelines}
 
