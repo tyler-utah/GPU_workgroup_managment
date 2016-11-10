@@ -978,6 +978,26 @@ $\mathsf{pop\_or\_steal}$, since when a workgroup wants to steal it must
 access other pool indexes, which are bounded by the total number of
 pools.
 
+\begin{figure}
+
+\begin{lstlisting}
+kernel work_stealing(global Task *pools, const int num_pools) {
+  while (more_work(pools)) {
+    int pool_id = get_group_id() % num_pools;
+    Task *t = pop_or_steal(pools, pool_id, num_pools);
+    if (t) {
+      // task processing may create more work
+      process_task(t, pools, pool_id);
+    }
+  }
+}
+\end{lstlisting}
+
+\caption{Cooperative version of work stealing: the number of workpools
+must be explicitely passed as arguments since the number of workgroups
+is not a constant anymore}\label{fig:workstealing-cooperative}
+\end{figure}
+
 \subsection{Programming Guidelines}\label{sec:programmingguidelines}
 
 We remark on some issues that programmer working with cooperative
