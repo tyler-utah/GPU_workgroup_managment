@@ -4,7 +4,7 @@
 % Requires temporary version of sigplanconf style file provided on
 % PLDI'16 web site.
 % 
-\documentclass[nocopyrightspace,10pt]{sigplanconf}
+\documentclass[numbers,nocopyrightspace,10pt]{sigplanconf}
 % \documentclass[pldi-cameraready]{sigplanconf-pldi16}
 
 %
@@ -379,7 +379,7 @@ In summary, our main contributions are:
 We begin by providing an overview of the OpenCL programming model and
 two motivating examples of irregular algorithms (Section~\ref{sec:background}).  At the end of the paper we discuss related work (Section~\ref{sec:relatedwork}) and avenues for future work (Section~\ref{sec:conclusion}).
 
-\section{Background and Examples}\label{sec:background}
+\section{Background and Motivating Examples}\label{sec:background}
 
 We use two examples of irregular data-parallel algorithms---a work
 stealing queue and breadth-first graph search---to introduce the
@@ -395,13 +395,6 @@ kernels.
 % local memory), and \emph{private} memory is dedicated to thread-level
 % storage and cannot be shared between threads. These concepts are
 % illustrated over the two examples.
-
-\ADComment{Points to make are: there is spinning, either on mutex
-implementation or main loop, so fairness is required.  Note OpenCL
-features: kernel keyword, global qualifier, ``get'' functions.  Note
-that pop\_or\_steal is executed by all, but internally the master
-manipulates the queue.  t is a single task, but is chunky enough that
-all threads can process part of it.}
 
 \begin{figure}
 
@@ -458,20 +451,54 @@ components.  A host application runs on the CPU and launches one or
 more \emph{kernels} that run on accelerator devices---GPUs in the
 context of this paper.  A kernel is writen in OpenCL C, based on C99.
 All threads executing a kernel execute the same entry function with
-identical arguments, but a thread may query its unique thread id in
-order to access different data or follow different control flow paths
-to other threads.
+identical arguments, but a thread may invoke the $\getglobalid()$
+function to query its unique thread id in order to access different
+data or follow different control flow paths to other threads.
+
+The threads executing a kernel are hierarchically organised.  A kernel
+is executed by a number of \emph{workgroups}, and each workgroup
+consists of a fixed number of threads.  Builtin functions
+$\getlocalid()$ and $\getgroupid()$ return a thread's local id within
+its workgroup and the id of the workgroup, respectively.\footnote{In general, an OpenCL kernel is organised as a multi-dimensional grid
+of multi-dimensional workgroups, and the above functions each take
+an integer dimension argument.  For simplicity, we consider only the
+one-dimensional case throughout the paper, which captures all the
+GPU-accelerated irregular algorithms we are aware of, and use
+e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
+}  The number
+of threads per workgroup and the number of workgroups are obtained via
+$\getlocalsize()$ and $\getnumgroups()$.  A thread's local and global
+id are related via the equation $\getglobalid() = \getgroupid() \times
+\getlocalsize() + \getlocalid()$.
+
+\ADComment{Maybe cut?} Within a workgroup, threads may also be
+organised into \emph{subgroups} (termed \emph{warps} and
+\emph{wavefronts} on NVIDIA and AMD architectures, respectively).
+
+\paragraph{Memory spaces and memory model}
+An OpenCL kernel has access to four memory spaces.  Shared virtual
+memory (SVM) is accessible to all threads, and to the host
+application.  Global memory is shared among all threads executing a
+kernel, but can only be safely accessed by the host application before
+or after kernel execution.  Local memory is shared among all threads
+in the same workgroup: each workgroup has its own portion of local
+memory, which can be used for fast intra-workgroup communication.
+Each thread has an allocation of very fast private memory, where
+function-local variables are allocated.
+
+Fine-grained communication between threads, and also with the host in
+the case of SVM, is enabled via a set of atomic data types and
+operations, based on the C11 memory model~\cite{...}.  In particular,
+atomic SVM operations enable fine-grained communication between host
+and device.  Our implementation of cooperative kernels
+(Section~\ref{sec:implementation}) depends on this recent OpenCL
+feature.
 
 \paragraph{Work stealing example}
-  \ADComment{Describe some
-  aspects of the example, saying that the mutex is not a primitive,
-  and can be coded up using the memory model but is not safe due to
-  the execution model.  Make it clear that the lock function uses
-  busy-waiting.}  
 Figure~\ref{fig:workstealing} shows a simplified version of an OpenCL
 kernel that uses a work stealing queue.
 %
-Work stealing is useful when a computation can be split into multiple
+The work stealing paradigm is useful when a computation can be split into multiple
 tasks that can be processed independently, but where the number of
 tasks is not known ahead of time because processing a given task may
 create an arbitrary number of new tasks. Work stealing enables dynamic
@@ -483,33 +510,42 @@ than terminating---tries to \emph{steal} a task from an other
 pool. Hence, workgroups keep on processing tasks until all the work is
 done.
 
-\myfiglong\ref{fig:workstealing} illustrates an OpenCL implementation of
-a work stealing application. All threads start their execution at the
+\myfiglong\ref{fig:workstealing} illustrates an OpenCL implementation
+of a work stealing algorithm. All threads start their execution at the
 function marked with the $\mathsf{kernel}$ keyword. They receive a
-pointer to the task pools that reside in global memory, and which were
-initialized by the host program beforehand to contain the initial
+pointer to the task pools, which reside in global memory, and which
+were initialized by the host program beforehand to contain the initial
 tasks. Each thread can identify the workgroup it belongs to via the
-function $\getgroupid$, and OpenCL provides a series of primitives in the
-same vein to access for instance the thread global id, or its local id
-within a workgroup. Here the group id is stored into the variable
-$\mathsf(pool\_id)$ (which is, by default, in private memory) and used
-to access the relevant task pool. The $\mathsf(pop\_or\_steal)$ function
-is called by all threads of a workgroup, although inside only the thread
-with a local id equal to $0$, also called \emph{master thread} of the
-workgroup, will try to pop or steal a task from the pools. The master
-thread uses local memory inside $\mathsf(pop\_or\_steal)$ to ensure that
-the returned value is valid for all threads of its workgroup. If a task
-was obtained, then all threads of the workgroup can participate in the
-processing of the task inside the $\mathsf{process\_task}$
-function. \HEComment{Manage to say that a task is considered big enough
-to benefit from parallel computation} If some new tasks are created
-during the processing, it is again the master thread who will be in
-charge of pushing them to the pool. Although not depicted here,
-concurrent accesses to each pool is guarded by a mutex which is
-implemented by atomic compare and swap operations on global
-memory. Henceforth, master threads may be spinning on mutexes, and
-workgroups are also spinning on the main loop, so a fair scheduling of
-workgroups is desirable.
+function $\getgroupid()$.  Here the group id is stored into the
+variable $\mathsf{pool\_id}$ (which is, by default, in private memory)
+and used to access the relevant task pool. The
+$\mathsf{pop\_or\_steal}$ function is called by all threads of a
+workgroup, although inside only the thread with a local id equal to
+$0$, also called the \emph{master thread} of the workgroup,
+\ADComment{Hugues, I changed; please check:} will try to pop a task
+from the workgroup's pool, or steal a task from a different pool. The
+master thread uses local memory inside $\mathsf{pop\_or\_steal}$ to
+ensure that the returned value is valid for all threads of its
+workgroup. If a task was obtained, then all threads of the workgroup
+participate in the processing of the task inside the
+$\mathsf{process\_task}$ function. \HEComment{Manage to say that a
+  task is considered big enough to benefit from parallel computation}
+\ADComment{I think that would be too much detail given the space we
+  have, so I would not delve into this. Remove both comments if you
+  agree.} Processing this task may lead to the creation of further
+tasks, which the master thread will push to the workgroup's pool.
+
+Although not depicted here, concurrent accesses to each pool inside
+$\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
+mutex which is implemented using atomic compare and swap operations on
+global memory.  As a result, the kernel presents two opportunities for
+spin-waiting: spinning to obtain a mutex, and spinning in the main
+kernel loop to obtain a task to process.  The algorithm thus depends
+on a fair scheduler, which, as discussed in Section~\ref{sec:intro},
+is not provided by current GPU programming models.  In
+Section~\ref{sec:cooperativeexamples} we show how the example can be
+updated to use our cooperative threads programming model to resolve
+the scheduling issue.
 
 \ADComment{Describe some
   aspects of the example, saying that the global barrier is not a
@@ -517,7 +553,7 @@ workgroups is desirable.
   safe due to the execution model.  Make it clear that the barrier
   uses busy-waiting.}
 
-\paragraph{Graph traversal} Figure~\ref{fig:graphsearch} shows the
+\paragraph{Graph traversal example} Figure~\ref{fig:graphsearch} shows the
 skeleton of a frontier based graph traversal algorithm (this approach
 has been shown to be efficient on GPUs in~\ref{...}). The kernel is
 given three arguments in global memory: a graph structure, and two
@@ -571,13 +607,6 @@ make progress.
 
 \paragraph{Execution model}
 
-The threads executing a kernel are hierarchically organised.  A kernel
-is executed by a number of \emph{workgroups}, and each workgroup
-consists of a fixed number of \emph{threads}.  Within a workgroup,
-threads may also be organised into \emph{subgroups} (termed
-\emph{warps} and \emph{wavefronts} on NVIDIA and AMD architectures,
-respectively).
-
 Two barrier primitives are provided in OpenCL.  A workgroup barrier
 synchronises all threads in a workgroup and ensures memory
 consistency.  This barrier is a \emph{workgroup-level} function: it
@@ -590,15 +619,13 @@ analogously at the subgroup level.  As discussed below, a
 not provided as a primitive.
 
 OpenCL specifically makes no guarantees about fair scheduling between
-workgroups \TSComment{This should explicitly say \emph{workgroups
-    executing the same kernel}, otherwise HSA has some weirdness},
-stating~\cite{...}: \emph{``A conforming implementation may choose to
-  serialize the workgroups so a correct algorithm cannot assume that
-  workgroups will execute in parallel.  There is no safe and portable
-  way to synchronize across the independent execution of workgroups
-  since once in the work-pool, they can execute in any order.''}
-OpenCL is not alone in this regard: CUDA similarly provides no
-guarantees~\cite{...}. 
+workgroups executing the same kernel, stating~\cite{...}: \emph{``A
+  conforming implementation may choose to serialize the workgroups so
+  a correct algorithm cannot assume that workgroups will execute in
+  parallel.  There is no safe and portable way to synchronize across
+  the independent execution of workgroups since once in the work-pool,
+  they can execute in any order.''}  OpenCL is not alone in this
+regard: CUDA similarly provides no guarantees~\cite{...}.
 
 HSA provides limited, one-way guarantees,
 stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
@@ -606,7 +633,7 @@ stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
   comes after B in work-group flattened ID order}. However, this
 one-way communication is not sufficient so support either the
 work stealing or graph application examples of
-Figure~\ref{fig:graphsearch} and \ref{fig:workstealing}. As described
+Figures~\ref{fig:workstealing} and \ref{fig:graphsearch}. As described
 above, both require \emph{symmetric} communication between
 threads. \ADComment{Tyler, can you state the HSA guarantee?},
 \TSComment{How is this?}~\cite{...}.
@@ -622,46 +649,7 @@ continuously scheduled, starving a workgroup that has not yet arrived
 at the barrier and meaning that no workgroup proceeds past the
 barrier.
 
-\paragraph{Identity and size functions}
 
-Builtin functions $\getlocalid()$ and $\getglobalid()$ provide a
-thread with an id that is unique within its workgroup and unique
-across all workgroups, respectively.  Each workgroup has an id,
-obtained via $\getgroupid()$.  The number of threads per workgroup and
-the number of workgroups are obtained via $\getlocalsize()$ and
-$\getnumgroups()$.  A thread's local and global id are related via the
-equation $\getglobalid() = \getgroupid() \times \getlocalsize() +
-\getlocalid()$.
-
-In general, an OpenCL kernel is organised as a multi-dimensional grid
-of multi-dimensional workgroups, and the above functions each take
-an integer dimension argument.  For simplicity, we consider only the
-one-dimensional case throughout the paper, which captures all the
-GPU-accelerated irregular algorithms we are aware of, and use
-e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
-
-
-\paragraph{Memory model}
-
-An OpenCL kernel has access to four memory spaces.  Shared virtual
-memory (SVM) is accessible to all threads, and to the host
-application.  Atomic operations on this memory space enable
-fine-grained communication between host and device.  Our
-implementation of cooperative kernels
-(Section~\ref{sec:implementation}) depends on this recent OpenCL
-feature.  Global memory is shared among all threads executing a
-kernel, but can only be safely accessed by the host application before
-or after kernel execution.  Local memory is shared among all threads
-in the same workgroup: each workgroup has its own portion of local
-memory, which can be used for fast intra-workgroup communication.
-Each thread has an allocation of very fast private memory, where
-function-local variables are allocated.
-
-Fine-grained communication between threads, and also with the host in
-the case of SVM, is enabled via a set of atomic data types and
-operations, based on the C11 memory model~\cite{...}.
-\ADComment{Perhaps say more.}  \ADComment{Can we illustrate using the
-  examples?}
 
 
 \section{The Cooperative Kernels Programming Model}\label{sec:cooperativekernels}
