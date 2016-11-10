@@ -237,7 +237,7 @@ int amd_check(int v) {
 	return v;
 }
 
-// Just for running the non persistent task
+// Just for running the persistent task
 void run_persistent(CL_Execution *exec) {
 	printf("Running persistent app %s\n", persistent_app_name());
 	printf("Running %d iterations\n", FLAGS_run_persistent);
@@ -247,7 +247,7 @@ void run_persistent(CL_Execution *exec) {
 		                           file::Path(FLAGS_restoration_ctx_path),
 		                           FLAGS_use_query_barrier);
 
-	
+
 	check_ocl(err);
 	exec->exec_kernels["persistent"] = cl::Kernel(exec->exec_program, persistent_kernel_name(), &err);
 	check_ocl(err);
@@ -259,15 +259,15 @@ void run_persistent(CL_Execution *exec) {
 	arg_index = set_persistent_app_args_for_occupancy(arg_index, exec->exec_kernels["persistent"]);
 	err = exec->exec_queue.flush();
 	check_ocl(err);
-	
+
 	cl::Buffer d_bar(exec->exec_context, CL_MEM_READ_WRITE, sizeof(IW_barrier));
 	reset_barrier(exec, d_bar);
-	
+
 	err = exec->exec_kernels["persistent"].setArg(arg_index, d_bar);
 	arg_index++;
 	check_ocl(err);
 
-	
+
 
 	cl::Buffer d_ctx_mem(exec->exec_context, CL_MEM_READ_WRITE, sizeof(Discovery_ctx));
 	reset_discovery(exec, d_ctx_mem, true);
