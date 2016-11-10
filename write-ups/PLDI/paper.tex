@@ -769,45 +769,72 @@ in the value returned by $\getnumgroups()$.
 \paragraph{Cooperative kernels that only use barriers}
 
 The situation is more stable if a cooperative kernel does not directly
-issue $\offerkill$ and $\offerfork$ calls directly.
+issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
+only calls to $\resizingglobalbarrier$ can cause the number of active
+workgroups to change and, as discussed in Section~\ref{sec:semantics},
+this function causes synchronisation between all threads and causes
+the number of active workgroups to change atomically.  At any point
+during execution, the threads of a kernel are executing between some
+pair of resizing barrier calls, which we call a \emph{resizing barrier
+  intervals} (here we consider the kernel entry and exit points
+conceptually to be special cases of resizing barriers).  The number of
+workgroups executing the kernel is thus constant within each resizing
+barrier interval, i.e.\ the result returned by repeated calls to
+$\getnumgroups()$ will be identical during such an interval.
 
-
- then the only possibility for the number of
-workgroups to change is due to $\resizingglobalbarrier$ being invoked.
-
-\ADComment{Shorten sentences.}
-In this case, because the resizing barrier is a kernel-level function,
-the statements executed by the cooperative kernel can be divided into
-\emph{resizing barrier intervals}: a resizing barrier interval starts
-at a resizing barrier or the kernel entry point, and ends at a
-resizing barrier or a kernel exit point.  At any moment of execution,
-all threads are guaranteed to be executing within the same resizing
-barrier interval.  As a result, the number of workgroups executing the
-kernel is guaranteed to remain unchanged within each resizing barrier
-interval, so the result returned by $\getnumgroups{0}$ is guaranteed
-to be identical on repeated calls during such an interval.
-
-This guarantee may be exploited by algorithms that perform strided data
-processing.  \ADComment{Tyler, can we give an example of a data
+This guarantee can be exploited by algorithms that perform strided
+data processing.  \ADComment{Tyler, can we give an example of a data
   processing loop that would have to be changed?}
 
 \paragraph{Placing the new constructs}
 
-\ADComment{TODO: needs work.}
-.  The irregular
-algorithms we encountered either employ work stealing or operate on
-graph data structures.  Work stealing algorithms have a transactional
-flavour, whereby tasks are repeatedly pulled from a queue and
-processed by a workgroup.  The point of task completion---the end of a transaction---is a natural place for a workgroup to invoke both $\offerkill$ and $\offerfork$, to indicate that 
+It is up to the programmmer to decide where to place our new language
+constructs.  This must be done bearing in mind both the semantics of
+the constructs, as detailed in Section~\ref{ }, as well as the
+non-functional requirements of cooperative kernels that we describe in
+Section~\ref{sec:nonfunctional}.
 
+We note, however, that the programming model and associated language
+constructs were inspired by the requirements of the irregular GPU
+algorithms proposed in the literature, and that at least for these
+algorithms it is usually easy to identify where to place the
+constructs.
 
+The irregular algorithms we encountered either employ work stealing or
+operate on graph data structures.
+
+Work stealing algorithms have a transactional flavour, whereby tasks
+are repeatedly pulled from a queue and processed by a workgroup.  The
+point of task completion---the end of a transaction---is a natural
+place for a workgroup to invoke both $\offerkill$ and $\offerfork$, to
+indicate both that the workgroup could gracefully exit computation,
+but also that there is more work to be processed and that further
+workgroups would be useful in order to process this work.  Such
+algorithms usually require little state to persist between tasks;
+typically only the pointers to the queue data structures need to be
+pre-initialised, by annotating them with $\transmit$.
+\ADComment{Refer back to cooperative versions of examples in
+  Section~\ref{sec:semantics}.}
+
+The level-by-level approach employed by many graph algorithms tends to
+involve global barrier synchronisation.  In some cases, a global
+barrier is required in the midst of a transaction, in which case
+$\globalbarrier$, but not $\resizingglobalbarrier$, is suitable for
+achieving synchronization without disturbing the set of active
+workgroups.  But often it is the case that on completing a level of
+the graph algorithm, the next level could be processed by more or
+fewer workgroups, something which $\resizingglobalbarrier$
+facilitates.  Again, only a small amount of state is relevant to new
+workgroups joining the computation, such as the value of the level
+being processed; this relevant state must be annotated with
+$\transmit$.
 
 \subsection{Non-Functional Requirements of Cooperative Kernels}\label{sec:nonfunctional}
 
 The semantics presented in Section~\ref{sec:semantics} describe the envelope of
 behaviour that a developer of a cooperative kernel should be prepared
 for.
-
+%
 However, the aim of cooperative kernels is to find a balance that
 allows \emph{efficient execution} of long-running kernels
 (e.g.\ implementing irregular data-parallel algorithms), and
@@ -899,7 +926,45 @@ remaining computation to be performed if competing workloads allow it.
 
 \subsection{Porting Irregular GPU Algorithms to Cooperative Kernels}\label{sec:portingalgorithms}
 
-\ADComment{Among other things, make sure we address the point that placing the primitives was pretty easy.}
+\ADComment{Describe the algorithms that we ported.}
+
+\ADComment{Give stats on how many variables had to be marked with
+  $\transmit$ (i.e., occurred in the restoration context), how many barriers we changed to resizing, how many offer kill and offer fork calls we included.}
+
+\ADComment{Make sure we address the point that placing the primitives was pretty easy.}
+
+\section{The GPUs we Tested}
+
+\ADComment{Describe the platforms.  Explain why we could not try other
+  platforms.}
+
+\section{Determining Representative Workloads}
+
+\ADComment{Better section title?}
+
+\ADComment{Hugues, can you please explain your experimental
+  methodology for working out required response times here?}
+
+\paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
+
+\paragraph{Results}  \ADComment{Discuss the results.}
+
+\section{The Overhad of Moving to Cooperative Kernels}
+
+\ADComment{Results for stand-alone vs.\ cooperative without co-scheduling.}
+
+\paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
+
+\paragraph{Results}  \ADComment{Discuss the results.}
+
+\section{Performance and Responsiveness of Cooperative Scheduling}
+
+\ADComment{Preamble}
+
+\paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
+
+\paragraph{Results}  \ADComment{Discuss the results.}
+
 
 
 \section{Related Work}\label{sec:relatedwork}
