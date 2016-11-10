@@ -462,12 +462,10 @@ kernel work_stealing(global Task *pools) {
 \end{figure}
 
 \begin{figure}
-\ADComment{Tyler/Hugues: please insert graph traversal example.}
-\TSComment{Hows this?}
 
 \begin{lstlisting}
-kernel graph_traversal(global graph *g, 
-                       global nodes *n0, global nodes *n1) {
+kernel graph_app(global graph *g, 
+                 global nodes *n0, global nodes *n1) {
 
   int level = 0;
   global nodes * in_nodes = n0;
@@ -534,14 +532,26 @@ analogously at the subgroup level.  As discussed below, a
 not provided as a primitive.
 
 OpenCL specifically makes no guarantees about fair scheduling between
-workgroups, stating~\cite{...}: \emph{``A conforming implementation
-  may choose to serialize the workgroups so a correct algorithm cannot
-  assume that workgroups will execute in parallel.  There is no safe
-  and portable way to synchronize across the independent execution of
-  workgroups since once in the work-pool, they can execute in any
-  order.''}  OpenCL is not alone in this regard: CUDA similarly
-provides no guarantees~\cite{...}, and HSA guarantees only that
-\ADComment{Tyler, can you state the HSA guarantee?}~\cite{...}.
+workgroups \TSComment{This should explicitly say \emph{workgroups
+    executing the same kernel}, otherwise HSA has some weirdness},
+stating~\cite{...}: \emph{``A conforming implementation may choose to
+  serialize the workgroups so a correct algorithm cannot assume that
+  workgroups will execute in parallel.  There is no safe and portable
+  way to synchronize across the independent execution of workgroups
+  since once in the work-pool, they can execute in any order.''}
+OpenCL is not alone in this regard: CUDA similarly provides no
+guarantees~\cite{...}. 
+
+HSA provides limited, one-way guarantees,
+stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
+  for values written by work-group B without deadlock provided ... A
+  comes after B in work-group flattened ID order}. However, this
+one-way communication is not sufficient so support either the
+work-stealing or graph application examples of
+Figure~\ref{fig:graphsearch} and \ref{fig:workstealing}. As described
+above, both require \emph{symmetric} communication between
+threads. \ADComment{Tyler, can you state the HSA guarantee?},
+\TSComment{How is this?}~\cite{...}.
 
 Revisiting the examples of Figures~\ref{fig:workstealing}
 and~\ref{fig:graphsearch}: the mutex function of
@@ -795,8 +805,10 @@ the barrier.  Once all threads have arrived, the threads may proceed
 past the barrier with the guarantee that all global memory accesses
 issued before the barrier have completed.  The $\globalbarrier$
 primitive can be implemented following any inter-workgroup barrier
-design, e.g.~\cite{...}, and the atomic operations provided by the
-OpenCL 2.0 memory model enable a memory-safe
+design, \TSComment{This isn't exactly true. For cooperative kernels,
+  the barriers must be able to handle a growing or shrinking number of
+  workgroups.} e.g.~\cite{...}, and the atomic operations provided by
+the OpenCL 2.0 memory model enable a memory-safe
 implementation~\cite{...}.  However, implementing such a barrier is
 involved, hence why we include this function as a primitive.
 
@@ -842,7 +854,60 @@ primitive operation that interacts directly with the scheduler.
 
 \paragraph{Examples}
 
+\begin{figure}
+
+\begin{lstlisting}
+kernel graph_app(global graph *g, 
+                 global nodes *n0, global nodes *n1) {
+
+(*@\label{line:cgraph:transmit1}@*)  transmit int level = 0;
+(*@\label{line:cgraph:transmit2}@*)  transmit global nodes *in_nodes = n0;
+(*@\label{line:cgraph:transmit3}@*)  transmit global nodes *out_nodes = n1;
+
+  while(in_nodes.size > 0) {
+
+(*@\label{line:cgraph:rechunking1}@*)    int tid = get_global_id();
+(*@\label{line:cgraph:rechunking2}@*)    int stride = get_global_size();
+
+    for (int i = tid; i < nodes.size; i += stride) {
+      process_node(g, in_nodes[i], out_nodes, level);
+    }
+
+    level++;
+    swap(in_nodes, out_nodes);
+    reset(out_nodes);
+(*@\label{line:cgraph:resizing}@*)    resizing_global_barrier();
+  }
+}
+\end{lstlisting}
+\caption{Cooperative kernel port for Figure~\ref{fig:graphsearch}}\label{fig:cgraphsearch}
+\end{figure}
+
 \ADComment{TODO.  We want to show the examples from Section~\ref{sec:background} ported to use cooperative kernels.  We want to make it clear that it is easy to place the primitives.}
+
+In practice, we found that transforming traditional blocking GPU
+kernels into cooperative kernels was straightforward. For example,
+Figure~\ref{fig:cgraphsearch} shows the graph traversal example of
+Figure~\ref{fig:graphsearch} transformed into a cooperative kernel.
+On line~\ref{line:cgraph:resizing}, we change the original barrier
+into a resizing barrier. Several variables are marked to be
+transmitted in the case of workgroups joining at the resizing barrier
+(lines~\ref{line:cgraph:transmit1}, \ref{line:cgraph:transmit2} and
+\ref{line:cgraph:transmit3}): {\tt level} must be restored so that
+new workgroups know which frontier they are processing; {\tt
+  in\_nodes} and {\tt out\_nodes} must be restored so that new
+workgroups know which of the node arrays are input and output. Lastly,
+the static work distribution of the original kernel is no longer valid
+in a cooperative kernel. This is because the stride (which is based on
+$M$) may change after each resizing barrier
+call. To fix this, we re-distribute the work after each resizing
+barrier call by recomputing the thread id and stride
+(lines~\ref{line:cgraph:rechunking1} and
+\ref{line:cgraph:rechunking2}).
+
+\TSComment{Can Hugues talk about work stealing here?}
+
+
 
 
 \subsection{Programming Guidelines}\label{sec:programmingguidelines}
@@ -852,13 +917,14 @@ kernels should be aware of.
 
 \paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
 the value returned by $\getnumgroups()$ is not fixed during the
-lifetime of a cooperative kernel.  Although $\getnumgroups()$ has
-atomic semantics, and so can be called at any time to yield a
-well-defined value, the value returned by two successive calls may
-differ if workgroups have executed $\offerkill$, $\offerfork$ or
-$\resizingglobalbarrier$ in-between.  The programmer must therefore
-write their cooperative kernel in a manner that is robust to changes
-in the value returned by $\getnumgroups()$.
+lifetime of a cooperative kernel \TSComment{Neither is {\tt
+    get\_global\_size}, is that worth mentioning?}.  Although
+$\getnumgroups()$ has atomic semantics, and so can be called at any
+time to yield a well-defined value, the value returned by two
+successive calls may differ if workgroups have executed $\offerkill$,
+$\offerfork$ or $\resizingglobalbarrier$ in-between.  The programmer
+must therefore write their cooperative kernel in a manner that is
+robust to changes in the value returned by $\getnumgroups()$.
 
 \paragraph{Cooperative kernels that only use barriers}
 
@@ -878,7 +944,8 @@ $\getnumgroups()$ will be identical during such an interval.
 
 This guarantee can be exploited by algorithms that perform strided
 data processing.  \ADComment{Tyler, can we give an example of a data
-  processing loop that would have to be changed?}
+  processing loop that would have to be changed?} \TSComment{Done,
+its in figure~\ref{fig:cgraphsearch}}
 
 \paragraph{Placing the new constructs}
 
@@ -1397,9 +1464,5 @@ implementation in software using the strong inter-workgroup FPP
 available on current GPUs. This allows us to test the feasibility of
 our approach and as well get upper bounds for the performance cost and
 the responsiveness of multi-tasking.
-
-
-
-
 
 \end{document}
