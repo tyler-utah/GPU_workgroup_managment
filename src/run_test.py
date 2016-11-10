@@ -5,6 +5,7 @@ import subprocess
 import shutil
 import glob
 import re
+import platform
 
 def fake_placeholder(x):
     return
@@ -12,51 +13,106 @@ def fake_placeholder(x):
 EXE_PATH      = ""
 DATA_PATH     = ""
 STAT_PATH     = ""
-ITERATIONS    = "10"
+ITERATIONS    = "1"
 PRINT         = fake_placeholder
 DATA_PRINT    = fake_placeholder
 NAME_OF_CHIP  = ""
+PLATFORM_ID   = "0"
+IS_AMD        = "0"
 
 PROGRAMS = {
-    "pannotia_color",
-    "pannotia_mis",
-    "pannotia_bc",
-    "pannotia_sssp"
+    "lonestar_sssp"
+#    "lonestar_bfs",
+#    "pannotia_color",
+#    "pannotia_mis",
+#    "pannotia_bc",
+#    "pannotia_sssp" 
 }
 
 PROGRAM_DATA = {
 
-    "pannotia_color" : [ { "input" : os.path.join("inputs", "color", "ecology1.graph"),
-                           "solution" : os.path.join("solutions", "color_ecology.txt"),
-                           "stat" : "color_ecology" },
-                         { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
-                           "solution" : os.path.join("solutions", "color_G3_circuit.txt"),
-                           "stat" : "color_G3_circuit" }
+    "pannotia_color" : [ { "input" : os.path.join("pannotia","inputs", "color", "ecology1.graph"),
+                           "solution" : os.path.join("pannotia","solutions", "color_ecology.txt"),
+                           "stat" : "color_ecology",
+                           "suite" : "pannotia"},
+                         { "input" : os.path.join("pannotia","inputs", "color", "G3_circuit.graph"),
+                           "solution" : os.path.join("pannotia","solutions", "color_G3_circuit.txt"),
+                           "stat" : "color_G3_circuit",
+                           "suite" : "pannotia"}
     ],
 
-    "pannotia_mis" : [ { "input" : os.path.join("inputs", "color", "ecology1.graph"),
-                         "solution" : os.path.join("solutions", "color_ecology.txt"),
-                         "stat" : "mis_ecology" },
-                       { "input" : os.path.join("inputs", "color", "G3_circuit.graph"),
-                         "solution" : os.path.join("solutions", "color_G3_circuit.txt"),
-                         "stat" : "mis_G3_circuit" }
+    "pannotia_mis" : [ { "input" : os.path.join("pannotia","inputs", "color", "ecology1.graph"),
+                         "solution" : os.path.join("pannotia","solutions", "color_ecology.txt"),
+                         "stat" : "mis_ecology",
+                         "suite" : "pannotia"},
+                       { "input" : os.path.join("pannotia","inputs", "color", "G3_circuit.graph"),
+                         "solution" : os.path.join("pannotia","solutions", "color_G3_circuit.txt"),
+                         "stat" : "mis_G3_circuit",
+                         "suite" : "pannotia"}
     ],
 
-    "pannotia_bc" : [ { "input" : os.path.join("inputs", "bc", "1k_128k.gr"),
-                        "solution" : os.path.join("solutions", "bc_1k_128k.txt"),
-                        "stat" : "bc_1k_128k" },
-                      { "input" : os.path.join("inputs", "bc", "2k_1M.gr"),
-                        "solution" : os.path.join("solutions", "bc_2k_1M.txt"),
-                        "stat" : "bc_2k_1M" }
+    "pannotia_bc" : [ { "input" : os.path.join("pannotia","inputs", "bc", "1k_128k.gr"),
+                        "solution" : os.path.join("pannotia","solutions", "bc_1k_128k.txt"),
+                        "stat" : "bc_1k_128k",
+                        "suite" : "pannotia"},
+                      { "input" : os.path.join("pannotia","inputs", "bc", "2k_1M.gr"),
+                        "solution" : os.path.join("pannotia","solutions", "bc_2k_1M.txt"),
+                        "stat" : "bc_2k_1M",
+                        "suite" : "pannotia"}
     ],
 
-    "pannotia_sssp" : [ { "input" : os.path.join("inputs", "sssp", "USA-road-d.NW.gr"),
-                          "solution" : os.path.join("solutions", "sssp_usa.txt"),
-                          "stat" : "sssp_usa_road" } ]
+    "pannotia_sssp" : [ { "input" : os.path.join("pannotia","inputs", "sssp", "USA-road-d.NW.gr"),
+                          "solution" : os.path.join("pannotia","solutions", "sssp_usa.txt"),
+                          "stat" : "sssp_usa_road",
+                          "suite" : "pannotia"}
+    ],
+    
+    "lonestar_sssp" : [ { "input" : os.path.join("lonestar", "inputs","rmat22.gr"),
+                        "solution" : os.path.join("lonestar","solutions", "sssp_rmat22.txt"),
+                        "stat" : "sssp_rmat22",
+                        "suite" : "lonestar"},
+                      { "input" : os.path.join( "lonestar", "inputs", "r4-2e23.gr"),
+                        "solution" : os.path.join("lonestar","solutions", "sssp_r4-2e23.txt"),
+                        "stat" : "sssp_r4-2e23",
+                        "suite" : "lonestar"},
+                   #   { "input" : os.path.join( "lonestar", "inputs", "USA-road-d.W.gr"),
+                   #     "solution" : os.path.join("lonestar","solutions", "sssp_USA_W.txt"),
+                   #     "stat" : "sssp_USA-road-d.W",
+                   #     "suite" : "lonestar"}
+    ],
+    "lonestar_bfs" : [ { "input" : os.path.join( "lonestar", "inputs", "rmat22.gr"),
+                        "solution" : os.path.join("lonestar","solutions", "bfs_rmat22.txt"),
+                        "stat" : "bfs_rmat22",
+                        "suite" : "lonestar"},
+                      { "input" : os.path.join( "lonestar", "inputs", "r4-2e23.gr"),
+                        "solution" : os.path.join("lonestar","solutions", "bfs_r4-2e23.txt"),
+                        "stat" : "bfs_r4-2e23",
+                        "suite" : "lonestar"},
+                      { "input" : os.path.join( "lonestar", "inputs", "USA-road-d.W.gr"),
+                        "solution" : os.path.join("lonestar","solutions", "bfs_USA_W.txt"),
+                        "stat" : "bfs_USA-road-d.W",
+                        "suite" : "lonestar"}
+                        
+    ],
 }
 
-# TODO: make it per machine
-MATMULT_CONFIG = [
+MATMULT_CONFIG = []
+
+MATMULT_CONFIG_TEMPLATE = [
+    # This is for Hugues laptop
+    { "freq" : "70", "matdim" : "160", "name" : "light" },
+    { "freq" : "40", "matdim" : "160", "name" : "medium" },
+    { "freq" : "40", "matdim" : "260", "name" : "high" },
+]
+
+MATMULT_CONFIG_HD5500 = [
+    # This is for Tylers laptop
+    { "freq" : "70", "matdim" : "250", "name" : "light" }, #light is 3 ms
+    { "freq" : "40", "matdim" : "250", "name" : "medium" }, #medium is 3ms
+    { "freq" : "40", "matdim" : "375", "name" : "high" },   #heavy is 10ms
+]
+
+MATMULT_CONFIG_HD520 = [
     # This is for Hugues laptop
     { "freq" : "70", "matdim" : "160", "name" : "light" },
     { "freq" : "40", "matdim" : "160", "name" : "medium" },
@@ -94,7 +150,8 @@ def exec_cmd(cmd, prefix="", record_file=""):
     PRINT("====================== RUN END ===========================")
     if (ret_code != 0):
         print("Error running " + " ".join(cmd))
-        exit(ret_code)
+        return ret_code
+	return 0
 
 def mv_wildcard(path, dest):
     for f in glob.glob(path):
@@ -119,10 +176,16 @@ def extract_finalsize(filename):
                 break
     return finalsize
 
+def optional_debug():
+    if platform.system() == "Windows":
+        return "Debug"
+    return ""
+    
+
 def run_suite():
     for p in PROGRAMS:
         for d in PROGRAM_DATA[p]:
-            exe = os.path.join(EXE_PATH, p)
+            exe = os.path.join(EXE_PATH, d["suite"], optional_debug(),  p)
             graph_in = os.path.join(DATA_PATH, d["input"])
             graph_sol = os.path.join(DATA_PATH, d["solution"])
 
@@ -132,29 +195,40 @@ def run_suite():
             cmd = cmd + ["--graph_solution_file", graph_sol]
             cmd = cmd + ["--threads_per_wg", "128"]
             # indicate very high number of workgroups to finally obtain occupancy
-            cmd = cmd + ["--num_wgs", "1000"]
+            cmd = cmd + ["--num_wgs", "256"]
             cmd = cmd + ["--skip_tasks", "1"]
             cmd = cmd + ["--merged_iterations", ITERATIONS]
+            cmd = cmd + ["--platform_id", PLATFORM_ID]
+            cmd = cmd + ["--is_AMD", IS_AMD]
+
             prefix = d["stat"] + "_skiptask"
             record_stdout = prefix + "_stdout.txt"
-            exec_cmd(cmd, prefix, record_stdout)
+            err_code = exec_cmd(cmd, prefix, record_stdout)
+            if err_code != 0:
+                continue
             # grab finalsize (min(occupancy, nb of workgroups))
             finalsize = extract_finalsize(record_stdout)
             collect_stats(d, prefix)
             if finalsize == -1:
                 PRINT("Could not find finalsize after run of merged skiptask")
-                exit(-1)
+                continue
 
             # RUN: standalone
             cmd = [exe]
             cmd = cmd + ["--graph_file", graph_in]
             cmd = cmd + ["--graph_solution_file", graph_sol]
+            cmd = cmd + ["--num_wgs", "256"]
+
             cmd = cmd + ["--threads_per_wg", "128"]
             cmd = cmd + ["--run_persistent", ITERATIONS]
             cmd = cmd + ["--num_wgs", finalsize]
+            cmd = cmd + ["--platform_id", PLATFORM_ID]
+            cmd = cmd + ["--is_AMD", IS_AMD]
             prefix = d["stat"] + "_standalone"
             record_stdout = prefix + "_stdout.txt"
-            exec_cmd(cmd, prefix, record_stdout)
+            err_code = exec_cmd(cmd, prefix, record_stdout)
+            if err_code != 0:
+                continue
             collect_stats(d, prefix)
 
             for c in MATMULT_CONFIG:
@@ -165,8 +239,10 @@ def run_suite():
                     cmd = cmd + ["--threads_per_wg", "128"]
                     cmd = cmd + ["--merged_iterations", ITERATIONS]
                     # indicate very high number of workgroups to finally obtain occupancy
-                    cmd = cmd + ["--num_wgs", "1000"]
+                    cmd = cmd + ["--num_wgs", "256"]
                     cmd = cmd + ["--non_persistent_frequency", c["freq"]]
+                    cmd = cmd + ["--platform_id", PLATFORM_ID]
+                    cmd = cmd + ["--is_AMD", IS_AMD]
                     npwg = "0"
                     if npconfig == "npwg_one":
                         npwg = "-2"
@@ -179,7 +255,9 @@ def run_suite():
                     cmd = cmd + ["--non_persistent_wgs", npwg]
                     cmd = cmd + ["--matdim", c["matdim"]]
                     prefix = d["stat"] + "_" + c["name"] + "_" + npconfig + "_merged"
-                    exec_cmd(cmd, prefix)
+                    err_code = exec_cmd(cmd, prefix)
+                    if err_code != 0:
+                        continue
                     collect_stats(d, prefix)
 
 def main():
@@ -192,10 +270,12 @@ def main():
     global DATA_PRINT
     global NAME_OF_CHIP
     global MATMULT_CONFIG
+    global PLATFORM_ID
+    global IS_AMD
 
-    if len(sys.argv) != 6:
+    if len(sys.argv) != 8:
         print("Please provide the following arguments:")
-        print("path to executables, path to data, path to result (where to store them), name of run, name of chip, frequency (ms) of non-persistent kernel")
+        print("path to build, path to src, path to result (where to store them), name of run, name of chip, platform_id, is_AMD")
         return 1
 
     EXE_PATH = sys.argv[1]
@@ -203,6 +283,15 @@ def main():
     STAT_PATH = sys.argv[3]
 
     NAME_OF_CHIP = sys.argv[5]
+    if NAME_OF_CHIP == "HD5500":
+        MATMULT_CONFIG = MATMULT_CONFIG_HD5500
+    elif NAME_OF_CHIP == "HD520":
+	    MATMULT_CONFIG = MATMULT_CONFIG_HD5500
+	else:
+	    print("Cannot find a matmult for your chip! Exiting")
+		exit(0)
+    PLATFORM_ID = sys.argv[6]
+    IS_AMD = sys.argv[7]
     log_file = sys.argv[4] + ".log"
     print("recording all to " + log_file)
     log_file_handle = open(log_file, "w")
@@ -213,13 +302,7 @@ def main():
 
     run_suite()
 
-    # data_file = sys.argv[3] + "_data.txt"
-    # print "recording data to " + data_file
-    # data_file_handle = open(data_file, "w")
-    # DATA_PRINT = lambda x : my_print(data_file_handle,x)
-
     log_file_handle.close()
-    # data_file_handle.close()
 
 if __name__ == '__main__':
     sys.exit(main())
