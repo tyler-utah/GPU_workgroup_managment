@@ -4,6 +4,7 @@ import os
 import subprocess
 import shutil
 import glob
+import re
 
 ###############################################################################
 # TODO:
@@ -113,6 +114,17 @@ def collect_stats(d, prefix):
     # move all potential stat files to the stats dir
     mv_wildcard(prefix + "*", stat_dir)
 
+def extract_finalsize(filename):
+    finalsize = -1
+    re_finalsize = re.compile(', [0-9]+ occupancy, [0-9]+ final size')
+    with open(filename) as f:
+        for line in f:
+            match = re_finalsize.search(line)
+            if match != None:
+                finalsize = match.group().split()[3]
+                break
+    return finalsize
+
 def run_suite():
     for p in PROGRAMS:
         for d in PROGRAM_DATA[p]:
@@ -125,10 +137,30 @@ def run_suite():
             cmd = cmd + ["--graph_file", graph_in]
             cmd = cmd + ["--graph_solution_file", graph_sol]
             cmd = cmd + ["--threads_per_wg", "128"]
+            # indicate very high number of workgroups to finally obtain occupancy
+            cmd = cmd + ["--num_wgs", "1000"]
             cmd = cmd + ["--skip_tasks", "1"]
             prefix = d["stat"] + "_skiptask"
-            exec_cmd(cmd, prefix)
-            # grab occupancy
+            record_stdout = prefix + "_stdout.txt"
+            exec_cmd(cmd, prefix, record_stdout)
+            # grab finalsize (min(occupancy, nb of workgroups))
+            finalsize = extract_finalsize(record_stdout)
+            collect_stats(d, prefix)
+            if finalsize == -1:
+                PRINT("Could not find finalsize after run of merged skiptask")
+                exit(-1)
+
+            # RUN: standalone
+            cmd = [exe]
+            cmd = cmd + ["--graph_file", graph_in]
+            cmd = cmd + ["--graph_solution_file", graph_sol]
+            cmd = cmd + ["--threads_per_wg", "128"]
+            cmd = cmd + ["--run_persistent", "1"]
+            cmd = cmd + ["--num_wgs", finalsize]
+            prefix = d["stat"] + "_standalone"
+            record_stdout = prefix + "_stdout.txt"
+            exec_cmd(cmd, prefix, record_stdout)
+            collect_stats(d, prefix)
 
             for c in MATMULT_CONFIG:
                 # Merged
@@ -136,30 +168,13 @@ def run_suite():
                 cmd = cmd + ["--graph_file", graph_in]
                 cmd = cmd + ["--graph_solution_file", graph_sol]
                 cmd = cmd + ["--threads_per_wg", "128"]
+                # indicate very high number of workgroups to finally obtain occupancy
+                cmd = cmd + ["--num_wgs", "1000"]
                 cmd = cmd + ["--non_persistent_frequency", c["freq"]]
                 cmd = cmd + ["--matdim", c["matdim"]]
                 prefix = c["name"] + "_" + d["stat"] + "_merged"
                 exec_cmd(cmd, prefix)
                 collect_stats(d, prefix)
-
-                # in this order:
-                # 1. run merged skip task
-                # 2. grab occupancy
-                # 3. run standalone with same occupancy
-                # for the 3 configurations of non-persistent:
-                #   4. run merged for 3 configurations of non_persistent
-                #   5. run non_persistent for the nb of iterations there was in the merged run
-
-                # TODO: run merged skip task, grab occupancy result, and run standalone with as many wgs as the occupancy found
-
-                # standalone, which does not produce stat files, so nothing to collect here
-                # exec_cmd(cmd, ["--run_persistent", "2"], "== standalone")
-                # merged without tasks, stats to collect afterwards
-                # exec_cmd(cmd, ["--skip_tasks", "1", "--merged_iterations", "2"], "== merged without task")
-                # collect_stats(d)
-                # merged
-                #exec_cmd(cmd, ["--merged_iterations", "1"], "== merged")
-
 
 # There is a summary when we run skiptask, but there is no summary when
 # we run in standalone. Add one ?
