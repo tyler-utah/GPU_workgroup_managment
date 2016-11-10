@@ -966,8 +966,17 @@ barrier call by recomputing the thread id and stride
 
 \TSComment{Can Hugues talk about work stealing here?}
 
-
-
+For the work stealing example, there is no state to transmit since a
+computation is entirely parametrized by a task, which is retrieved from
+a task pool located in global memory. Care must be taken on the dynamic
+change of the number of workgroups though: we cannot assume that the
+total number of task pools is equal to $\getnumgroups$. Thus, the number
+of pools must be given as an argument, and the $\mathsf{pool}$ argument
+must be obtained from the group id modulo the total number of
+pools. This total number of pools must also be passed to
+$\mathsf{pop\_or\_steal}$, since when a workgroup wants to steal it must
+access other pool indexes, which are bounded by the total number of
+pools.
 
 \subsection{Programming Guidelines}\label{sec:programmingguidelines}
 
