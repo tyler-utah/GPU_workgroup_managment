@@ -52,6 +52,7 @@
 %\newcommand{\TSComment}[1]{\textcolor{blue}{TS: #1}}
 \newcommand{\HEComment}[1]{\textcolor{orange}{HE: #1}}
 %\newcommand{\COULDCUT}[1]{\textcolor{blue}{#1}}
+\newcommand{\TSComment}[1]{\textcolor{purple}{TS: #1}}
 
 \newcommand{\myfig}{Fig.~}
 \newcommand{\myfiglong}{Figure~}
@@ -457,10 +458,33 @@ __kernel connect_four(__global uchar *base_board,
 
 \begin{figure}
 \ADComment{Tyler/Hugues: please insert graph traversal example.}
+\TSComment{Hows this?}
+
 \begin{lstlisting}
-TODO
+kernel graph_traversal(global graph *g, 
+                       global nodes *n0, global nodes *n1) {
+
+  int level = 0;
+  global nodes * in_nodes = n0;
+  global nodes * out_nodes = n1;
+
+  int tid = get_global_id();
+  int stride = get_global_size();
+
+  while(in_nodes.size > 0) {
+
+    for (int i = tid; i < nodes.size; i += stride) {
+      process_node(g, in_nodes[i], out_nodes, level);
+    }
+
+    level++;
+    swap(in_nodes, out_nodes);
+    reset(out_nodes);
+    global_barrier();
+  }
+}
 \end{lstlisting}
-\caption{An OpenCL graph search algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
+\caption{An OpenCL graph traversal algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
 \end{figure}
 
 \paragraph{OpenCL kernels}
