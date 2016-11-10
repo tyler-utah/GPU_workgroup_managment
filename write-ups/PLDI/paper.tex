@@ -392,39 +392,16 @@ get\_group\_id(0). When we try to steal, we can look into other pools
 which are indexed by (pool\_id + delta) modulo get\_num\_workgroups(0).
 }
 
+\ADComment{Points to make are: there is spinning, either on mutex implementation or main loop, so fairness is required.  Note OpenCL features: kernel keyword, global qualifier, ``get'' functions.  Note that pop\_or\_steal is executed by all, but internally the master manipulates the queue.  t is a single task, but is chunky enough that all threads can process part of it.}
+
 \begin{lstlisting}
-__kernel connect_four(__global uchar *base_board,
-                      const int lookahead,
-                      __global atomic_int *best_move,
-                      __global int *all_done,
-                      __global Node *tree,
-                      __global Task *pools,
-                      __global Mutex *pool_m)
-{
-  // init
-  if (get_global_id(0) == 0) {
-    init_first_tasks(tree, pools);
-  }
-  global_barrier();
-
-  // main loop
-  while (true) {
-    // obtain a task, or terminate if all work is done
-    int pool_id = get_group_id(0);
-    Task *t = pop_or_steal(pools, pool_m, pool_id);
-    if (t == NULL) {
-      if (*all_done) { return; } else { continue; }
-    }
-
-    // perform task, may create new tasks
-    Node *node = tree[t->node_index];
-    value = node_value(base_board, node);
-    if (winning(value) || node->level == lookahead) {
-      // we reached a leaf
-      update_parent_value(node, tree, best_move, all_done);
-    } else {
-      // create_children() pushes or donates new tasks
-      create_children(node, tree, pools, pool_m, pool_id);
+kernel work_stealing(global Task *pools) {
+  while (more_work(pools)) {
+    int pool_id = get_group_id();
+    Task *t = pop_or_steal(pools, pool_id);
+    if (t) {
+      // task processing may create more work
+      process_task(t, pools, pool_id);
     }
   }
 }
@@ -816,7 +793,7 @@ The semantics of $\resizingglobalbarrier$ can be modelled via the following sequ
 \lstset{basicstyle=\tt}
 \begin{lstlisting}
   $\globalbarrier()$;
-  if($\getgroupid{0}$ != 0) $\offerfork$();
+  if($\getgroupid()$ == 0) $\offerfork$();
   $\globalbarrier()$;
   $\offerkill()$;
   $\globalbarrier()$;
@@ -1002,12 +979,19 @@ remaining computation to be performed if competing workloads allow it.
 
 \ADComment{Give details of how host and device interact.}
 
-\ADComment{Explain kernel merge tool.}
+\ADComment{Explain kernel merge tool briefly.  Explain library briefly.}
+
+\ADComment{Give most attention to interesting performance and safety issues, e.g.\ reverse ticket lock, efficient barrier, the query functions...}
+
+\ADComment{Host-device interaction through SVM.  Make clear that this is probably the most aggressive use of OpenCL 2.0 ever.}
 
 \subsection{An Efficient Resizing Barrier}\label{sec:resizingbarrier}
 
 \ADComment{Optimised barrier implementation.}
 
+\subsection{Vendor Implementation Defects}
+
+\ADComment{Briefly rant about our pain.  Compiler hang, compiler crashes, deadlocks, defunct processes.  Caution: don't make it sound so terrible that you can't trust our results.  Gently acknowledge that our implementation may be imperfect.}
 
 
 \section{Applications and Experiments}\label{sec:experiments}
@@ -1025,6 +1009,8 @@ remaining computation to be performed if competing workloads allow it.
 
 \ADComment{Describe the platforms.  Explain why we could not try other
   platforms.}
+
+\ADComment{Tyler and Hugues, please write.}
 
 \subsection{Determining Representative Workloads}
 
@@ -1122,7 +1108,7 @@ relation $(\sigma, (l, \mathit{ss})) \rightarrow_{\tau} (\sigma', (l',
 $\offerkill$, $\offerfork$, $\globalbarrier$ or
 $\resizingglobalbarrier$.
 
-To abstractly account for the interaction between global barrier
+To abstractly accounts for the interaction between global barrier
 synchronization and the GPU memory model, we assume a function
 $\mathsf{sync}$ that is applied to a global state.  This returns a new
 global state in which the shared state and thread local states have
@@ -1166,7 +1152,7 @@ w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
 \inferrule{
 \forall j \;.\; w_M(j) = (l_j, \offerkill();\mathit{ss})
 \\
-$M > 0$
+M > 0
 }
 {
 (\sigma, (\dots, w_{M-1}, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_{M-1}, \bot, \bot, \dots, \bot))
@@ -1201,7 +1187,7 @@ k \in [0, N - M]
 \forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \mathit{ss})
 }
 {
-(\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow \mathsf{sync}(\sigma', (w_1', \dots, w_M', \bot, \dots, \bot))
+(\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow \mathsf{sync}(\sigma , (w_1', \dots, w_M', \bot, \dots, \bot))
 }
 (\textsc{Barrier})
 \]
@@ -1212,9 +1198,9 @@ k \in [0, N - M]
 \inferrule{
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \resizingglobalbarrier();\mathit{ss})
 \\
-\forall j\;.\;w_0'(j) = (l_{0,j}, \globalbarrier(); \offerfork(); \globalbarrier(); \globalbarrier();\mathit{ss})
+\forall j\;.\;w_1'(j) = (l_{1,j}, \globalbarrier(); \offerfork(); \globalbarrier(); \globalbarrier();\mathit{ss})
 \\
-\forall i \neq 0 \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \globalbarrier(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
+\forall i \neq 1 \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \globalbarrier(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
 }
 {
 (\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (w_1', \dots, w_M', \bot, \dots, \bot))
