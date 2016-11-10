@@ -434,16 +434,17 @@ kernel graph_app(global graph *g,
   int tid = get_global_id();
   int stride = get_global_size();
 
-  while(in_nodes.size > 0) {
+(*@\label{line:graph:iterate}@*)  while(in_nodes.size > 0) {
 
     for (int i = tid; i < nodes.size; i += stride) {
       process_node(g, in_nodes[i], out_nodes, level);
     }
 
+(*@\label{line:graph:swap}@*)    swap(in_nodes, out_nodes);
+(*@\label{line:graph:gb1}@*)    global_barrier();
+(*@\label{line:graph:reset}@*)    reset(out_nodes);
     level++;
-    swap(in_nodes, out_nodes);
-    reset(out_nodes);
-    global_barrier();
+(*@\label{line:graph:gb2}@*)    global_barrier();
   }
 }
 \end{lstlisting}
@@ -511,12 +512,63 @@ memory. Henceforth, master threads may be spinning on mutexes, and
 workgroups are also spinning on the main loop, so a fair scheduling of
 workgroups is desirable.
 
-
-Figure~\ref{fig:graphsearch} shows the
-skeleton of a graph traversal algorithm.  \ADComment{Describe some
+\ADComment{Describe some
   aspects of the example, saying that the global barrier is not a
   primitive, and can be coded up using the memory model but is not
-  safe due to the execution model.  Make it clear that the barrier uses busy-waiting.}
+  safe due to the execution model.  Make it clear that the barrier
+  uses busy-waiting.}
+
+\paragraph{Graph traversal} Figure~\ref{fig:graphsearch} shows the
+skeleton of a frontier based graph traversal algorithm (this approach
+has been shown to be efficient on GPUs in~\ref{...}). The kernel is
+given three arguments in global memory: a graph structure, and two
+arrays that can contain graph nodes. Initially, {\tt n0} contains the
+starting nodes to process. Threads keep three local variables: {\tt
+  level} which indicates the frontier level which is currently being
+processed, {\tt in\_nodes} and {\tt out\_nodes} which point to
+distinct node arrays. {\tt in\_nodes} contains the nodes to be
+processed for the current frontier, while {\tt out\_nodes} contains
+the nodes to be processed during the next frontier.
+
+The application iterates as long as the current frontier contains
+nodes to process (line~\ref{line:graph:iterate}). At each frontier,
+the nodes to be processed are evenly distributed between the executing
+threads. This is done through \emph{stride} based processing. A thread
+retrieves its global thread id and the total number of threads
+(obtained through the {\tt get\_global\_id()} and {\tt
+  get\_global\_size()} OpenCL primitives). A thread then processes
+each node associated with id (i.e.\ indices with its thread id value
+added to any integer multiple of the total number of threads up to the
+list size). A thread processes a node via the {\tt process\_node}
+function, which may (a) push nodes to process in the next frontier to
+the {\tt out\_nodes} list and (b) use the frontier level in
+computation. After processing the frontier, the threads swap their
+local node array pointers (line~\ref{line:graph:swap}), i.e.\ the {\tt
+  out\_nodes} of the current frontier becomes the input of the next
+frontier.
+
+At this point, the GPU threads must wait for all other threads to
+finishing processing the frontier before they can continue. To achieve
+this, we use a global barrier construct
+(line~\ref{line:graph:gb1}). After all threads reach this point, the
+output node array is reset (line~\ref{line:graph:reset}) and the level
+is incremented. Again, threads must wait until the output node is
+reset at a global barrier (line~\ref{line:graph:gb2}). At this point
+threads can continue to the next frontier.
+
+The global barrier used in this application is not provided as a GPU
+primitive, though many previous works have shown that such a global
+barrier can be implemented~\cite{...}. These implementations use well
+defined atomic memory operations to ensure memory consistency and use
+spinning to ensure threads wait at the barrier for the remaining
+threads to reach the barrier. Even though such barriers appear to run
+reliably on current GPUs, they violate GPU language specifications,
+which do not provide fair scheduling of workgroups. These barriers
+require fair workgroup scheduling in order to function correctly. That
+is, \emph{all} workgroups must be fairly scheduled in order to reach
+the barrier, otherwise, the workgroups waiting at the barrier will not
+make progress.
+
 
 \paragraph{Execution model}
 
@@ -914,8 +966,37 @@ barrier call by recomputing the thread id and stride
 
 \TSComment{Can Hugues talk about work stealing here?}
 
+For the work stealing example, there is no state to transmit since a
+computation is entirely parametrized by a task, which is retrieved from
+a task pool located in global memory. Care must be taken on the dynamic
+change of the number of workgroups though: we cannot assume that the
+total number of task pools is equal to $\getnumgroups$. Thus, the number
+of pools must be given as an argument, and the $\mathsf{pool}$ argument
+must be obtained from the group id modulo the total number of
+pools. This total number of pools must also be passed to
+$\mathsf{pop\_or\_steal}$, since when a workgroup wants to steal it must
+access other pool indexes, which are bounded by the total number of
+pools.
 
+\begin{figure}
 
+\begin{lstlisting}
+kernel work_stealing(global Task *pools, const int num_pools) {
+  while (more_work(pools)) {
+    int pool_id = get_group_id() % num_pools;
+    Task *t = pop_or_steal(pools, pool_id, num_pools);
+    if (t) {
+      // task processing may create more work
+      process_task(t, pools, pool_id);
+    }
+  }
+}
+\end{lstlisting}
+
+\caption{Cooperative version of work stealing: the number of workpools
+must be explicitely passed as arguments since the number of workgroups
+is not a constant anymore}\label{fig:workstealing-cooperative}
+\end{figure}
 
 \subsection{Programming Guidelines}\label{sec:programmingguidelines}
 
