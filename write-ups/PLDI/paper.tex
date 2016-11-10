@@ -127,8 +127,11 @@
 \newcommand{\offerkill}{\mathsf{offer\_kill}}
 \newcommand{\globalbarrier}{\mathsf{global\_barrier}}
 \newcommand{\resizingglobalbarrier}{\mathsf{resizing\_global\_barrier}}
-\newcommand{\getgroupid}[1]{\mathsf{get\_group\_id(#1)}}
-\newcommand{\getnumgroups}[1]{\mathsf{get\_num\_groups(#1)}}
+\newcommand{\getgroupid}{\mathsf{get\_group\_id}}
+\newcommand{\getnumgroups}{\mathsf{get\_num\_groups}}
+\newcommand{\getlocalid}{\mathsf{get\_local\_id}}
+\newcommand{\getglobalid}{\mathsf{get\_global\_id}}
+\newcommand{\getlocalsize}{\mathsf{get\_global\_id}}
 
 \newcommand{\NumAlgorithms}{8}
 
@@ -377,8 +380,127 @@ two motivating examples of irregular algorithms (Section~\ref{sec:background}). 
 
 \section{Background and Examples}\label{sec:background}
 
-\ADComment{Use the work stealing example to both introduce OpenCL and
-  also make our key point: that arbitrary preemption will not work.}
+We use two worked examples---work stealing and breadth-first graph
+search---to provide background on the OpenCL programming model and
+irregular data-parallel algorithms.
+
+\begin{figure}
+\ADComment{Tyler/Hugues: please insert workstealing example.}
+\begin{lstlisting}
+TODO
+\end{lstlisting}
+\caption{An excerpt of a work stealing algorithm in OpenCL}\label{fig:workstealing}
+\end{figure}
+
+\begin{figure}
+\ADComment{Tyler/Hugues: please insert graph traversal example.}
+\begin{lstlisting}
+TODO
+\end{lstlisting}
+\caption{An OpenCL graph search algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
+\end{figure}
+
+\paragraph{OpenCL}
+An OpenCL program is divided into \emph{host} and \emph{device}
+components.  A host application runs on the CPU and launches one or
+more \emph{kernels} that run on accelerator devices---GPUs in the
+context of this paper.  A kernel is writen in OpenCL C, based on C99.
+All threads executing a kernel execute the same entry function with
+identical arguments, but a thread may query its unique thread id in
+order to access different data or follow different control flow paths
+to other threads.
+
+Figure~\ref{fig:workstealing} shows a simplified version of an OpenCL
+kernel that uses a work stealing queue.  \ADComment{Describe some
+  aspects of the example, saying that the mutex is not a primitive,
+  and can be coded up using the memory model but is not safe due to
+  the execution model.  Make it clear that the lock function uses busy-waiting.}  Figure~\ref{fig:graphsearch} shows the
+skeleton of a graph traversal algorithm.  \ADComment{Describe some
+  aspects of the example, saying that the global barrier is not a
+  primitive, and can be coded up using the memory model but is not
+  safe due to the execution model.  Make it clear that the barrier uses busy-waiting.}
+
+\paragraph{Execution model}
+
+The threads executing a kernel are hierarchically organised.  A kernel
+is executed by a number of \emph{workgroups}, and each workgroup
+consists of a fixed number of \emph{threads}.  Within a workgroup,
+threads may also be organised into \emph{subgroups} (termed
+\emph{warps} and \emph{wavefronts} on NVIDIA and AMD architectures,
+respectively).
+
+Two barrier primitives are provided in OpenCL.  A workgroup barrier
+synchronises all threads in a workgroup and ensures memory
+consistency.  This barrier is a \emph{workgroup-level} function: it
+must be encountered uniformly by all or none of the threads of a
+workgroup, thus can only appear in conditional code if all threads in
+a workgroup that reach the barrier agree on the guards of all
+enclosing conditional statements.  A subgroup barrier works
+analogously at the subgroup level.  As discussed below, a
+\emph{global} barrier (synchronising all threads running a kernel) is
+not provided as a primitive.
+
+OpenCL specifically makes no guarantees about fair scheduling between
+workgroups, stating~\cite{...}: \emph{``A conforming implementation
+  may choose to serialize the workgroups so a correct algorithm cannot
+  assume that workgroups will execute in parallel.  There is no safe
+  and portable way to synchronize across the independent execution of
+  workgroups since once in the work-pool, they can execute in any
+  order.''}  OpenCL is not alone in this regard: CUDA similarly
+provides no guarantees~\cite{...}, and HSA guarantees only that
+\ADComment{Tyler, can you state the HSA guarantee?}~\cite{...}.
+
+Revisiting the examples of Figures~\ref{fig:workstealing}
+and~\ref{fig:graphsearch}: the mutex function of
+Figure~\ref{fig:workstealing} will cause starvation if a workgroup
+that holds the mutex is not scheduled again and so does not release
+the mutex.  A similar issue affects the global barrier function of
+Figure~\ref{fig:graphsearch}.  Because the barrier is implemented
+using busy-waiting, a set of workgroups waiting at the barrier may be
+continuously scheduled, starving a workgroup that has not yet arrived
+at the barrier and meaning that no workgroup proceeds past the
+barrier.
+
+\paragraph{Id functions}
+
+Builtin functions $\getlocalid()$ and $\getglobalid()$ provide a
+thread with an id that is unique within its workgroup and unique
+across all workgroups, respectively.  Each workgroup has an id,
+obtained via $\getgroupid()$.  The number of threads per workgroup and
+the number of workgroups are obtained via $\getlocalsize()$ and
+$\getnumgroups()$.  A thread's local and global id are related via the
+equation $\getglobalid() = \getgroupid() \times \getlocalsize() +
+\getlocalid()$.
+
+In general, an OpenCL kernel is organised as a multi-dimensional grid
+of multi-dimensional workgroups, and the above id functions each take
+an integer dimension argument.  For simplicity, we consider only the
+one-dimensional case throughout the paper, which captures all the
+GPU-accelerated irregular algorithms we are aware of, and use
+e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
+
+
+\paragraph{Memory model}
+
+An OpenCL kernel has access to four memory spaces.  Shared virtual
+memory (SVM) is accessible to all threads, and to the host
+application.  Atomic operations on this memory space enable
+fine-grained communication between host and device.  Our
+implementation of cooperative kernels
+(Section~\ref{sec:implementation}) depends on this recent OpenCL
+feature.  Global memory is shared among all threads executing a
+kernel, but can only be safely accessed by the host application before
+or after kernel execution.  Local memory is shared among all threads
+in the same workgroup: each workgroup has its own portion of local
+memory, which can be used for fast intra-workgroup communication.
+Each thread has an allocation of very fast private memory, where
+function-local variables are allocated.
+
+Fine-grained communication between threads, and also with the host in
+the case of SVM, is enabled via a set of atomic data types and
+operations, based on the C11 memory model~\cite{...}.
+\ADComment{Perhaps say more.}  \ADComment{Can we illustrate using the
+  examples?}
 
 
 \section{The Cooperative Kernels Programming Model}\label{sec:cooperativekernels}
@@ -493,12 +615,8 @@ $\getnumgroups{\mathit{i}}$ return 0 and 1, respectively, for $i >
 
 \ADComment{Explain that the ``last one dies'' semantics is convenient because it maintains contiguous ids, but other options are possible and may be more efficient sometimes.}
 
-Our first additional language primitive, $\offerkill$, is a
-workgroup-level function: similar to the OpenCL intra-workgroup
-$\mathsf{barrier}$ primitive, if $\offerkill$ appears inside
-conditional code then it must be executed by \emph{all} threads in a
-workgroup, with all threads having executed the same number of
-iterations of any enclosing loops.
+Similar to the OpemncL workgroup $\mathsf{barrier}$ primitive, our first additional language primitive, $\offerkill$, is a
+workgroup-level function (see Section~\ref{sec:background}).
 
 Suppose a workgroup with id $m$ executes $\offerkill$.  If $m < M-1$,
 i.e.\ the workgroup's id is not the largest among the active
