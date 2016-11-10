@@ -979,6 +979,8 @@ w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
 \[
 \inferrule{
 \forall j \;.\; w_M(j) = (l_j, \offerkill();\mathit{ss})
+\\
+$M > 0$
 }
 {
 (\sigma, (\dots, w_{M-1}, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_{M-1}, \bot, \bot, \dots, \bot))
@@ -1024,7 +1026,7 @@ k \in [0, N - M]
 \inferrule{
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \resizingglobalbarrier();\mathit{ss})
 \\
-\forall j\;.\;w_0'(j) = (l_{0,j}, \globalbarrier(); \offerfork(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
+\forall j\;.\;w_0'(j) = (l_{0,j}, \globalbarrier(); \offerfork(); \globalbarrier(); \globalbarrier();\mathit{ss})
 \\
 \forall i \neq 0 \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \globalbarrier(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
 }
