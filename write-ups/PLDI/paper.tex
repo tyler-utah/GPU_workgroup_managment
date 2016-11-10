@@ -668,12 +668,12 @@ to this:
 
 \end{itemize}
 
-In effect, thread 0 of the spawning workgroup transmits the relevant
-portion of its local state to the new threads.  We discuss in
-Section~\ref{sec:semanticalternatives} the rationale for having all
-new threads obtain this local state portion from thread 0, as well as
-our reasons for selecting which variables to transmit via annotations
-rather than transmitting the entire thread state.
+In effect, thread 0 of the forking workgroup transmits the relevant
+portion of its local state to the threads of the forked workgroups.
+We discuss in Section~\ref{sec:semanticalternatives} the rationale for
+having all new threads obtain this local state portion from thread 0,
+as well as our reasons for selecting which variables to transmit via
+annotations rather than transmitting the entire thread state.
 
 Notice that $k=0$ is always a legitimate choice for the number of
 workgroups to be spawned by an $\offerfork$ call, and if the number of
@@ -682,6 +682,7 @@ guaranteed.
 
 \paragraph{Global barriers}
 
+\ADComment{Maybe refer back to motivating examples?}
 Many irregular algorithms require synchronisation across workgroups.
 This can be achieved via a \emph{global barrier}, but a global barrier
 is not provided as a primitive in OpenCL, CUDA or HSA.  This is
@@ -689,10 +690,10 @@ because, as discussed in Section~\ref{sec:intro}, an inter-workgroup barrier
 requires fair scheduling of workgroups.
 
 Because workgroups of a cooperative kernel are fairly scheduled, a
-global barrier primitive can be provided.  We specify two such primitives: $\globalbarrier()$
-and $\resizingglobalbarrier()$.
+global barrier primitive can be provided.  We specify two such primitives: $\globalbarrier$
+and $\resizingglobalbarrier$.
 
-A $\globalbarrier()$ is a kernel-level function: if it appears in
+Our $\globalbarrier$ primitive is a kernel-level function: if it appears in
 conditional code then it must be reached by \emph{all} threads
 executing the cooperative kernel.  On reaching a $\globalbarrier()$, a
 thread waits until all threads have arrived at the barrier.  Once all
@@ -700,10 +701,16 @@ threads have arrived, the threads may proceed past the barrier with
 the guarantee that all global memory accesses issued before the
 barrier have completed.
 
-A $\resizingglobalbarrier()$ is identical to a global barrier, except
-that, semantically, every workgroup executes $\offerkill$ on reaching
-the barrier, and every workgroup executes $\offerfork$ on leaving the
-barrier.  Thus $\resizingglobalbarrier()$ is semantically equivalent to:
+The $\resizingglobalbarrier$ primitive is also a kernel-level
+function.  It is identical to $\globalbarrier$, except that it caters
+for cooperation with the scheduler: by issuing a
+$\resizingglobalbarrier$ the programmer indicates that the cooperative
+kernel is prepared to proceed after the barrier with fewer workgroups,
+or with additional workgroups joining the computation.
+Semantically, it is as if every workgroup executes $\offerkill$ on reaching the
+barrier, and every workgroup executes $\offerfork$ on leaving the
+barrier.  Thus $\resizingglobalbarrier()$ is semantically equivalent
+to: \ADComment{Does the order of these three calls matter, semantically?}
 %
 \lstset{basicstyle=\tt}
 \begin{lstlisting}
@@ -713,44 +720,31 @@ barrier.  Thus $\resizingglobalbarrier()$ is semantically equivalent to:
 \end{lstlisting}
 \lstset{basicstyle=\scriptsize\tt}
 
-The $\globalbarrier()$ primitive can be implemented directly using the
-atomic operations provided by the OpenCL 2.0 memory model~\cite{...},
-but the implementation is involved, hence why we include this function
-as a primitive.  As noted above, the $\resizingglobalbarrier()$
-primitive is, semantically, syntactic sugar for a sequence of other
-primitive calls.  We include it as a primitive because (a) we have
-found that global barriers often provide a natural point for
-cooperation with the scheduler, and (b) a custom implementation of
-$\resizingglobalbarrier()$ that provides the semantics described
-above can be made significantly more efficient than the above sequence of
+The $\globalbarrier$ primitive can be implemented following any
+inter-workgroup barrier design, e.g.~\cite{...}, and the atomic
+operations provided by the OpenCL 2.0 memory model enable a
+memory-safe implementation~\cite{...}.  However, implementing such a
+barrier is involved, hence why we include this function as a
+primitive.  As noted above, the $\resizingglobalbarrier$ primitive
+is, semantically, syntactic sugar for a sequence of other primitive
+calls.  We include it as a primitive because (a) we have found that
+global barriers often provide a natural point for cooperation with the
+scheduler, and (b) a custom implementation of
+$\resizingglobalbarrier()$ that provides the semantics described above
+can be made significantly more efficient than the above sequence of
 calls.  We discuss our efficient implementation of
-$\resizingglobalbarrier$ in detail in Section~\ref{sec:resizingbarrier}.
+$\resizingglobalbarrier$ in detail in
+Section~\ref{sec:resizingbarrier}.
 
 \paragraph{Examples}
 
-\ADComment{TODO}
+\ADComment{TODO.  We want to show the examples from Section~\ref{sec:background} ported to use cooperative kernels.  We want to make it clear that it is easy to place the primitives.}
 
 
 \subsection{Programming Guidelines}\label{sec:programmingguidelines}
 
 An OpenCL programmer writing a cooperative kernel should pay careful
 attention to the following details.
-
-\paragraph{Keeping at least one workgroup alive}
-
-The programmer is responsible for keeping at least one workgroup alive.  In particular, if all workgroups execute $\offerkill$, the scheduler is at liberty to destroy all workgroups, causing the cooperative kernel to exit.  This can be guarded against by wrapping each $\offerkill$ call in a conditional statement:
-
-\lstset{basicstyle=\tt}
-\begin{lstlisting}
-  if($\getgroupid{0}$ != 0) $\offerkill$();
-\end{lstlisting}
-\lstset{basicstyle=\scriptsize\tt}
-
-We could, alternatively, have formulated the semantics of $\offerkill$
-so that workgroup 0 is never killed.  However, there might be a use
-case for a cooperative kernel reaching a point where it would be
-acceptable for the kernel to exit, although desirable for some
-remaining computation to be performed if competing workloads allow it.
 
 \paragraph{A changing number of workgroups}
 
@@ -841,7 +835,25 @@ frequently that the scheduler can meet such real-time constraints.
 
 \ADComment{What are difficulties with other alternatives and why we didn't use them.}
 
-\ADComment{Allowing zero to be killed.}
+\ADComment{Allowing zero to be killed; the following is some text we had before:}
+
+\paragraph{Keeping at least one workgroup alive}
+
+The programmer is responsible for keeping at least one workgroup alive.  In particular, if all workgroups execute $\offerkill$, the scheduler is at liberty to destroy all workgroups, causing the cooperative kernel to exit.  This can be guarded against by wrapping each $\offerkill$ call in a conditional statement:
+
+\lstset{basicstyle=\tt}
+\begin{lstlisting}
+  if($\getgroupid{0}$ != 0) $\offerkill$();
+\end{lstlisting}
+\lstset{basicstyle=\scriptsize\tt}
+
+We could, alternatively, have formulated the semantics of $\offerkill$
+so that workgroup 0 is never killed.  However, there might be a use
+case for a cooperative kernel reaching a point where it would be
+acceptable for the kernel to exit, although desirable for some
+remaining computation to be performed if competing workloads allow it.
+
+
 
 \ADComment{Allowing arbitrary workgroups to be killed (not just the largest workgroup)}
 
