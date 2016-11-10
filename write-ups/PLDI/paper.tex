@@ -50,6 +50,7 @@
 
 \newcommand{\ADComment}[1]{\textcolor{green}{AD: #1}}
 %\newcommand{\TSComment}[1]{\textcolor{blue}{TS: #1}}
+\newcommand{\HEComment}[1]{\textcolor{orange}{HE: #1}}
 %\newcommand{\COULDCUT}[1]{\textcolor{blue}{#1}}
 
 \newcommand{\myfig}{Fig.~}
@@ -384,8 +385,95 @@ search---to introduce the industry-standard OpenCL programming model on which we
 
 \begin{figure}
 \ADComment{Tyler/Hugues: please insert workstealing example.}
+
+\HEComment{standard version: one task pool per workgroup, the number of
+workgroup is a constant. So we access our pool by pool\_id ==
+get\_group\_id(0). When we try to steal, we can look into other pools
+which are indexed by (pool\_id + delta) modulo get\_num\_workgroups(0).
+}
+
 \begin{lstlisting}
-TODO
+__kernel connect_four(__global uchar *base_board,
+                      const int lookahead,
+                      __global atomic_int *best_move,
+                      __global int *all_done,
+                      __global Node *tree,
+                      __global Task *pools,
+                      __global Mutex *pool_m)
+{
+  // init
+  if (get_global_id(0) == 0) {
+    init_first_tasks(tree, pools);
+  }
+  global_barrier();
+
+  // main loop
+  while (true) {
+    // obtain a task, or terminate if all work is done
+    int pool_id = get_group_id(0);
+    Task *t = pop_or_steal(pools, pool_m, pool_id);
+    if (t == NULL) {
+      if (*all_done) { return; } else { continue; }
+    }
+
+    // perform task, may create new tasks
+    Node *node = tree[t->node_index];
+    value = node_value(base_board, node);
+    if (winning(value) || node->level == lookahead) {
+      // we reached a leaf
+      update_parent_value(node, tree, best_move, all_done);
+    } else {
+      // create_children() pushes or donates new tasks
+      create_children(node, tree, pools, pool_m, pool_id);
+    }
+  }
+}
+\end{lstlisting}
+
+\HEComment{ cooperative version: add kill/fork, and must pass the number
+of task pools explicitely since get\_num\_workgroups() cannot be used to
+know the number of pools. }
+
+\begin{lstlisting}
+__kernel connect_four(__global uchar *base_board,
+                      const int lookahead,
+                      __global atomic_int *best_move,
+                      __global int *all_done,
+                      __global Node *tree,
+                      __global Task *pools,
+                      __global Mutex *pool_m,
+                      const int num_pools)
+{
+  // init
+  if (get_global_id(0) == 0) {
+    init_first_tasks(tree, pools, num_pools);
+  }
+  global_barrier();
+
+  // main loop
+  while (true) {
+    offer_kill();
+    offer_fork();
+
+    // obtain a task, or terminate if all work is done
+    int pool_id = get_group_id(0) % num_pools;
+    Task *t = pop_or_steal(pools, pool_m, pool_id, num_pools);
+    if (t == NULL) {
+      if (*all_done) { return; } else { continue; }
+    }
+
+    // perform task, may create new tasks
+    Node *node = tree[t->node_index];
+    value = node_value(base_board, node);
+    if (winning(value) || node->level == lookahead) {
+      // we reached a leaf
+      update_parent_value(node, tree, best_move, all_done);
+    } else {
+      // create_children() pushes or donates new tasks
+      create_children(node, tree, pools, pool_m, pool_id, num_pools);
+    }
+  }
+}
 \end{lstlisting}
 \caption{An excerpt of a work stealing algorithm in OpenCL}\label{fig:workstealing}
 \end{figure}
