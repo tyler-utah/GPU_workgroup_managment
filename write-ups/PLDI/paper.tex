@@ -381,19 +381,69 @@ two motivating examples of irregular algorithms (Section~\ref{sec:background}). 
 
 \section{Background and Examples}\label{sec:background}
 
-We use two examples of irregular data-parallel algorithms---a work stealing queue and breadth-first graph
-search---to introduce the industry-standard OpenCL programming model on which we base cooperative kernels.
+We use two examples of irregular data-parallel algorithms---a work
+stealing queue and breadth-first graph search---to introduce the
+industry-standard OpenCL programming model on which we base cooperative
+kernels.
 
+\paragraph{OpenCL concepts}
+An OpenCL program is typically executed by many \emph{threads} running
+in parallel. Threads are organized into \emph{workgroups} of equal
+size. The memory is organized in three levels: \emph{global} memory is
+accessible by any thread, \emph{local} memory is shared at the workgroup
+level (i.e., threads of different workgroups cannot access the same
+local memory), and \emph{private} memory is dedicated to thread-level
+storage and cannot be shared between threads. These concepts are
+illustrated over the two examples.
+
+\paragraph{Work stealing}
+Work stealing is generally used for computational work that can be
+splitted into independently processable tasks. The processing of a given
+task may create an arbitrary number of new tasks in such a way that it
+is typically hard to know the total number of tasks in advance. Work
+stealing enables the dynamic balance of task processing over several
+processing units, OpenCL workgroups in our case. Each workgroup has an
+associated task pool from which it obtains tasks to process and to where
+it stores newly created tasks. When a workgroup's pool becomes empty, a
+workgroup---rather than terminating---tries to \emph{steal} a task from
+an other pool. Hence, workgroups keep on processing tasks until all the
+work is done.
+
+\myfiglong\ref{fig:workstealing} illustrates an OpenCL implementation of
+a work stealing application. All threads start their execution at the
+function marked with the $\mathsf{kernel}$ keyword. They receive a
+pointer to the task pools that reside in global memory, and which were
+initialized by the host program beforehand to contain the initial
+tasks. Each thread can identify the workgroup it belongs to via the
+function \getgroupid, and OpenCL provides a series of primitives in the
+same vein to access for instance the thread global id, or its local id
+within a workgroup. Here the group id is stored into the variable
+$\mathsf(pool\_id)$ (which is, by default, in private memory) and used
+to access the relevant task pool. The $\mathsf(pop\_or\_steal)$ function
+is called by all threads of a workgroup, although inside only the thread
+with a local id equal to $0$, also called \emph{master thread} of the
+workgroup, will try to pop or steal a task from the pools. The master
+thread uses local memory inside $\mathsf(pop\_or\_steal)$ to ensure that
+the returned value is valid for all threads of its workgroup. If a task
+was obtained, then all threads of the workgroup can participate in the
+processing of the task inside the $\mathsf{process\_task}$
+function. \HEComment{Manage to say that a task is considered big enough
+to benefit from parallel computation} If some new tasks are created
+during the processing, it is again the master thread who will be in
+charge of pushing them to the pool. Although not depicted here,
+concurrent accesses to each pool is guarded by a mutex which is
+implemented by atomic compare and swap operations on global
+memory. Henceforth, master threads may be spinning on mutexes, and
+workgroups are also spinning on the main loop, so a fair scheduling of
+workgroups is desirable.
 \begin{figure}
-\ADComment{Tyler/Hugues: please insert workstealing example.}
 
-\HEComment{standard version: one task pool per workgroup, the number of
-workgroup is a constant. So we access our pool by pool\_id ==
-get\_group\_id(0). When we try to steal, we can look into other pools
-which are indexed by (pool\_id + delta) modulo get\_num\_workgroups(0).
-}
-
-\ADComment{Points to make are: there is spinning, either on mutex implementation or main loop, so fairness is required.  Note OpenCL features: kernel keyword, global qualifier, ``get'' functions.  Note that pop\_or\_steal is executed by all, but internally the master manipulates the queue.  t is a single task, but is chunky enough that all threads can process part of it.}
+\ADComment{Points to make are: there is spinning, either on mutex
+implementation or main loop, so fairness is required.  Note OpenCL
+features: kernel keyword, global qualifier, ``get'' functions.  Note
+that pop\_or\_steal is executed by all, but internally the master
+manipulates the queue.  t is a single task, but is chunky enough that
+all threads can process part of it.}
 
 \begin{lstlisting}
 kernel work_stealing(global Task *pools) {
@@ -408,51 +458,6 @@ kernel work_stealing(global Task *pools) {
 }
 \end{lstlisting}
 
-\HEComment{ cooperative version: add kill/fork, and must pass the number
-of task pools explicitely since get\_num\_workgroups() cannot be used to
-know the number of pools. }
-
-\begin{lstlisting}
-__kernel connect_four(__global uchar *base_board,
-                      const int lookahead,
-                      __global atomic_int *best_move,
-                      __global int *all_done,
-                      __global Node *tree,
-                      __global Task *pools,
-                      __global Mutex *pool_m,
-                      const int num_pools)
-{
-  // init
-  if (get_global_id(0) == 0) {
-    init_first_tasks(tree, pools, num_pools);
-  }
-  global_barrier();
-
-  // main loop
-  while (true) {
-    offer_kill();
-    offer_fork();
-
-    // obtain a task, or terminate if all work is done
-    int pool_id = get_group_id(0) % num_pools;
-    Task *t = pop_or_steal(pools, pool_m, pool_id, num_pools);
-    if (t == NULL) {
-      if (*all_done) { return; } else { continue; }
-    }
-
-    // perform task, may create new tasks
-    Node *node = tree[t->node_index];
-    value = node_value(base_board, node);
-    if (winning(value) || node->level == lookahead) {
-      // we reached a leaf
-      update_parent_value(node, tree, best_move, all_done);
-    } else {
-      // create_children() pushes or donates new tasks
-      create_children(node, tree, pools, pool_m, pool_id, num_pools);
-    }
-  }
-}
-\end{lstlisting}
 \caption{An excerpt of a work stealing algorithm in OpenCL}\label{fig:workstealing}
 \end{figure}
 
