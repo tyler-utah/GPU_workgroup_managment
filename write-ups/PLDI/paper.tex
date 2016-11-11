@@ -1117,11 +1117,18 @@ for $\getglobalsize()$ to change after each resizing barrier call, but
 depends on the fact that $\getglobalid()$ returns a contiguous range
 of thread ids.
 
-\ADComment{TODO: Discuss downside, which is that if WG with high id is
-  doing a chunky task, a WG with a lower id may be ready to be killed
-  but cannot be taken.  Work stealing algorithms, which do not depend
-  on thread id, could take advantage of this.}
+A disadvantage of this decision is that it may provide sub-optimal
+responsiveness from the point of view of the scheduler.  Suppose the
+scheduler requires an additional compute unit, but the active thread
+with the larget id is processing some computationally intensive work
+and will take a while to reach $\offerkill$.  Our semantics means that
+the scheuduler cannot take advantage of the fact that another active
+workgroup may invoke $\offerkill$ sooner.
 
+Cooperative kernels that do not require contiguous thread ids might me
+more suited to a semantics in which workgroups can be killed in any
+order, but where workgroup ids (and thus thread global ids) are not
+guaranteed to be contiguous.
 
 \paragraph{Keeping one workgroup alive}
 
