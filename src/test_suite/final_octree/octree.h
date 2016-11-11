@@ -1,11 +1,7 @@
-#include "octree_common.h"
-
-/*---------------------------------------------------------------------------*/
-
 DEFINE_int32(numParticles, 10000, "number of particles to treat");
 DEFINE_int32(maxChildren, 20, "maximum number of children");
-DEFINE_int32(threads, 64, "number of threads");
-//DEFINE_int32(num_iterations, 300, "number of iterations");
+DEFINE_int32(threads, 128, "number of threads");
+DEFINE_int32(pool_size, 300, "size of task pools");
 
 // ---
 DEFINE_string(restoration_ctx_path, "test_suite/final_octree/", "Path to restoration context");
@@ -13,22 +9,30 @@ DEFINE_string(merged_kernel_file, "test_suite/final_octree/device/merged.cl", "p
 DEFINE_string(persistent_kernel_file, "test_suite/final_octree/device/standalone.cl", "path to the standalone mega kernel file");
 
 /*---------------------------------------------------------------------------*/
+
+typedef struct {
+  cl_float4 middle;
+  cl_bool flip;
+  cl_uint end;
+  cl_uint beg;
+  cl_uint treepos;
+} Task;
+
+/*---------------------------------------------------------------------------*/
 // global vars
 
 const unsigned int MAXTREESIZE = 11000000;
-const unsigned int maxlength = 256;
-int max_workgroups = 0;
+int num_workgroups = 0;
 
-//cl::Buffer d_num_iterations;
-cl::Buffer randdata;
 cl::Buffer particles;
 cl::Buffer newParticles;
 cl::Buffer tree;
 cl::Buffer treeSize;
 cl::Buffer particlesDone;
-cl::Buffer stealAttempts;
-cl::Buffer deq;
-cl::Buffer dh;
+cl::Buffer pools;
+cl::Buffer task_pool_lock;
+cl::Buffer pool_head;
+Task *h_pools = NULL;
 
 /*---------------------------------------------------------------------------*/
 // Specific to octree
@@ -40,6 +44,8 @@ double genrand_real1(void);
 
 void generate_particles(CL_Execution *exec)
 {
+  printf("Enter %s%\n", __func__);
+
   cl_float4* lparticles = new cl_float4[FLAGS_numParticles];
   char fname[256];
   snprintf(fname, 256, "octreecacheddata-%dparticles.dat", FLAGS_numParticles);
@@ -79,54 +85,64 @@ const char* persistent_app_name() {
   return "octree";
 }
 
+/*---------------------------------------------------------------------------*/
+
 const char* persistent_kernel_name() {
   return "octree_main";
 }
+
 /*---------------------------------------------------------------------------*/
 
 void reset_persistent_task(CL_Execution *exec) {
+  printf("Enter %s%\n", __func__);
   // re-write 0 to the CL buffers, etc
   int err = 0;
 
-  // err = exec->exec_queue.enqueueWriteBuffer(d_num_iterations, CL_TRUE, 0, sizeof(cl_int), &(num_iterations));
-  // check_ocl(err);
   err = exec->exec_queue.enqueueFillBuffer(tree, 0, 0, sizeof(cl_uint)*MAXTREESIZE);
   check_ocl(err);
-  err = exec->exec_queue.enqueueFillBuffer(deq, 0, 0, sizeof(Task) * maxlength * max_workgroups);
+  err = exec->exec_queue.enqueueWriteBuffer(pools, CL_TRUE, 0, num_workgroups * FLAGS_pool_size * sizeof(Task), h_pools);
   check_ocl(err);
-  err = exec->exec_queue.enqueueFillBuffer(dh, 0, 0, sizeof(DequeHeader) * max_workgroups);
+  err = exec->exec_queue.enqueueFillBuffer(task_pool_lock, 0, false, num_workgroups * sizeof(cl_uint));
+  check_ocl(err);
+  err = exec->exec_queue.enqueueFillBuffer(pool_head, 0, 0, num_workgroups * sizeof(cl_uint));
   check_ocl(err);
 
   generate_particles(exec);
+  printf("Exit %s%\n", __func__);
 }
 
 /*---------------------------------------------------------------------------*/
 
 // Empty for Pannotia apps
 void init_persistent_app_for_real(CL_Execution *exec, int occupancy) {
-  int err = 0;
-  max_workgroups = occupancy - 1;
+  printf("Enter %s%\n", __func__);
+  num_workgroups = occupancy - 1;
 
-  //d_num_iterations = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_int));
-  randdata = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_int) * 128);
   particles = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
   newParticles = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
   tree = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint)*MAXTREESIZE);
   treeSize = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint));
   particlesDone = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint));
-  stealAttempts = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_uint));
-  deq = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(Task) * maxlength * max_workgroups);
-  dh = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(DequeHeader) * max_workgroups);
+
+  pools = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, num_workgroups * FLAGS_pool_size * sizeof(Task));
+  task_pool_lock = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, num_workgroups * sizeof(cl_uint));
+  pool_head = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, num_workgroups * sizeof(cl_uint));
+
+  h_pools = (Task *)calloc(num_workgroups * FLAGS_pool_size, sizeof(Task));
+  if (h_pools == NULL) {
+    cout << "calloc failed" << endl;
+    exit(EXIT_FAILURE);
+  }
 
   reset_persistent_task(exec);
-
 }
 
 /*---------------------------------------------------------------------------*/
 
 void set_persistent_app_args_for_real(int arg_index, cl::Kernel k) {
+  printf("Enter %s%\n", __func__);
   // Set args for persistent kernel
-  check_ocl(k.setArg(arg_index++, randdata));
+
   check_ocl(k.setArg(arg_index++, particles));
   check_ocl(k.setArg(arg_index++, newParticles));
   check_ocl(k.setArg(arg_index++, tree));
@@ -134,10 +150,13 @@ void set_persistent_app_args_for_real(int arg_index, cl::Kernel k) {
   check_ocl(k.setArg(arg_index++, treeSize));
   check_ocl(k.setArg(arg_index++, particlesDone));
   check_ocl(k.setArg(arg_index++, FLAGS_maxChildren));
-  check_ocl(k.setArg(arg_index++, max_workgroups));
-  check_ocl(k.setArg(arg_index++, deq));
-  check_ocl(k.setArg(arg_index++, dh));
-  check_ocl(k.setArg(arg_index++, maxlength));
+
+  check_ocl(k.setArg(arg_index++, pools));
+  check_ocl(k.setArg(arg_index++, task_pool_lock));
+  check_ocl(k.setArg(arg_index++, pool_head));
+  check_ocl(k.setArg(arg_index++, num_workgroups));
+  check_ocl(k.setArg(arg_index++, FLAGS_pool_size));
+
   check_ocl(k.setArg(arg_index++, NULL));
   check_ocl(k.setArg(arg_index++, NULL));
 }
@@ -146,10 +165,12 @@ void set_persistent_app_args_for_real(int arg_index, cl::Kernel k) {
 
 void init_persistent_app_for_occupancy(CL_Execution *exec)
 {
+  printf("Enter %s%\n", __func__);
   // nothing to do for octree
 }
 
 int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {
+  printf("Enter %s%\n", __func__);
   // Set dummy args for persistent kernel
   int err = 0;
   int num_args_octree = 14;
@@ -162,12 +183,14 @@ int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {
 }
 
 void output_persistent_solution(const char *fname, CL_Execution *exec) {
+  printf("Enter %s%\n", __func__);
   // write to a file, nothing to do for octree
   return;
 }
 
 void clean_persistent_task(CL_Execution *exec) {
   // free malloc'ed values
+  free(h_pools);
 }
 
 bool diff_solution_file_int(int * a, const char * solution_fname, int v) {
@@ -176,18 +199,19 @@ bool diff_solution_file_int(int * a, const char * solution_fname, int v) {
 }
 
 bool check_persistent_task(CL_Execution *exec) {
+  printf("Enter %s%\n", __func__);
   // check whether the output is correct, load cl buffer back in host
   // and check values
-  unsigned int* htree;
-  unsigned int htreeSize;
-  unsigned int hparticlesDone;
-  int err = 0;
+  cl_uint* htree;
+  cl_uint htreeSize;
+  cl_uint hparticlesDone;
+  cl_int err = 0;
 
   err = exec->exec_queue.enqueueReadBuffer(particlesDone, CL_TRUE, 0, sizeof(cl_uint), &hparticlesDone);
   check_ocl(err);
   err = exec->exec_queue.enqueueReadBuffer(treeSize, CL_TRUE, 0, sizeof(cl_uint), &htreeSize);
   check_ocl(err);
-  htree = new unsigned int[MAXTREESIZE];
+  htree = new cl_uint[MAXTREESIZE];
   err = exec->exec_queue.enqueueReadBuffer(tree, CL_TRUE, 0, sizeof(cl_uint) * MAXTREESIZE, htree);
   check_ocl(err);
 
@@ -199,10 +223,20 @@ bool check_persistent_task(CL_Execution *exec) {
   }
 
   std::cout << "OCTREE: Particles in tree: " << sum << " (" << FLAGS_numParticles << ") [" << hparticlesDone << "]" << std::endl;
+  delete(htree);
 
-  if (sum == FLAGS_numParticles && hparticlesDone == FLAGS_numParticles) {
-    return true;
-  } else {
-    return false;
+  // for debug
+  cl_int *h_pool_head = (cl_int *)calloc(num_workgroups, sizeof(cl_int));
+  if (h_pool_head == NULL) {
+    cout << "calloc failed" << endl;
+    exit(EXIT_FAILURE);
   }
+  err = exec->exec_queue.enqueueReadBuffer(pool_head, CL_TRUE, 0, num_workgroups * sizeof(cl_uint), h_pool_head);
+  check_ocl(err);
+  for (int i = 0; i < num_workgroups; i++) {
+    printf("pool head %.3d: %u\n", i, h_pool_head[i]);
+  }
+  free(h_pool_head);
+
+  return (sum == FLAGS_numParticles) && (hparticlesDone == FLAGS_numParticles);
 }
