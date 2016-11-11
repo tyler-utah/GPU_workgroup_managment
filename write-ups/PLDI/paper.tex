@@ -1154,7 +1154,16 @@ would ensure that at least workgroup 0 is kept alive.
 
 \paragraph{Transmission of partial state from a single thread}
 
-\ADComment{TODO: explain why we have thread 0 transmit its state, and transmitting only annotated variables.}
+Recall from the semantics of $\offerfork$ that newly forked workgroups
+inherit the variable valuation associated with thread 0 of the forking
+workgroup, but only for $\transmit$-annotated variables.  Alternative
+choices here would be to have forked workgroups inherit values for
+\emph{all} variables from the forking workgroup, and to have thread
+$i$ in the forking workgroup provide the valuation for thread $i$ in
+each spawned workgroup, rather than having thread 0 transmit the
+valuation to all new threads.
+
+\ADComment{TODO: justify our choice: uniform variables and efficiency.}
 
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
