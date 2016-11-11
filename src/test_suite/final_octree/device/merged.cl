@@ -53,6 +53,8 @@ void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
     }
   }
 
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
   if (get_local_id(0) == 0) {
     int finished = atomic_fetch_add(counter, 1);
     if (finished == (k_get_num_groups(__k_ctx) - 1)) {
@@ -213,7 +215,7 @@ void octree_init(__global Task *pools, __global atomic_int *task_pool_lock,
 void octree_main(
     /* octree args */
     __global float4 *particles, __global float4 *newparticles,
-    __global unsigned int *tree, const unsigned int numParticles,
+    __global unsigned int *tree, const uint numParticles,
     __global atomic_uint *treeSize, __global atomic_uint *particlesDone,
     const unsigned int maxchilds, __global Task *pools,
     __global atomic_int *task_pool_lock, __global int *pool_head,
@@ -288,7 +290,7 @@ void octree_main(
       barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
       if (!got_new_task[0]) {
-        if (atomic_load(particlesDone) == numParticles) {
+        if (atomic_load(particlesDone) >= numParticles) {
           return;
         } else {
           continue;
@@ -355,15 +357,17 @@ void octree_main(
             newTask[0].treepos = tree[(t[0]).treepos + i];
 
             int pushed = false;
-            while (!pushed) {
-              for (int j = 0; j < num_pools; j++) {
-                pushed = wgm_task_push(&(newTask[0]), pools, task_pool_lock,
-                                       pool_head, pool_size,
-                                       (pool_id + j) % num_pools);
-                if (pushed) {
-                  break;
-                }
+            for (int j = 0; j < num_pools; j++) {
+              pushed =
+                  wgm_task_push(&(newTask[0]), pools, task_pool_lock, pool_head,
+                                pool_size, (pool_id + j) % num_pools);
+              if (pushed) {
+                break;
               }
+            }
+            if (pushed == false) {
+              /* pool overflow */
+              atomic_store(particlesDone, numParticles);
             }
           }
           barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
@@ -395,7 +399,7 @@ mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
             const int B_row, const int B_col, __global int *C,
             __global atomic_int *counter, __global atomic_int *hash,
             __global float4 *particles, __global float4 *newparticles,
-            __global unsigned int *tree, const unsigned int numParticles,
+            __global unsigned int *tree, const uint numParticles,
             __global atomic_uint *treeSize, __global atomic_uint *particlesDone,
             const unsigned int maxchilds, __global Task *pools,
             __global atomic_int *task_pool_lock, __global int *pool_head,
