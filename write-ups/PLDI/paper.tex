@@ -626,7 +626,7 @@ provide.  But, as discussed in \mysec\ref{sec:intro}, this
 occupancy-bound model is not mandated by language standards or vendor
 implementations, and is unlikely to be guaranteed in the future.
 
-In Section~\ref{sec:cooperativeexamples} we show how the work stealing
+In Section~\ref{sec:programmingguidelines} we show how the work stealing
 and graph traversal examples of Figures~\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
 updated to use our cooperative kernels programming model to resolve
 the scheduling issue.
@@ -911,7 +911,7 @@ robust to changes in the values returned by these functions.
 \paragraph{Adapting work stealing}
 
 \myfiglong\ref{fig:workstealing-cooperative} shows a cooperative
-version of the work stealing example of \myfig\ref{...} that we
+version of the work stealing example of \myfig\ref{fig:workstealing} that we
 discussed in \mysec\ref{sec:openclexamples}.
 \ADComment{TODO: go through with Hugues; where are the offer functions?}
 
@@ -942,7 +942,7 @@ kernel work_stealing(global Task *pools, const int num_pools) {
 }
 \end{lstlisting}
 
-\caption{Cooperative version of the work stealing example from \myfig\ref{fig:XXX}; the number of workpools
+\caption{Cooperative version of the work stealing example from \myfig\ref{fig:workstealing}; the number of workpools
 must be explicitly passed as arguments since the number of workgroups
 is not a constant anymore}\label{fig:workstealing-cooperative}
 \end{figure}
@@ -1014,11 +1014,11 @@ kernel graph_app(global graph *g,
 \caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing global barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
 \end{figure}
 
-In \mysec\ref{ } we describe the set of irregular GPU algorithms used
+In \mysec\ref{sec:portingalgorithms} we describe the set of irregular GPU algorithms used
 in our experiments, which largely captures the irregular blocking
 algorithms that are available as open source GPU kernels.  These all
 employ either work stealing or operate on graph data structures.
-Like the simplified example of \myfig\ref{ }, the work stealing algorithms have a transactional flavour
+Like the simplified example of \myfig\ref{fig:workstealing-cooperative}, the work stealing algorithms have a transactional flavour
 and require little or no state to be carried between transactions.  Thus the point at which a workgroup is ready to process a new task is a natural point to place $\offerkill$ and $\offerfork$, and few or no $\transmit$ annotations are required.
 %
 The example of \myfig\ref{fig:cgraphsearch} is simpler than, but representative of,
