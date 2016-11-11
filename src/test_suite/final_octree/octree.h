@@ -1,7 +1,7 @@
-DEFINE_int32(numParticles, 5000000, "number of particles to treat");
+DEFINE_int32(numParticles, 3000000, "number of particles to treat");
 DEFINE_int32(maxChildren, 10, "maximum number of children");
 DEFINE_int32(threads, 128, "number of threads");
-DEFINE_int32(pool_size, 10000, "size of task pools");
+DEFINE_int32(pool_size, 20000, "size of task pools");
 
 // ---
 DEFINE_string(restoration_ctx_path, "test_suite/final_octree/", "Path to restoration context");
