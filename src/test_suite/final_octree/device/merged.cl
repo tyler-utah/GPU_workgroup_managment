@@ -53,6 +53,8 @@ void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
     }
   }
 
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
   if (get_local_id(0) == 0) {
     int finished = atomic_fetch_add(counter, 1);
     if (finished == (k_get_num_groups(__k_ctx) - 1)) {
@@ -103,7 +105,8 @@ int pool_try_lock(__global atomic_int *task_pool_lock, int pool_id) {
 /*---------------------------------------------------------------------------*/
 
 void pool_unlock(__global atomic_int *task_pool_lock, int pool_id) {
-  atomic_store(&(task_pool_lock[pool_id]), false);
+  
+  atomic_store_explicit(&(task_pool_lock[pool_id]), false, memory_order_seq_cst, memory_scope_device);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -120,7 +123,7 @@ int wgm_task_pop(__local Task *task, __global Task *pools,
     ;
   /* If pool is not empty, pick up the latest inserted task. */
   if (pool_head[pool_id] > 0) {
-    atomic_dec(&(pool_head[pool_id]));
+    pool_head[pool_id] -= 1;
     *task = pools[(pool_size * pool_id) + pool_head[pool_id]];
     poped = true;
   }
@@ -142,7 +145,7 @@ int wgm_task_push(__local Task *task, __global Task *pools,
   /* If pool is not full, insert task */
   if (pool_head[pool_id] < pool_size) {
     pools[(pool_size * pool_id) + pool_head[pool_id]] = *task;
-    atomic_inc(&(pool_head[pool_id]));
+    pool_head[pool_id] += 1;
     pushed = true;
   }
   pool_unlock(task_pool_lock, pool_id);
@@ -213,16 +216,17 @@ void octree_init(__global Task *pools, __global atomic_int *task_pool_lock,
 void octree_main(
     /* octree args */
     __global float4 *particles, __global float4 *newparticles,
-    __global unsigned int *tree, const unsigned int numParticles,
+    __global unsigned int *tree, const uint numParticles,
     __global atomic_uint *treeSize, __global atomic_uint *particlesDone,
     const unsigned int maxchilds, __global Task *pools,
     __global atomic_int *task_pool_lock, __global int *pool_head,
     const int num_pools, const int pool_size, __global float4 *frompart,
     __global float4 *topart, __local uint *count, __local uint *sum,
     __local Task *t, __local int *got_new_task, __local Task *newTask,
-    __global IW_barrier *__bar, __global Kernel_ctx *__k_ctx,
-    CL_Scheduler_ctx __s_ctx, __local int *__scratchpad,
-    Restoration_ctx *__restoration_ctx) {
+    __local int *game_over, __global IW_barrier *__bar,
+    __global Kernel_ctx *__k_ctx, CL_Scheduler_ctx __s_ctx,
+    __local int *__scratchpad, Restoration_ctx *__restoration_ctx) {
+  ;
   ;
   ;
   ;
@@ -240,8 +244,7 @@ void octree_main(
 
     /* main loop */
   }
-  // Hand hack: impose a non-trivial true
-  while (atomic_load(particlesDone) != 1000000000) {
+  while (k_get_group_id(__k_ctx) != -1) {
       /* __restoration_ctx->target != */
       /* UCHAR_MAX /\* substitute for 'true', which can cause compiler hangs *\/) { */
     switch (__restoration_ctx->target) {
@@ -284,11 +287,16 @@ void octree_main(
             break;
           }
         }
+        game_over[0] = false;
+        if (!got_new_task[0]) {
+          /* test for end of computation */
+          game_over[0] = atomic_load(particlesDone) >= numParticles;
+        }
       }
       barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
       if (!got_new_task[0]) {
-        if (atomic_load(particlesDone) == numParticles) {
+        if (game_over[0]) {	  
           return;
         } else {
           continue;
@@ -305,7 +313,7 @@ void octree_main(
         topart = newparticles;
       }
 
-      barrier(CLK_LOCAL_MEM_FENCE);
+      barrier(CLK_LOCAL_MEM_FENCE| CLK_GLOBAL_MEM_FENCE);
 
       for (int i = local_id; i < 8; i += local_size) {
         count[i] = 0;
@@ -327,7 +335,7 @@ void octree_main(
         }
       }
 
-      barrier(CLK_LOCAL_MEM_FENCE);
+      barrier(CLK_LOCAL_MEM_FENCE| CLK_GLOBAL_MEM_FENCE);
 
       for (uint i = (t[0]).beg + local_id; i < (t[0]).end; i += local_size) {
         int toidx = (t[0]).beg +
@@ -355,15 +363,17 @@ void octree_main(
             newTask[0].treepos = tree[(t[0]).treepos + i];
 
             int pushed = false;
-            while (!pushed) {
-              for (int j = 0; j < num_pools; j++) {
-                pushed = wgm_task_push(&(newTask[0]), pools, task_pool_lock,
-                                       pool_head, pool_size,
-                                       (pool_id + j) % num_pools);
-                if (pushed) {
-                  break;
-                }
+            for (int j = 0; j < num_pools; j++) {
+              pushed =
+                  wgm_task_push(&(newTask[0]), pools, task_pool_lock, pool_head,
+                                pool_size, (pool_id + j) % num_pools);
+              if (pushed) {
+                break;
               }
+            }
+            if (pushed == false) {
+              /* pool overflow */
+              atomic_store(particlesDone, numParticles);
             }
           }
           barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
@@ -395,7 +405,7 @@ mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
             const int B_row, const int B_col, __global int *C,
             __global atomic_int *counter, __global atomic_int *hash,
             __global float4 *particles, __global float4 *newparticles,
-            __global unsigned int *tree, const unsigned int numParticles,
+            __global unsigned int *tree, const uint numParticles,
             __global atomic_uint *treeSize, __global atomic_uint *particlesDone,
             const unsigned int maxchilds, __global Task *pools,
             __global atomic_int *task_pool_lock, __global int *pool_head,
@@ -409,6 +419,7 @@ mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
   __local Task t[1];
   __local int got_new_task[1];
   __local Task newTask[1];
+  __local int game_over[1];
 #define NON_PERSISTENT_KERNEL                                                  \
   matmult(A, A_row, A_col, B, B_row, B_col, C, counter, hash,                  \
           non_persistent_kernel_ctx)
@@ -416,8 +427,8 @@ mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
   octree_main(particles, newparticles, tree, numParticles, treeSize,           \
               particlesDone, maxchilds, pools, task_pool_lock, pool_head,      \
               num_pools, pool_size, frompart, topart, count, sum, t,           \
-              got_new_task, newTask, bar, persistent_kernel_ctx, s_ctx,        \
-              scratchpad, &r_ctx_local)
+              got_new_task, newTask, game_over, bar, persistent_kernel_ctx,    \
+              s_ctx, scratchpad, &r_ctx_local)
 #include "main_device_body.cl"
 }
 //

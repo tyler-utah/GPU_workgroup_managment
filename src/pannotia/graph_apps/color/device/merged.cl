@@ -53,6 +53,8 @@ void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
     }
   }
 
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
   if (get_local_id(0) == 0) {
     int finished = atomic_fetch_add(counter, 1);
     if (finished == (k_get_num_groups(__k_ctx) - 1)) {

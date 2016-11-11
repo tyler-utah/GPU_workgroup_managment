@@ -281,7 +281,7 @@ int wgm_task_pop(__global int *task_pool, __global atomic_int *task_pool_lock, _
   while (!(pool_try_lock(task_pool_lock, pool_id)));
   /* If pool is not empty, pick up the latest inserted task. */
   if (task_pool_head[pool_id] > 0) {
-    task_pool_head[pool_id]--;
+    atomic_dec(&(task_pool_head[pool_id]));
     task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
   }
   pool_unlock(task_pool_lock, pool_id);
@@ -300,7 +300,7 @@ int wgm_task_push(int task, __global int *task_pool, __global atomic_int *task_p
   /* If pool is not full, insert task */
   if (task_pool_head[pool_id] < task_pool_size) {
     task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]] = task;
-    task_pool_head[pool_id]++;
+    atomic_inc(&(task_pool_head[pool_id]));
     task = NULL_TASK;
   }
   pool_unlock(task_pool_lock, pool_id);
@@ -402,13 +402,11 @@ connect_four(
   /* MAIN LOOP */
   while (true) {
 
-    int group_id = get_group_id(0);
-
-    if (group_id > 0) {
+    if (get_group_id(0) > 0) {
       offer_kill();
     }
 
-    if (group_id == 0) {
+    if (get_group_id(0) == 0) {
       offer_fork();
     }
 
@@ -418,15 +416,11 @@ connect_four(
 
     /* get task */
     if (local_id == 0) {
-      local_task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
-      /* if no more task in own pool, try to steal some from other pools */
-      if (local_task[0] == NULL_TASK) {
-        for (int i = 1; i < num_task_pool; i++) {
-          int steal_pool_id = (pool_id + i) % num_task_pool;
-          local_task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
-          if (local_task[0] != NULL_TASK) {
-            break;
-          }
+      // try all pools, starting with own
+      for (int i = 0; i < num_task_pool; i++) {
+        local_task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, (pool_id + i) % num_task_pool);
+        if (local_task[0] != NULL_TASK) {
+          break;
         }
       }
       /* if task is still null, there may be no work left anymore */

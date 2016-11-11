@@ -26,6 +26,7 @@ DEFINE_string(output_timestamp_executing_groups, "timestamp_executing_groups", "
 DEFINE_string(output_timestamp_non_persistent, "timestamp_non_persistent", "Path to output timestamps for non persistent tasks");
 DEFINE_string(output_non_persistent_duration, "non_persistent_duration", "Path to output duration results for non persistent tasks");
 DEFINE_string(output_summary, "summary", "output file for summary of results");
+DEFINE_string(output_summary2, "summary2", "output file for summary of results (2nd edition, used in scripts)");
 DEFINE_int32(non_persistent_wgs, 2, "ratio of workgroups to send to non-persistent task. Special values are (-1) to send all but one workgroup and (-2) to send one workgroup");
 DEFINE_int32(skip_tasks, 0, "flag to say if non persistent tasks should be skipped: 0 - don't skip, 1 - skip");
 DEFINE_int32(non_persistent_frequency, 100, "frequency in milliseconds to launch non_persistent tasks");
@@ -74,6 +75,14 @@ using namespace std;
 #else
 #error "No non-persistent task macro defined ? like NON_PERSISTENT_XYZ (check your CMakeLists.txt)"
 #endif
+
+void print_string_to_file(const char * fname, std::string to_print) {
+	FILE * fp = fopen(fname, "w");
+	if (!fp) { printf("ERROR: unable to open file %s\n", fname); }
+	fprintf(fp, "%s\n", to_print.c_str());
+
+	fclose(fp);
+}
 
 //From IWOCL tutorial (needs attribution)
 unsigned getDeviceList(std::vector<std::vector<cl::Device> >& devices)
@@ -239,8 +248,14 @@ int amd_check(int v) {
 
 // Just for running the persistent task
 void run_persistent(CL_Execution *exec) {
-	printf("Running persistent app %s\n", persistent_app_name());
-	printf("Running %d iterations\n", FLAGS_run_persistent);
+	std::stringstream summ_str1;
+	//printf("Running persistent app %s\n", persistent_app_name());
+	//printf("Running %d iterations\n", FLAGS_run_persistent);
+
+	summ_str1 << "Running persistent app " << persistent_app_name() << "\n";
+	summ_str1 << "Running " << FLAGS_run_persistent << " iterations\n";
+
+	cout << summ_str1.str();
 
 	int err = exec->compile_kernel(file::Path(FLAGS_persistent_kernel_file.c_str()),
 		                           file::Path(FLAGS_scheduler_rt_path),
@@ -283,8 +298,11 @@ void run_persistent(CL_Execution *exec) {
 
 	int num_wgs = min(FLAGS_num_wgs, amd_check(occupancy));
 
-	printf("%d threads per workgroup, %d workgroups, %d occupancy, %d final size\n", FLAGS_threads_per_wg, FLAGS_num_wgs, occupancy, num_wgs);
 
+	std::stringstream summ_str2;
+	//printf("%d threads per workgroup, %d workgroups, %d occupancy, %d final size\n", FLAGS_threads_per_wg, FLAGS_num_wgs, occupancy, num_wgs);
+	summ_str2 << FLAGS_threads_per_wg << " threads per workgroup, " << FLAGS_num_wgs << " workgroups, " << occupancy << " occupancy, " << num_wgs << " final size\n";
+	cout << summ_str2.str() << endl;
 	CL_Communicator::my_sleep(1000);
 
 	init_persistent_app_for_real(exec, num_wgs);
@@ -294,8 +312,9 @@ void run_persistent(CL_Execution *exec) {
 	vector<int> groups;
 
 	int error = 0;
-
+	std::stringstream summ_str3;
 	for (int i = 0; i < FLAGS_run_persistent; i++) {
+		summ_str3 << "Running iteration " << i << "\n";
 		cout << "Running iteration " << i << endl;
 		reset_discovery(exec, d_ctx_mem, false);
 		reset_barrier(exec, d_bar);
@@ -339,17 +358,29 @@ void run_persistent(CL_Execution *exec) {
 
 
 	clean_persistent_task(exec);
+	std::stringstream summ_str4;
+	summ_str4 << "\n" <<  "Error (from check_non_persistent_task(), should be 0):" << error << "\n" << "\n";
+	summ_str4 << "Average occupancy: " << CL_Communicator::average_int_vector(groups) << "\n";
+	summ_str4 << "Iterations: " << FLAGS_run_persistent << "\n";
+	summ_str4 << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << "\n";
+	summ_str4 << "Mean time: " << CL_Communicator::get_average_time_ms(times) << " ms" << "\n";
+	summ_str4 << "Max time: " << CL_Communicator::max_times_ms(times) << " ms" << "\n";
+	summ_str4 << "Min time: " << CL_Communicator::min_times_ms(times) << " ms" << "\n";
+	summ_str4 << "Standard Deviation: " << CL_Communicator::std_dev_times_ms(times) << " ms" << "\n";
 
-	cout << endl <<  "Error (from check_non_persistent_task(), should be 0):" << error << endl << endl;
-	cout << "Average occupancy: " << CL_Communicator::average_int_vector(groups) << endl;
-	cout << "Iterations: " << FLAGS_run_persistent << endl;
-	cout << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << endl;
-	cout << "Mean time: " << CL_Communicator::get_average_time_ms(times) << " ms" << endl;
-	cout << "Max time: " << CL_Communicator::max_times_ms(times) << " ms" << endl;
-	cout << "Min time: " << CL_Communicator::min_times_ms(times) << " ms" << endl;
-	cout << "Standard Deviation: " << CL_Communicator::std_dev_times_ms(times) << " ms" << endl;
+	summ_str4 << "Check value: " << *(s_ctx.check_value) << "\n";
 
-	cout << "Check value: " << *(s_ctx.check_value) << endl;
+	cout << summ_str4.str() << endl;
+
+	std::stringstream summ_str5;
+
+	summ_str5 << summ_str1.str() << summ_str2.str() << summ_str3.str() << summ_str4.str();
+
+	
+
+	print_string_to_file((FLAGS_output_summary2).c_str(), summ_str5.str());
+
+	
 
 }
 
@@ -368,6 +399,8 @@ int get_workgroups_for_non_persistent(int occupancy_bound) {
 	return ret;
 
 }
+
+
 
 void execute_merged_iteration(CL_Execution *exec, CL_Communicator &cl_comm, int number_of_workgroups, int workgroups_for_non_persistent, int &error) {
 
@@ -430,10 +463,18 @@ void execute_merged_iteration(CL_Execution *exec, CL_Communicator &cl_comm, int 
 }
 
 void run_merged(CL_Execution *exec) {
-	printf("Running persistent app %s with non persistent app %s\n", persistent_app_name(), non_persistent_app_name());
-	printf("Running %d iterations\n", FLAGS_merged_iterations);
-	printf("%d threads per workgroups\n", FLAGS_threads_per_wg);
-	printf("Using query barrier: %d\n", FLAGS_use_query_barrier);
+	std::stringstream summ_str1;
+
+	//printf("Running persistent app %s with non persistent app %s\n", persistent_app_name(), );
+	//printf("Running %d iterations\n", FLAGS_merged_iterations);
+	//printf("%d threads per workgroups\n", FLAGS_threads_per_wg);
+	//printf("Using query barrier: %d\n", FLAGS_use_query_barrier);
+	summ_str1 << "Running persistent app " << persistent_app_name() << " with non persistent app " << non_persistent_app_name() << "\n";
+	summ_str1 << "Running " << FLAGS_merged_iterations << " iterations\n";
+	summ_str1 << FLAGS_threads_per_wg << " threads per workgroups\n";
+	summ_str1 << "Using query barrier: " << FLAGS_use_query_barrier << "\n";
+
+	cout << summ_str1.str() << endl;
 
 	// Should be built into the cmake file. Haven't thought of how to do this yet.
 	int err = exec->compile_kernel(file::Path(FLAGS_merged_kernel_file.c_str()),
@@ -493,7 +534,10 @@ void run_merged(CL_Execution *exec) {
 
 	int num_wgs = min(FLAGS_num_wgs, amd_check(occupancy));
 
-	printf("%d threads per workgroup, %d workgroups, %d occupancy, %d final size\n", FLAGS_threads_per_wg, FLAGS_num_wgs, occupancy, num_wgs);
+	//printf("%d threads per workgroup, %d workgroups, %d occupancy, %d final size\n", FLAGS_threads_per_wg, FLAGS_num_wgs, occupancy, num_wgs);
+	std::stringstream summ_str2;
+	summ_str2 << FLAGS_threads_per_wg << " threads per workgroup, " << FLAGS_num_wgs << " workgroups, " << occupancy << " occupancy, " << num_wgs << " final size\n";
+	cout << summ_str2.str() << endl;
 
 	CL_Communicator::my_sleep(1000);
 
@@ -504,16 +548,20 @@ void run_merged(CL_Execution *exec) {
 	int error_persistent = 0;
 
 	int workgroups_for_non_persistent = get_workgroups_for_non_persistent(num_wgs);
-
 	vector<time_stamp> times;
 	cout << endl;
+	std::stringstream summ_str3;
 	for (int i = 0; i < FLAGS_merged_iterations; i++) {
 		err = exec->exec_queue.flush();
 		check_ocl(err);
 		exec->exec_queue.finish();
 		check_ocl(err);
-		cout << "ITERATION " << i << endl;
-		cout << "##############################" << endl;
+		summ_str3 << "ITERATION " << i << "\n";
+		summ_str3 << "##############################" << "\n";
+
+		cout << "ITERATION " << i << "\n";
+		cout << "##############################" << "\n";
+		
 		cl_comm.reset_communicator();
 		reset_discovery(exec, d_ctx_mem, false);
 		reset_barrier(exec, d_bar);
@@ -541,8 +589,15 @@ void run_merged(CL_Execution *exec) {
 		cl_comm.print_summary();
 		times.push_back(cl_comm.get_persistent_time());
 		//cout << "Check value: " << *(s_ctx.check_value) << endl;
-		cout << "Persistent Error: " << error_persistent << endl;
-		cout << "Non-persistent Error: " << error_non_persistent << endl;
+		summ_str3 << "Persistent Error: " << error_persistent << "\n";
+		summ_str3 << "Non-persistent Error: " << error_non_persistent << "\n";
+		summ_str3 << "check value: " << *s_ctx.check_value << "\n";
+
+		cout << "Persistent Error: " << error_persistent << "\n";
+		cout << "Non-persistent Error: " << error_non_persistent << "\n";
+		cout << "check value: " << *s_ctx.check_value << "\n";
+		
+
 		cout << endl;
 		CL_Communicator::my_sleep(1000);
 	}
@@ -551,15 +606,26 @@ void run_merged(CL_Execution *exec) {
 	clean_persistent_task(exec);
 	clean_non_persistent_task(exec);
 
-	cout << endl << "error non persistent: " << error_non_persistent << endl;
-	cout << endl << "error persistent: " << error_persistent << endl << endl;
+	
 
-	cout << "stats for persistent tasks" << endl;
-	cout << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << endl;
-	cout << "Mean time: " << CL_Communicator::get_average_time_ms(times) << " ms" << endl;
-	cout << "Max time: " << CL_Communicator::max_times_ms(times) << " ms" << endl;
-	cout << "Min time: " << CL_Communicator::min_times_ms(times) << " ms" << endl;
-	cout << "Standard Deviation: " << CL_Communicator::std_dev_times_ms(times) << " ms" << endl;
+	std::stringstream summ_str4;
+	summ_str4 << "\n" << "error non persistent: " << error_non_persistent << "\n";
+	summ_str4 << "\n" << "error persistent: " << error_persistent << "\n" << "\n";
+
+	summ_str4 << "stats for persistent tasks" << "\n";
+	summ_str4 << "Total time: " << CL_Communicator::reduce_times_ms(times) << " ms" << "\n";
+	summ_str4 << "Mean time: " << CL_Communicator::get_average_time_ms(times) << " ms" << "\n";
+	summ_str4 << "Max time: " << CL_Communicator::max_times_ms(times) << " ms" << "\n";
+	summ_str4 << "Min time: " << CL_Communicator::min_times_ms(times) << " ms" << "\n";
+	summ_str4 << "Standard Deviation: " << CL_Communicator::std_dev_times_ms(times) << " ms" << "\n";
+
+	cout << summ_str4.str() << endl;
+
+	std::stringstream summ_str5;
+	summ_str5 << summ_str1.str() << summ_str2.str() << summ_str3.str() << summ_str4.str();
+
+	print_string_to_file((FLAGS_output_summary2).c_str(), summ_str5.str());
+
 
 	return;
 }

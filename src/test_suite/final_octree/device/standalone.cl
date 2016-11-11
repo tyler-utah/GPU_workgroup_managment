@@ -59,7 +59,7 @@ int wgm_task_pop(__local Task *task, __global Task *pools,
     ;
   /* If pool is not empty, pick up the latest inserted task. */
   if (pool_head[pool_id] > 0) {
-    atomic_dec(&(pool_head[pool_id]));
+    pool_head[pool_id] -= 1;
     *task = pools[(pool_size * pool_id) + pool_head[pool_id]];
     poped = true;
   }
@@ -81,7 +81,7 @@ int wgm_task_push(__local Task *task, __global Task *pools,
   /* If pool is not full, insert task */
   if (pool_head[pool_id] < pool_size) {
     pools[(pool_size * pool_id) + pool_head[pool_id]] = *task;
-    atomic_inc(&(pool_head[pool_id]));
+    pool_head[pool_id] += 1;
     pushed = true;
   }
   pool_unlock(task_pool_lock, pool_id);
@@ -152,7 +152,7 @@ void octree_init(__global Task *pools, __global atomic_int *task_pool_lock,
 __kernel void octree_main(
     /* octree args */
     __global float4 *particles, __global float4 *newparticles,
-    __global unsigned int *tree, const unsigned int numParticles,
+    __global unsigned int *tree, const uint numParticles,
     __global atomic_uint *treeSize, __global atomic_uint *particlesDone,
     const unsigned int maxchilds, __global Task *pools,
     __global atomic_int *task_pool_lock, __global int *pool_head,
@@ -167,6 +167,7 @@ __kernel void octree_main(
   __local Task t[1];
   __local int got_new_task[1];
   __local Task newTask[1];
+  __local int game_over[1];
 
   /* ADD INIT HERE */
   if (p_get_group_id(__d_ctx) == 0) {
@@ -218,11 +219,16 @@ __kernel void octree_main(
           break;
         }
       }
+      game_over[0] = false;
+      if (!got_new_task[0]) {
+        /* test for end of computation */
+        game_over[0] = atomic_load(particlesDone) >= numParticles;
+      }
     }
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
     if (!got_new_task[0]) {
-      if (atomic_load(particlesDone) == numParticles) {
+      if (game_over[0]) {
         break;
       } else {
         continue;
@@ -288,15 +294,17 @@ __kernel void octree_main(
           newTask[0].treepos = tree[(t[0]).treepos + i];
 
           int pushed = false;
-          while (!pushed) {
-            for (int j = 0; j < num_pools; j++) {
-              pushed =
-                  wgm_task_push(&(newTask[0]), pools, task_pool_lock, pool_head,
-                                pool_size, (pool_id + j) % num_pools);
-              if (pushed) {
-                break;
-              }
+          for (int j = 0; j < num_pools; j++) {
+            pushed =
+                wgm_task_push(&(newTask[0]), pools, task_pool_lock, pool_head,
+                              pool_size, (pool_id + j) % num_pools);
+            if (pushed) {
+              break;
             }
+          }
+          if (pushed == false) {
+            /* pool overflow */
+            atomic_store(particlesDone, numParticles);
           }
         }
         barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);

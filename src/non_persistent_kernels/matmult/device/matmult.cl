@@ -55,6 +55,8 @@ __kernel void matmult(
     }
   }
 
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
   if (get_local_id(0) == 0) {
     int finished = atomic_fetch_add(counter, 1);
     if (finished == (get_num_groups(0) - 1)) {
