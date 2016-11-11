@@ -208,7 +208,6 @@ __kernel void octree_main (
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
     if (!got_new_task[0]) {
-      break;
       if (atomic_load(particlesDone) == numParticles) {
         break;
       } else {
