@@ -207,10 +207,9 @@ algorithms, for which work to be processed can be evenly split between
 the workgroups that execute a GPU kernel ahead of time.  However, many
 interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
-by the computation itself.  There is growing interest in accelerating irregular
+by the computation itself.  The last decade has seen growing interest in accelerating irregular
 data-parallel algorithms on GPUs, particularly algorithms that
-traverse and manipulate linked data structures, with several recent notable
-successes~\cite{...}.
+traverse and manipulate linked data structures~\cite{owens-persistent,TPO10,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/oopsla/SorensenDBGR16}.  \ADComment{Tyler, can you add relevant workstealing papers if not here already?}
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
@@ -232,8 +231,8 @@ towards the barrier.
 
 \paragraph{A degree of fairness: occupancy-bound execution}
 GPU schedulers are \emph{not} fair. the current GPU
-programming models---OpenCL~\cite{...}, CUDA~\cite{...}  and
-HSA~\cite{...}---specify almost no guarantees regarding scheduling of
+programming models---OpenCL~\cite{opencl2Spec}, CUDA~\cite{...}  and
+HSA~\cite{HSAprogramming11}---specify almost no guarantees regarding scheduling of
 workgroups, and implementations of these programming models do not
 provide fair scheduling in practice.  Roughly speaking, each workgroup
 executing a GPU kernel is mapped to a hardware \emph{compute
@@ -483,12 +482,12 @@ feature.
 \paragraph{Execution model}
 
 OpenCL specifically makes no guarantees about fair scheduling between
-workgroups executing the same kernel, stating~\cite{...}: \emph{``A
+workgroups executing the same kernel, stating~\cite[p.\ 31]{opencl2Spec}: \emph{``A
   conforming implementation may choose to serialize the workgroups so
   a correct algorithm cannot assume that workgroups will execute in
   parallel.  There is no safe and portable way to synchronize across
   the independent execution of workgroups since once in the work-pool,
-  they can execute in any order.''}  OpenCL is not alone in this
+  they can execute in any order.''}  \ADComment{Tyler: please provide CUDA reference with page} OpenCL is not alone in this
 regard: CUDA similarly provides no guarantees~\cite{...}.
 
 HSA provides limited, one-way guarantees,
