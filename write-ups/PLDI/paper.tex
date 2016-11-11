@@ -169,13 +169,36 @@
 \maketitle
 
 \begin{abstract}
+There is growing interest in accelerating irregular data-parallel
+algorithms on GPUs.  These algorithms are typically \emph{blocking},
+so require fair scheduling.  But GPU programming models (e.g.\ OpenCL)
+do not mandate fair scheduling, and GPU schedulers are inherently
+unfair in practice.  Current irregular algorithms only work on today's
+GPUs by identifying hardware compute units and scheduling workgroups
+exclusively to these compute units.  As well as being non-portable,
+this is unacceptable because the GPU cannot be used in the meantime
+for high-priority tasks with soft real-time constraints,
+such as graphics rendering.
 
+We propose \emph{cooperative kernels}, an extension to the traditional
+GPU programming model geared towards writing blocking algorithms.
+Cooperative kernels enable fair scheduling of workgroups executing a
+blocking algorithm, as well as co-scheduling of other tasks on the
+GPU, via a small set of language extensions that create a contract
+between the programmer and the scheduler.  We describe our cooperative
+kernels programming model and its semantics in detail, and our
+implementation of a portable prototype of cooperative kernels on top
+of OpenCL 2.0.  We evaluate the technique by porting a set of
+irregular work stealing and graph algorithms to our programming model
+and evaluate the performance and responsiveness of the approach across
+four GPUs from two vendors.  Because our implementation exploits no
+vendor-specific hardware, driver or compiler support, our encouraging
+experimental results provide a lower-bound on the efficiency with which
+cooperative kernels can be implemented in practice.
 
 \end{abstract}
     
 \section{Introduction}\label{sec:intro}
-
-\ADComment{Open to attack: why not just buy another GPU?}
 
 \paragraph{The needs of irregular data-parallel algorithms}
 Acceleration of general-purpose computations on graphics processing
@@ -1172,20 +1195,49 @@ $i$ in the forking workgroup provide the valuation for thread $i$ in
 each spawned workgroup, rather than having thread 0 transmit the
 valuation to all new threads.
 
-\ADComment{TODO: justify our choice: uniform variables and efficiency.}
+We opted for transmitting only selected varibles based on the
+observation that many of a thread's private variables are dead at the
+point of issuing $\offerfork$ or $\resizingglobalbarrier$, thus it
+would be wasteful to transmit them.  A live variable analysis could
+instead be employed to over-approximate the variables that might be
+accessed by newly arriving workgroups, so that these are automatically
+transmitted.
+
+In all cases, we found that a variable that needed to be transmitted
+had the property of being uniform across the workgroup.  That is,
+despite each thread having its own copy of the variable, each thread
+is in agreement on the variable's value.  As an example, the
+$\keyword{level}$, $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$
+variables used in \myfig\ref{fig:cgraphsearch} are all stored in thread-private
+memory, but all threads in a workgroup agree on the values of these
+variables at each $\resizingglobalbarrier$ call.  As a result,
+transmitting the thread 0's valuation of the annotated variables is
+equivalent to (and more efficient than) transmitting values on a
+thread-by-thread basis.  We have not yet encountered a real-world
+example where our current semantics would not suffice.
+
 
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
 
-\ADComment{Perhaps this would fit better under ``programming guidelines'' -- not sure.}
+A goal of coopeative kernels is to allow traditional, non-blocking GPU
+tasks, such as graphics shaders (in programming models such as OpenGL,
+Vulkan and DirectX) and regular data-parallel computational kernels,
+to be co-scheduled with blocking irregular algorithms.  It is
+important to note that our new model has no effect on the manner in
+which these traditional GPU workloads are programmed.
 
-\ADComment{Make the point here that if an irregular algorithm is
-  written as a cooperative kernel then it will execute just as safely
-  as it does today on current hardware if: (1) the $\transmit$
-  annotation and $\offerkill$/$\offerfork$ calls are defined away to
-  nothing, (2) $\resizingglobalbarrier$ is redefined to
-  $\globalbarrier$, (3) a standard implementation of $\globalbarrier$
-  that assumes the occupancy-bound execution model is provided.  If the kernel uses blocking features---the global barrier, mutexes, etc., then it may not execute safely due to the possibility of unfair scheduling, but it will execute no less safely than it would if the cooperative kernels style were not used.}
+Furthermore, if our cooperative language extensions are
+ignored---$\offerkill$ and $\offerfork$ are treated as no-ops,
+$\transmit$ annotations are ignored, and $\globalbarrier$ and
+$\resizingglobalbarrier$ calls are redirected to an existing global
+barrier implementation (so that no resizing occurs in the latter
+case)---then cooperative kernel will behave just like its
+non-cooperative counterpart would behave.  As a result, a developer
+for whom today's occupancy-bound execution model suffices can upgrade
+their kernel to a cooperative form and retain backwards-compatibility
+with today's GPU platforms by pre-processing away our language
+extensions.
 
 
 \section{Prototype Implementation}\label{sec:implementation}
