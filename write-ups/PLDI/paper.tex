@@ -390,7 +390,7 @@ model on which we base cooperative kernels (\mysec\ref{sec:opencl}),
 and illustrate OpenCL using two irregular data-parallel algorithms---a
 work stealing queue and breadth-first graph search---that also
 pinpoint the problems associated with unfair scheduling of workgroups
-and motivate our cooperative threads approach (\mysec\ref{sec:openclexamples}.
+and motivate our cooperative threads approach (\mysec\ref{sec:openclexamples}).
 
 \subsection{OpenCL Background}\label{sec:opencl}
 
@@ -554,17 +554,13 @@ and used to access the relevant task pool. The
 $\mathsf{pop\_or\_steal}$ function is called by all threads of a
 workgroup.  Inside $\mathsf{pop\_or\_steal}$ only the thread with a local id equal to
 $0$, also called the \emph{master thread} of the workgroup,
-\ADComment{Hugues, I changed; please check:} will try to pop a task
+will try to pop a task
 from the workgroup's pool, or steal a task from a different pool. The
 master thread uses local memory inside $\mathsf{pop\_or\_steal}$ to
 ensure that the returned value is valid for all threads of its
 workgroup. If a task was obtained, then all threads of the workgroup
 participate in the processing of the task via the
-$\mathsf{process\_task}$ function. \HEComment{Manage to say that a
-  task is considered big enough to benefit from parallel computation}
-\ADComment{I think that would be too much detail given the space we
-  have, so I would not delve into this. Remove both comments if you
-  agree.} Processing this task may lead to the creation of further
+$\mathsf{process\_task}$ function.  Processing this task may lead to the creation of further
 tasks, which the master thread will push to the workgroup's pool.
 
 Although not depicted here, concurrent accesses to each pool inside
@@ -1055,27 +1051,77 @@ tasks with soft real-time constraints.
 
 To achieve this balance, both an implementation of the cooperative
 kernels model, and the programmer of a cooperative kernel, must strive
-to meet a number of non-functional requirements, which we outline
-here.
-
-\ADComment{Sree mentioned TimeGraph paper.}
+to meet the following non-functional requirements.
 
 \paragraph{Sufficient $\offerkill$ calls}
 
-Recall that the purpose of $\offerkill$ is to provide the scheduler
-with an opportunity to destroy a workgroup in order to schedule
+The purpose of $\offerkill$ is to provide the scheduler with an
+opportunity to destroy a workgroup in order to schedule
 higher-priority tasks.  Because these higher-priority tasks, such as
 graphics rendering, may have soft real-time constraints, the scheduler
 relies on the cooperative kernel to execute $\offerkill$ sufficiently
 frequently that the scheduler can meet such real-time constraints.
 
-\ADComment{Forward reference to experiments with display freezing.}
+Using work stealing as an example: in the kernel of \myfig\ref{...}, a
+workgroup offers itself to the scheduler after processing each task.
+If tasks turn out to be very short then it might turn out to be
+reasonable to invoke $\offerkill$ less frequently, after every $k$
+tasks for some appropriate $k$.  On the other hand, if individual
+tasks may be very time-consuming then it may be necessary to rewrite
+the algorithm so work on a larger number of shorter tasks, so as to
+achieve a higher rate of calls to $\offerfork$.
+
+Getting this non-functional requirement right depends on the
+constraints of the tasks to be co-scheduled with a cooperative kernel,
+on properties of the cooperative kernel itself, and on the efficiency
+of the GPU that is used for execution.  In \mysec\ref{...} we conduct
+experiments to understand the response rate that would be required to
+co-schedule graphics rendering with a cooperative kernel in order to
+achieve a smooth frame rate, and we evalaute responsiveness in
+practice in \mysec\ref{...}.
+
+\paragraph{Sufficient workgroups for the cooperative kernel}
+
+Recall that the cooperative kernel would ideally utilise the $N$
+workgroups requested upon kernel launch, in order to conduct its
+processing efficiently.  The scheduler should thus aim to provide with
+cooperative kernel with as many workgroups, up to this number, as
+other constraints allow.  As a result, the scheduler should generally
+accept an $\offerkill$ only if a comput unit is required for another
+task, and should respond positively to $\offerfork$ calls by
+scheduling new workgroups if compute units are available.  Our
+implementation of cooperative scheduling (\mysec\ref{ }) is as
+generous as possible to the cooperative kernel in this regard.
+However, these are not hard-and-fast rules: a scheduler might employ
+heuristics based on historical workloads to avoid thrashing.  For
+example, if graphics calls are known to arrive at a certain rate then
+the scheduler might decide that it is worth accepting an $\offerkill$
+from the cooperative kernel on the assumption that a graphics task
+will be requested momentarily.  Similarly, the scheduler might provide
+some, but not all, compute units to the cooperative kernel in response
+to an $\offerfork$ call if it has reason to believe that the remaining
+compute units are likely to be useful for other high priority tasks
+that are likely to arrive imminently.
+
+
+\subsection{Alternative Semantic Choices}\label{sec:semanticalternatives}
+
+\paragraph{Killing order}
+
+We opted for a semantics whereby only the active workgroup with the
+highest id can be killed.  This has an appealing property: it means
+that the ids of active workgroups are contiguous, which is important
+for processing of contiguous data.  The cooperative graph traversal
+algorithm of \myfig\ref{ } illustrates this: the algorithm is prepared
+for $\getglobalsize()$ to change after each resizing barrier call, but
+depends on the fact that $\getglobalid()$ returns a contiguous range
+of thread ids.
 
 \ADComment{Got here.}
 
-\ADComment{Generosity: initial number of workgroups, and responding to offer fork.}
 
-\subsection{Alternative Semantic Choices}\label{sec:semanticalternatives}
+\paragraph{Keeping one workgroup alive}
+
 
 \ADComment{Explain here where we could have done things differently.}
 
