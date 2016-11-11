@@ -543,6 +543,8 @@ void run_merged(CL_Execution *exec) {
 		//cout << "Check value: " << *(s_ctx.check_value) << endl;
 		cout << "Persistent Error: " << error_persistent << endl;
 		cout << "Non-persistent Error: " << error_non_persistent << endl;
+		cout << "check value: " << *s_ctx.check_value << endl;
+
 		cout << endl;
 		CL_Communicator::my_sleep(1000);
 	}

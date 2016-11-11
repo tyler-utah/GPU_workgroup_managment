@@ -105,7 +105,8 @@ int pool_try_lock(__global atomic_int *task_pool_lock, int pool_id) {
 /*---------------------------------------------------------------------------*/
 
 void pool_unlock(__global atomic_int *task_pool_lock, int pool_id) {
-  atomic_store(&(task_pool_lock[pool_id]), false);
+  
+  atomic_store_explicit(&(task_pool_lock[pool_id]), false, memory_order_seq_cst, memory_scope_device);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -243,7 +244,7 @@ void octree_main(
 
     /* main loop */
   }
-  while (atomic_load(particlesDone) > 1000000000) {
+  while (k_get_group_id(__k_ctx) != -1) {
       /* __restoration_ctx->target != */
       /* UCHAR_MAX /\* substitute for 'true', which can cause compiler hangs *\/) { */
     switch (__restoration_ctx->target) {
@@ -295,7 +296,7 @@ void octree_main(
       barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
       if (!got_new_task[0]) {
-        if (game_over[0]) {
+        if (game_over[0]) {	  
           return;
         } else {
           continue;
@@ -312,7 +313,7 @@ void octree_main(
         topart = newparticles;
       }
 
-      barrier(CLK_LOCAL_MEM_FENCE);
+      barrier(CLK_LOCAL_MEM_FENCE| CLK_GLOBAL_MEM_FENCE);
 
       for (int i = local_id; i < 8; i += local_size) {
         count[i] = 0;
@@ -334,7 +335,7 @@ void octree_main(
         }
       }
 
-      barrier(CLK_LOCAL_MEM_FENCE);
+      barrier(CLK_LOCAL_MEM_FENCE| CLK_GLOBAL_MEM_FENCE);
 
       for (uint i = (t[0]).beg + local_id; i < (t[0]).end; i += local_size) {
         int toidx = (t[0]).beg +
