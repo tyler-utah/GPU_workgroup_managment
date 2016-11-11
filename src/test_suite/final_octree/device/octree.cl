@@ -272,19 +272,17 @@ __kernel void octree_main (
           tree[(t[0]).treepos + i] = atomic_fetch_add(treeSize, (uint)8);
           newTask[0].treepos = tree[(t[0]).treepos + i];
 
-          wgm_task_push(&(newTask[0]), pools, task_pool_lock, pool_head, pool_size, pool_id);
-
-          /* bool pushed = false; */
-          /* while (!pushed) { */
-          /*   for (int j = 0; j < num_pools; j++) { */
-          /*     pushed = wgm_task_push(&(newTask[0]), pools, task_pool_lock, pool_head, pool_size, (pool_id + j) % num_pools); */
-          /*     if (pushed) { */
-          /*       break; */
-          /*     } */
-          /*   } */
+          int pushed = false;
+          while (!pushed) {
+            for (int j = 0; j < num_pools; j++) {
+              pushed = wgm_task_push(&(newTask[0]), pools, task_pool_lock, pool_head, pool_size, (pool_id + j) % num_pools);
+              if (pushed) {
+                break;
+              }
+            }
           }
 
-        /* } */
+        }
         barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
       } else {
