@@ -42,7 +42,7 @@ int rand_fill(cl_int *M, int num_row, int num_col, int seed)
     for (int col = 0; col < num_col; col++) {
       seed = seed * seed;
       seed = (seed / 1000) % 1000000;
-      M[(row * num_col) + col] = (cl_int)seed;
+      M[(row * num_col) + col] = (cl_int)(seed % 10);
     }
   }
 
@@ -51,15 +51,15 @@ int rand_fill(cl_int *M, int num_row, int num_col, int seed)
 
 /*---------------------------------------------------------------------------*/
 
-int hash_mat(cl_int *M, int num_row, int num_col)
+cl_int hash_mat(cl_int *M, cl_int num_row, cl_int num_col)
 {
   // hash the diagonal using djb2, see
   // http://www.cse.yorku.ca/~oz/hash.html
-  int hash = 5381;
-  int row = 0;
-  int col = 0;
+  cl_int hash = 5381;
+  cl_int row = 0;
+  cl_int col = 0;
   while (row < num_row && col < num_col) {
-    hash = (hash * 33) + M[(row * num_col) + col];
+    hash = (hash * (cl_int)33) + M[(row * num_col) + col];
     row++;
     col++;
   }
