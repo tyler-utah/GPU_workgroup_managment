@@ -116,7 +116,7 @@ void reset_persistent_task(CL_Execution *exec) {
 // Empty for Pannotia apps
 void init_persistent_app_for_real(CL_Execution *exec, int occupancy) {
   printf("Enter %s%\n", __func__);
-  num_workgroups = occupancy - 1;
+  num_workgroups = occupancy;
 
   particles = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
   newParticles = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
