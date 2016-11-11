@@ -360,28 +360,28 @@ Placing the $\offerkill$ and $\offerfork$ primitives requires manual
 effort and care, but our experience porting a representative set of
 GPU-accelerated irregular algorithms to use cooperative kernels
 suggests that this is straightforward in practice.  We discuss this in
-detail in Section~\ref{sec:portingalgorithms}.
+detail in \mysec\ref{sec:portingalgorithms}.
 
 In summary, our main contributions are:
 
 \begin{itemize}
 
-\item \emph{Cooperative kernels}, an extension to the GPU programming model to support the scheduling requirements of blocking algorithms.  We describe the semantics of the programming model in detail (Section~\ref{sec:cooperativekernels}). 
+\item \emph{Cooperative kernels}, an extension to the GPU programming model to support the scheduling requirements of blocking algorithms.  We describe the semantics of the programming model in detail (\mysec\ref{sec:cooperativekernels}). 
 
 \item A proof-of-concept portable implementation of cooperative
   kernels on top of the OpenCL 2.0 programming model
-  (Section~\ref{sec:implementation}).
+  (\mysec\ref{sec:implementation}).
 
 \item An experience report porting \NumAlgorithms{} irregular GPU
   algorithms to use cooperative kernels, and experimental results
   assessing the performance overhead associated with cooperation and
   the responsiveness to high priority tasks that cooperation enables,
-  across four GPUs from two vendors (Section~\ref{sec:experiments}).
+  across four GPUs from two vendors (\mysec\ref{sec:experiments}).
 
 \end{itemize}
 
 We begin by providing an overview of the OpenCL programming model and
-two motivating examples of irregular algorithms (Section~\ref{sec:background}).  At the end of the paper we discuss related work (Section~\ref{sec:relatedwork}) and avenues for future work (Section~\ref{sec:conclusion}).
+two motivating examples of irregular algorithms (\mysec\ref{sec:background}).  At the end of the paper we discuss related work (\mysec\ref{sec:relatedwork}) and avenues for future work (\mysec\ref{sec:conclusion}).
 
 \section{Background and Motivating Examples}\label{sec:background}
 
@@ -454,7 +454,7 @@ the case of SVM, is enabled via a set of atomic data types and
 operations, based on the C11 memory model~\cite{...}.  \ADComment{Could cut:} In particular,
 atomic SVM operations enable fine-grained communication between host
 and device.  Our implementation of cooperative kernels
-(Section~\ref{sec:implementation}) depends on this recent OpenCL
+(\mysec\ref{sec:implementation}) depends on this recent OpenCL
 feature.
 
 \paragraph{Execution model}
@@ -573,7 +573,7 @@ mutex, implemented using atomic compare and swap operations on
 global memory.  As a result, the kernel presents two opportunities for
 spin-waiting: spinning to obtain a mutex, and spinning in the main
 kernel loop to obtain a task to process.  The algorithm thus depends
-on a fair scheduler, which, as discussed in Section~\ref{sec:intro},
+on a fair scheduler, which, as discussed in \mysec\ref{sec:intro},
 is not provided by current GPU programming models.
 
 \paragraph{Graph traversal example} Figure~\ref{fig:graphsearch} shows the
@@ -626,7 +626,7 @@ provide.  But, as discussed in \mysec\ref{sec:intro}, this
 occupancy-bound model is not mandated by language standards or vendor
 implementations, and is unlikely to be guaranteed in the future.
 
-In Section~\ref{sec:programmingguidelines} we show how the work stealing
+In \mysec\ref{sec:programmingguidelines} we show how the work stealing
 and graph traversal examples of Figures~\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
 updated to use our cooperative kernels programming model to resolve
 the scheduling issue.
@@ -643,25 +643,25 @@ and could be applied to extend other GPU programming models, such as
 CUDA and HSA.
 
 We describe the semantics of cooperative kernels
-(Section~\ref{sec:semantics}) and summarise the important
+(\mysec\ref{sec:semantics}) and summarise the important
 differences between programming with regular vs.\ cooperative kernels
 by showing how the motivating examples of \mysec\ref{sec:openclexamples} can be adapted to use cooperative kernels
-(Section~\ref{sec:programmingguidelines}).
+(\mysec\ref{sec:programmingguidelines}).
 We then focus on the non-functional
 properties that a developer of a cooperative kernel, and the
 implementer of a scheduler for cooperative kernels, should strive for
-(Section~\ref{sec:nonfunctional}).  The semantics of cooperative
+(\mysec\ref{sec:nonfunctional}).  The semantics of cooperative
 kernels has been guided by the practical applications we have studied
-(described in Section~\ref{sec:portingalgorithms}), and we discuss several cases where we
-might have taken different and also reasonable semantic decisions (Section~\ref{sec:semanticalternatives}).
+(described in \mysec\ref{sec:portingalgorithms}), and we discuss several cases where we
+might have taken different and also reasonable semantic decisions (\mysec\ref{sec:semanticalternatives}).
 We conclude the section by discussing the backwards-compatible nature
 of cooperative kernels with respect to blocking algorithms designed to
 run on current GPU platforms
-(Section~\ref{sec:backwardscompatibility}).
+(\mysec\ref{sec:backwardscompatibility}).
 
 \subsection{Semantics of Cooperative Kernels}\label{sec:semantics}
 
-As with a regular OpenCL kernel (see Section~\ref{sec:opencl}), a
+As with a regular OpenCL kernel (see \mysec\ref{sec:opencl}), a
 cooperative kernel is launched by the host application.  The host
 application passes parameters to the kernel and specifies a desired
 number of workgroups, each consisting of a specified number of
@@ -706,7 +706,7 @@ integer between $1$ and $N$.  The initial active workgroups have
 consecutive workgroup ids in the range $[0, M-1]$.
 
 The $\getgroupid()$ function retrieves the id of a workgroup as usual
-(see Section~\ref{sec:opencl}).  When executed by a cooperative
+(see \mysec\ref{sec:opencl}).  When executed by a cooperative
 kernel, $\getnumgroups()$ returns $M$, the \emph{current} number of
 active workgroups.  This is in contrast to $\getnumgroups()$ for
 regular kernels, which returns the fixed number of workgroups that
@@ -735,7 +735,7 @@ these for work stealing and graph traversal below.
 Similar to the OpenCL workgroup $\mathsf{barrier}$ primitive,
 $\offerkill$, is a workgroup-level function---it must be encountered
 uniformly by all threads in a workgroup (see
-Section~\ref{sec:opencl}).
+\mysec\ref{sec:opencl}).
 
 Suppose a workgroup with id $m$ executes $\offerkill$.  If $m < M-1$
 or $M=1$, i.e.\ the workgroup's id is not the largest among the active
@@ -757,7 +757,7 @@ In this formulation of cooperative kernels, only the active workgroup
 with the largest id can be killed, and workgroup 0 can never be
 killed.  We discuss the rationale for these choices, as well as
 possible alternative choices, in
-Section~\ref{sec:semanticalternatives}.
+\mysec\ref{sec:semanticalternatives}.
 
 \paragraph{Semantics for $\offerfork$}
 
@@ -802,7 +802,7 @@ to this:
 
 In effect, thread 0 of the forking workgroup transmits the relevant
 portion of its local state to the threads of the forked workgroups.
-We discuss in Section~\ref{sec:semanticalternatives} the rationale for
+We discuss in \mysec\ref{sec:semanticalternatives} the rationale for
 having all new threads obtain this local state portion from thread 0,
 as well as our reasons for selecting which variables to transmit via
 annotations rather than transmitting the entire thread state.
@@ -873,7 +873,7 @@ $M'\geq M$, the workgroups with ids smaller than $M$ are left intact.
 Because $\resizingglobalbarrier$ can be implemented in the above
 manner, we do not regard it conceptually as a primitive of the
 cooperative kernels programming model.  However, we discuss in
-Section~\ref{sec:resizingbarrier} how $\resizingglobalbarrier$ can be
+\mysec\ref{sec:resizingbarrier} how $\resizingglobalbarrier$ can be
 implemented significantly more efficiently if it is treated as a
 primitive operation that interacts directly with the scheduler.
 
@@ -952,7 +952,7 @@ is not a constant anymore}\label{fig:workstealing-cooperative}
 The situation is more stable if a cooperative kernel does not directly
 issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
 only calls to $\resizingglobalbarrier$ can cause the number of active
-workgroups to change and, as discussed in Section~\ref{sec:semantics},
+workgroups to change and, as discussed in \mysec\ref{sec:semantics},
 this function causes synchronisation between all threads and causes
 the number of active workgroups to change atomically.  At any point
 during execution, the threads of a kernel are executing between some
@@ -1042,7 +1042,7 @@ algorithm.
 
 \subsection{Non-Functional Requirements of Cooperative Kernels}\label{sec:nonfunctional}
 
-The semantics presented in Section~\ref{sec:semantics} describe the envelope of
+The semantics presented in \mysec\ref{sec:semantics} describe the envelope of
 behaviour that a developer of a cooperative kernel should be prepared
 for.
 %
