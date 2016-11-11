@@ -576,7 +576,7 @@ kernel loop to obtain a task to process.  The algorithm thus depends
 on a fair scheduler, which, as discussed in \mysec\ref{sec:intro},
 is not provided by current GPU programming models.
 
-\paragraph{Graph traversal example} Figure~\ref{fig:graphsearch} shows the
+\paragraph{Graph traversal example} \mylongfig\ref{fig:graphsearch} shows the
 skeleton of a frontier-based graph traversal algorithm; such algorithms have
 been shown to be execute efficiently on GPUs~\cite{...}.
 The kernel is
@@ -627,7 +627,7 @@ occupancy-bound model is not mandated by language standards or vendor
 implementations, and is unlikely to be guaranteed in the future.
 
 In \mysec\ref{sec:programmingguidelines} we show how the work stealing
-and graph traversal examples of Figures~\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
+and graph traversal examples of \myfigs\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
 updated to use our cooperative kernels programming model to resolve
 the scheduling issue.
 
