@@ -181,9 +181,9 @@ __kernel void octree_main (
   while (true) {
 
     /* only the first group can fork, to limit calls to offer_fork. */
-    /* if (get_group_id(0) == 0) { */
-    /*   offer_fork(); */
-    /* } */
+    if (get_group_id(0) == 0) {
+      offer_fork();
+    }
 
     // can be killed before handling a task, but always keep at least
     // one work-group alive.
