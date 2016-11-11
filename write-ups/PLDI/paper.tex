@@ -548,7 +548,7 @@ kernel graph_app(global graph * g,
 \caption{An OpenCL graph traversal algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
 \end{figure}
 
-\paragraph{Work stealing example}  \ADComment{Tyler/Hugues: can you please say in the first paragraph that this has been implemented on GPUs and cite the right papers?}
+\paragraph{Work stealing example}
 %
 The work stealing paradigm is useful when a computation can be split
 into multiple tasks that can be processed independently, but where the
@@ -559,7 +559,9 @@ workgroups in our case. Each workgroup has an associated task pool from
 which it obtains tasks to process, and to which it stores newly created
 tasks. When a workgroup's pool becomes empty, a workgroup---rather than
 terminating---tries to \emph{steal} a task from an other
-pool. Workgroups keep on processing tasks until all the work is done.
+pool. Workgroups keep on processing tasks until all the work is
+done. Previous work addresses the feasibility and efficiency of work
+stealing on GPUs~ref\cite{dlb-web,TPO10}.
 
 \myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
 kernel that uses a work stealing queue. All threads start their
@@ -844,7 +846,7 @@ the barrier.  Once all threads have arrived, the threads may proceed
 past the barrier with the guarantee that all global memory accesses
 issued before the barrier have completed.  The $\globalbarrier$
 primitive can be implemented by adapting an inter-workgroup barrier
-design, e.g.~\cite{XF}, to take account of a growing and shrinking number of workgroups, and the atomic operations provided by
+design, e.g.~\cite{XF10}, to take account of a growing and shrinking number of workgroups, and the atomic operations provided by
 the OpenCL 2.0 memory model enable a memory-safe
 implementation~\cite{DBLP:conf/oopsla/SorensenDBGR16}.  However, implementing such a barrier is
 involved, hence why we include this function as a primitive.

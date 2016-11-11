@@ -6,6 +6,10 @@ import shutil
 import glob
 import re
 import platform
+import time
+from threading import Thread
+import signal
+import pdb
 
 def fake_placeholder(x):
     return
@@ -13,20 +17,24 @@ def fake_placeholder(x):
 EXE_PATH      = ""
 DATA_PATH     = ""
 STAT_PATH     = ""
-ITERATIONS    = "1"
+ITERATIONS    = "2"
 PRINT         = fake_placeholder
 DATA_PRINT    = fake_placeholder
 NAME_OF_CHIP  = ""
 PLATFORM_ID   = "0"
 IS_AMD        = "0"
+CHECK_POINT_FILE = "checkpoint.txt"
+CHECK_POINT_DATA = []
+TIME_BEGIN       = 0.0
+EXIT_THREAD      = 0
 
 PROGRAMS = {
-    "lonestar_sssp"
-#    "lonestar_bfs",
-#    "pannotia_color",
-#    "pannotia_mis",
-#    "pannotia_bc",
-#    "pannotia_sssp"
+#    "lonestar_sssp"
+    "lonestar_bfs",
+    "pannotia_color",
+    "pannotia_mis",
+    "pannotia_bc",
+    "pannotia_sssp"
 }
 
 PROGRAM_DATA = {
@@ -34,69 +42,84 @@ PROGRAM_DATA = {
     "pannotia_color" : [ { "input" : os.path.join("pannotia","inputs", "color", "ecology1.graph"),
                            "solution" : os.path.join("pannotia","solutions", "color_ecology.txt"),
                            "stat" : "color_ecology",
-                           "suite" : "pannotia"},
+                           "suite" : "pannotia",
+                           "query_barrier" : [0,1]},
                          { "input" : os.path.join("pannotia","inputs", "color", "G3_circuit.graph"),
                            "solution" : os.path.join("pannotia","solutions", "color_G3_circuit.txt"),
                            "stat" : "color_G3_circuit",
-                           "suite" : "pannotia"}
+                           "suite" : "pannotia",
+                           "query_barrier" : [0,1]}
     ],
 
     "pannotia_mis" : [ { "input" : os.path.join("pannotia","inputs", "color", "ecology1.graph"),
                          "solution" : os.path.join("pannotia","solutions", "color_ecology.txt"),
                          "stat" : "mis_ecology",
-                         "suite" : "pannotia"},
+                         "suite" : "pannotia",
+                         "query_barrier" : [0,1]},
                        { "input" : os.path.join("pannotia","inputs", "color", "G3_circuit.graph"),
                          "solution" : os.path.join("pannotia","solutions", "color_G3_circuit.txt"),
                          "stat" : "mis_G3_circuit",
-                         "suite" : "pannotia"}
+                         "suite" : "pannotia",
+                         "query_barrier" : [0,1]}
     ],
 
     "pannotia_bc" : [ { "input" : os.path.join("pannotia","inputs", "bc", "1k_128k.gr"),
                         "solution" : os.path.join("pannotia","solutions", "bc_1k_128k.txt"),
                         "stat" : "bc_1k_128k",
-                        "suite" : "pannotia"},
+                        "suite" : "pannotia",
+                        "query_barrier" : [0,1]},
                       { "input" : os.path.join("pannotia","inputs", "bc", "2k_1M.gr"),
                         "solution" : os.path.join("pannotia","solutions", "bc_2k_1M.txt"),
                         "stat" : "bc_2k_1M",
-                        "suite" : "pannotia"}
+                        "suite" : "pannotia",
+                        "query_barrier" : [0,1]}
     ],
 
     "pannotia_sssp" : [ { "input" : os.path.join("pannotia","inputs", "sssp", "USA-road-d.NW.gr"),
                           "solution" : os.path.join("pannotia","solutions", "sssp_usa.txt"),
                           "stat" : "sssp_usa_road",
-                          "suite" : "pannotia"}
+                          "suite" : "pannotia",
+                          "query_barrier" : [0,1]}
     ],
 
     "lonestar_sssp" : [ { "input" : os.path.join("lonestar", "inputs","rmat22.gr"),
                         "solution" : os.path.join("lonestar","solutions", "sssp_rmat22.txt"),
                         "stat" : "sssp_rmat22",
-                        "suite" : "lonestar"},
+                        "suite" : "lonestar",
+                        "query_barrier" : [0,1]},
                       { "input" : os.path.join( "lonestar", "inputs", "r4-2e23.gr"),
                         "solution" : os.path.join("lonestar","solutions", "sssp_r4-2e23.txt"),
                         "stat" : "sssp_r4-2e23",
-                        "suite" : "lonestar"},
+                        "suite" : "lonestar",
+                        "query_barrier" : [0,1]},
                    #   { "input" : os.path.join( "lonestar", "inputs", "USA-road-d.W.gr"),
                    #     "solution" : os.path.join("lonestar","solutions", "sssp_USA_W.txt"),
                    #     "stat" : "sssp_USA-road-d.W",
-                   #     "suite" : "lonestar"}
+                   #     "suite" : "lonestar",
+                   #     "query_barrier" : [0,1]}
     ],
     "lonestar_bfs" : [ { "input" : os.path.join( "lonestar", "inputs", "rmat22.gr"),
                         "solution" : os.path.join("lonestar","solutions", "bfs_rmat22.txt"),
                         "stat" : "bfs_rmat22",
-                        "suite" : "lonestar"},
+                        "suite" : "lonestar",
+                        "query_barrier" : [0,1]},
                       { "input" : os.path.join( "lonestar", "inputs", "r4-2e23.gr"),
                         "solution" : os.path.join("lonestar","solutions", "bfs_r4-2e23.txt"),
                         "stat" : "bfs_r4-2e23",
-                        "suite" : "lonestar"},
+                        "suite" : "lonestar",
+                        "query_barrier" : [0,1]},
                       { "input" : os.path.join( "lonestar", "inputs", "USA-road-d.W.gr"),
                         "solution" : os.path.join("lonestar","solutions", "bfs_USA_W.txt"),
                         "stat" : "bfs_USA-road-d.W",
-                        "suite" : "lonestar"}
+                        "suite" : "lonestar",
+                        "query_barrier" : [0,1]}
 
     ],
 }
 
 MATMULT_CONFIG = []
+
+
 
 MATMULT_CONFIG_TEMPLATE = [
     # This is for Hugues laptop
@@ -123,11 +146,61 @@ def my_print(file_handle, data):
     print(data)
     file_handle.write(data + os.linesep)
 
+def signal_handler(signal, frame):
+    print('You pressed Ctrl+C!')
+    global EXIT_THREAD
+    EXIT_THREAD = 1
+    sys.exit(0)
+
+def write_to_checkpoint(data):
+    f = open(CHECK_POINT_FILE, "a")
+    f.write(data + "\n")
+    f.write(str(time.time() - TIME_BEGIN) + "\n")
+    f.close()
+
+def get_check_point_data():
+    global CHECK_POINT_DATA
+    global TIME_BEGIN
+    #pdb.set_trace()
+    if (os.path.isfile(CHECK_POINT_FILE)):
+        print("HI THERE")
+        f = open(CHECK_POINT_FILE, "r")
+        CHECK_POINT_DATA = f.readlines()
+        CHECK_POINT_DATA = [x.replace("\n", "") for x in CHECK_POINT_DATA]
+        checked_time = float(CHECK_POINT_DATA[len(CHECK_POINT_DATA) - 1])
+        TIME_BEGIN = TIME_BEGIN - checked_time
+        f.close()
+
+def const_print_time():
+    global EXIT_THREAD
+    i = 0
+    local_time_begin = time.time()
+    while (EXIT_THREAD != 1) and (time.time() - local_time_begin < 1200):
+        time.sleep(10)
+        print("time update: " + str(i) + " - " + str(time.time() - local_time_begin))
+        i = i + 1
+    if (EXIT_THREAD == 1):
+          return
+    print("time has been longer than 20 minutes, probably you should restart!")
+    return
+
 def exec_cmd(cmd, prefix="", record_file=""):
+    global EXIT_THREAD
     cmd = cmd + ["--output_summary", prefix + "_summary"]
     cmd = cmd + ["--output_non_persistent_duration", prefix + "_non_persistent_duration"]
     cmd = cmd + ["--output_timestamp_executing_groups", prefix + "_timestamp_executing_groups"]
     cmd = cmd + ["--output_timestamp_non_persistent", prefix + "_timestamp_non_persistent"]
+
+    if prefix in CHECK_POINT_DATA:
+        print(prefix + " found in checkpoint")
+        return 0;
+
+    #time.sleep(30)
+    EXIT_THREAD = 0
+    local_time_begin = time.time()
+    thread = Thread(target = const_print_time)
+    thread.start()
+
     PRINT("====================== RUN START =========================")
     PRINT(prefix)
     for s in cmd:
@@ -144,14 +217,21 @@ def exec_cmd(cmd, prefix="", record_file=""):
         f.close()
     PRINT("* stderr:")
     PRINT(serr.decode())
+    local_time_end = time.time()
     PRINT("----------------------------------------------------------")
     str_ret_code = "Return code: " + str(ret_code)
     PRINT(str_ret_code)
+    PRINT("time for run: " + str(local_time_end - local_time_begin) + " seconds")
+    PRINT("time since start: " + str(local_time_end - TIME_BEGIN) + " seconds")
     PRINT("====================== RUN END ===========================")
+    EXIT_THREAD = 1
+    thread.join();
     if (ret_code != 0):
         print("Error running " + " ".join(cmd))
         return ret_code
-	return 0
+    
+    write_to_checkpoint(prefix)
+    return 0
 
 def mv_wildcard(path, dest):
     for f in glob.glob(path):
@@ -185,80 +265,90 @@ def optional_debug():
 def run_suite():
     for p in PROGRAMS:
         for d in PROGRAM_DATA[p]:
-            exe = os.path.join(EXE_PATH, d["suite"], optional_debug(),  p)
-            graph_in = os.path.join(DATA_PATH, d["input"])
-            graph_sol = os.path.join(DATA_PATH, d["solution"])
+            for q in d["query_barrier"]:
+                exe = os.path.join(EXE_PATH, d["suite"], optional_debug(),  p)
+                graph_in = os.path.join(DATA_PATH, d["input"])
+                graph_sol = os.path.join(DATA_PATH, d["solution"])
 
-            # RUN: merged skip tasks
-            cmd = [exe]
-            cmd = cmd + ["--graph_file", graph_in]
-            cmd = cmd + ["--graph_solution_file", graph_sol]
-            cmd = cmd + ["--threads_per_wg", "128"]
-            # indicate very high number of workgroups to finally obtain occupancy
-            cmd = cmd + ["--num_wgs", "256"]
-            cmd = cmd + ["--skip_tasks", "1"]
-            cmd = cmd + ["--merged_iterations", ITERATIONS]
-            cmd = cmd + ["--platform_id", PLATFORM_ID]
-            cmd = cmd + ["--is_AMD", IS_AMD]
+                # RUN: merged skip tasks
+                cmd = [exe]
+                cmd = cmd + ["--graph_file", graph_in]
+                cmd = cmd + ["--graph_solution_file", graph_sol]
+                cmd = cmd + ["--threads_per_wg", "128"]
+                # indicate very high number of workgroups to finally obtain occupancy
+                cmd = cmd + ["--num_wgs", "256"]
+                cmd = cmd + ["--skip_tasks", "1"]
+                cmd = cmd + ["--merged_iterations", ITERATIONS]
+                cmd = cmd + ["--platform_id", PLATFORM_ID]
+                cmd = cmd + ["--is_AMD", IS_AMD]
+                cmd = cmd + ["--use_query_barrier", str(q)]
 
-            prefix = d["stat"] + "_skiptask"
-            record_stdout = prefix + "_stdout.txt"
-            err_code = exec_cmd(cmd, prefix, record_stdout)
-            if err_code != 0:
-                continue
-            # grab finalsize (min(occupancy, nb of workgroups))
-            finalsize = extract_finalsize(record_stdout)
-            collect_stats(d, prefix)
-            if finalsize == -1:
-                PRINT("Could not find finalsize after run of merged skiptask")
-                continue
 
-            # RUN: standalone
-            cmd = [exe]
-            cmd = cmd + ["--graph_file", graph_in]
-            cmd = cmd + ["--graph_solution_file", graph_sol]
-            cmd = cmd + ["--num_wgs", "256"]
+                prefix = d["stat"] + "_skiptask"
+                record_stdout = prefix + "_stdout.txt"
+                err_code = exec_cmd(cmd, prefix, record_stdout)
 
-            cmd = cmd + ["--threads_per_wg", "128"]
-            cmd = cmd + ["--run_persistent", ITERATIONS]
-            cmd = cmd + ["--num_wgs", finalsize]
-            cmd = cmd + ["--platform_id", PLATFORM_ID]
-            cmd = cmd + ["--is_AMD", IS_AMD]
-            prefix = d["stat"] + "_standalone"
-            record_stdout = prefix + "_stdout.txt"
-            err_code = exec_cmd(cmd, prefix, record_stdout)
-            if err_code != 0:
-                continue
-            collect_stats(d, prefix)
+                #dummy value for check pointing
+                finalsize = 256
+                if err_code != 0:
+                    continue
+                # grab finalsize (min(occupancy, nb of workgroups))
+                if (prefix not in CHECK_POINT_DATA):
+                    finalsize = extract_finalsize(record_stdout)
+                    collect_stats(d, prefix)
+                    if finalsize == -1:
+                        PRINT("Could not find finalsize after run of merged skiptask")
+                        continue
+            
 
-            for c in MATMULT_CONFIG:
-                for npconfig in ["npwg_one", "npwg_all_but_one", "npwg_half", "npwg_quarter"]:
+                # RUN: standalone
+                if (q == 0):
                     cmd = [exe]
                     cmd = cmd + ["--graph_file", graph_in]
                     cmd = cmd + ["--graph_solution_file", graph_sol]
-                    cmd = cmd + ["--threads_per_wg", "128"]
-                    cmd = cmd + ["--merged_iterations", ITERATIONS]
-                    # indicate very high number of workgroups to finally obtain occupancy
                     cmd = cmd + ["--num_wgs", "256"]
-                    cmd = cmd + ["--non_persistent_frequency", c["freq"]]
+
+                    cmd = cmd + ["--threads_per_wg", "128"]
+                    cmd = cmd + ["--run_persistent", ITERATIONS]
+                    cmd = cmd + ["--num_wgs", finalsize]
                     cmd = cmd + ["--platform_id", PLATFORM_ID]
                     cmd = cmd + ["--is_AMD", IS_AMD]
-                    npwg = "0"
-                    if npconfig == "npwg_one":
-                        npwg = "-2"
-                    elif npconfig == "npwg_all_but_one":
-                        npwg = "-1"
-                    elif npconfig == "npwg_half":
-                        npwg = "2"
-                    elif npconfig == "npwg_quarter":
-                        npwg = "4"
-                    cmd = cmd + ["--non_persistent_wgs", npwg]
-                    cmd = cmd + ["--matdim", c["matdim"]]
-                    prefix = d["stat"] + "_" + c["name"] + "_" + npconfig + "_merged"
-                    err_code = exec_cmd(cmd, prefix)
+                    prefix = d["stat"] + "_standalone"
+                    record_stdout = prefix + "_stdout.txt"
+                    err_code = exec_cmd(cmd, prefix, record_stdout)
                     if err_code != 0:
                         continue
                     collect_stats(d, prefix)
+
+                for c in MATMULT_CONFIG:
+                    for npconfig in ["npwg_one", "npwg_all_but_one", "npwg_half", "npwg_quarter"]:
+                        cmd = [exe]
+                        cmd = cmd + ["--graph_file", graph_in]
+                        cmd = cmd + ["--graph_solution_file", graph_sol]
+                        cmd = cmd + ["--threads_per_wg", "128"]
+                        cmd = cmd + ["--merged_iterations", ITERATIONS]
+                        # indicate very high number of workgroups to finally obtain occupancy
+                        cmd = cmd + ["--num_wgs", "256"]
+                        cmd = cmd + ["--non_persistent_frequency", c["freq"]]
+                        cmd = cmd + ["--platform_id", PLATFORM_ID]
+                        cmd = cmd + ["--is_AMD", IS_AMD]
+                        cmd = cmd + ["--use_query_barrier", str(q)]
+                        npwg = "0"
+                        if npconfig == "npwg_one":
+                            npwg = "-2"
+                        elif npconfig == "npwg_all_but_one":
+                            npwg = "-1"
+                        elif npconfig == "npwg_half":
+                            npwg = "2"
+                        elif npconfig == "npwg_quarter":
+                            npwg = "4"
+                        cmd = cmd + ["--non_persistent_wgs", npwg]
+                        cmd = cmd + ["--matdim", c["matdim"]]
+                        prefix = d["stat"] + "_" + c["name"] + "_" + npconfig + "_merged"
+                        err_code = exec_cmd(cmd, prefix)
+                        if err_code != 0:
+                            continue
+                        collect_stats(d, prefix)
 
 def main():
 
@@ -272,6 +362,7 @@ def main():
     global MATMULT_CONFIG
     global PLATFORM_ID
     global IS_AMD
+    global TIME_BEGIN
 
     if len(sys.argv) != 8:
         print("Please provide the following arguments:")
@@ -286,14 +377,20 @@ def main():
     if NAME_OF_CHIP == "HD5500":
         MATMULT_CONFIG = MATMULT_CONFIG_HD5500
     elif NAME_OF_CHIP == "HD520":
-	    MATMULT_CONFIG = MATMULT_CONFIG_HD520
-	else:
-	    print("Cannot find a matmult for your chip! Exiting")
-		exit(0)
+	MATMULT_CONFIG = MATMULT_CONFIG_HD520
+    else:
+        print("Cannot find a matmult for your chip! Exiting")
+	exit(0)
     PLATFORM_ID = sys.argv[6]
     IS_AMD = sys.argv[7]
     log_file = sys.argv[4] + ".log"
+    TIME_BEGIN = time.time()
+    get_check_point_data()
     print("recording all to " + log_file)
+    log_file_handle = ""
+    if (os.path.isfile(log_file)):
+        log_file_handle = open(log_file, "a")
+        
     log_file_handle = open(log_file, "w")
     PRINT = lambda x : my_print(log_file_handle,x)
 
@@ -302,7 +399,13 @@ def main():
 
     run_suite()
 
+    time_end = time.time()
+
+    PRINT("-------------------------------")
+    PRINT("total time: " + str(time_end - TIME_BEGIN) + " seconds")
+
     log_file_handle.close()
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal_handler)
     sys.exit(main())
