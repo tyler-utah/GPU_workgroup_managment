@@ -91,7 +91,8 @@
   columns=fullfelxible,
   %commentstyle=\rmfamily\itshape,
   morekeywords={barrier,kernel,global,__device__,__syncthreads,__global__,bool,then},
-  escapeinside={(*@}{@*)}
+  escapeinside={(*@}{@*)},
+  numbers=left
 }
 
 \newcommand{\transmit}{\mathsf{transmit}}
@@ -135,6 +136,9 @@
 \newcommand{\getlocalid}{\mathsf{get\_local\_id}}
 \newcommand{\getglobalid}{\mathsf{get\_global\_id}}
 \newcommand{\getlocalsize}{\mathsf{get\_global\_id}}
+\newcommand{\getglobalsize}{\mathsf{get\_global\_size}}
+
+\newcommand{\keyword}[1]{\mathsf{#1}}
 
 \newcommand{\NumAlgorithms}{8}
 
@@ -381,10 +385,14 @@ two motivating examples of irregular algorithms (Section~\ref{sec:background}). 
 
 \section{Background and Motivating Examples}\label{sec:background}
 
-We use two examples of irregular data-parallel algorithms---a work
-stealing queue and breadth-first graph search---to introduce the
-industry-standard OpenCL programming model on which we base cooperative
-kernels.
+We provide background on the industry-standard OpenCL programming
+model on which we base cooperative kernels (\mysec\ref{sec:opencl}),
+and illustrate OpenCL using two irregular data-parallel algorithms---a
+work stealing queue and breadth-first graph search---that also
+pinpoint the problems associated with unfair scheduling of workgroups
+and motivate our cooperative threads approach (\mysec\ref{sec:openclexamples}.
+
+\subsection{OpenCL Background}
 
 % \paragraph{OpenCL concepts}
 % An OpenCL program is typically executed by many \emph{threads} running
@@ -396,55 +404,6 @@ kernels.
 % storage and cannot be shared between threads. These concepts are
 % illustrated over the two examples.
 
-\begin{figure}
-
-\begin{lstlisting}
-kernel work_stealing(global Task *pools) {
-  while (more_work(pools)) {
-    int pool_id = get_group_id();
-    Task *t = pop_or_steal(pools, pool_id);
-    if (t) {
-      // task processing may create more work
-      process_task(t, pools, pool_id);
-    }
-  }
-}
-\end{lstlisting}
-
-\caption{An excerpt of a work stealing algorithm in OpenCL}\label{fig:workstealing}
-\end{figure}
-
-\begin{figure}
-
-\begin{lstlisting}
-kernel graph_app(global graph *g, 
-                 global nodes *n0, global nodes *n1) {
-
-  int level = 0;
-  global nodes * in_nodes = n0;
-  global nodes * out_nodes = n1;
-
-  int tid = get_global_id();
-  int stride = get_global_size();
-
-(*@\label{line:graph:iterate}@*)  while(in_nodes.size > 0) {
-
-    for (int i = tid; i < nodes.size; i += stride) {
-      process_node(g, in_nodes[i], out_nodes, level);
-    }
-
-(*@\label{line:graph:swap}@*)    swap(in_nodes, out_nodes);
-(*@\label{line:graph:gb1}@*)    global_barrier();
-(*@\label{line:graph:reset}@*)    reset(out_nodes);
-    level++;
-(*@\label{line:graph:gb2}@*)    global_barrier();
-  }
-}
-\end{lstlisting}
-\caption{An OpenCL graph traversal algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
-\end{figure}
-
-\paragraph{OpenCL kernels}
 
 An OpenCL program is divided into \emph{host} and \emph{device}
 components.  A host application runs on the CPU and launches one or
@@ -469,154 +428,36 @@ e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
 of threads per workgroup and the number of workgroups are obtained via
 $\getlocalsize()$ and $\getnumgroups()$.  A thread's local and global
 id are related via the equation $\getglobalid() = \getgroupid() \times
-\getlocalsize() + \getlocalid()$.
+\getlocalsize() + \getlocalid()$.  The total number of threads executing the kernel is given by $\getglobalsize()$, which is equal to $\getlocalsize()\times\getnumgroups()$.
 
-\ADComment{Maybe cut?} Within a workgroup, threads may also be
-organised into \emph{subgroups} (termed \emph{warps} and
-\emph{wavefronts} on NVIDIA and AMD architectures, respectively).
+The execution of all threads in a workgroup can be synchronised via a
+workgroup barrier, which also ensures memory consistency.  This
+barrier is a \emph{workgroup-level} function: it must be encountered
+uniformly by all or none of the threads of a workgroup, thus can only
+appear in conditional code if all threads in a workgroup that reach
+the barrier agree on the guards of all enclosing conditional
+statements.  As discussed below, a \emph{global} barrier
+(synchronising all threads running a kernel) is \emph{not} provided as
+a primitive.
 
 \paragraph{Memory spaces and memory model}
-An OpenCL kernel has access to four memory spaces.  Shared virtual
-memory (SVM) is accessible to all threads, and to the host
-application.  Global memory is shared among all threads executing a
+An OpenCL kernel has access to four memory spaces.  \emph{Shared virtual
+memory} (SVM) is accessible to all threads and the host application concurrently.  \emph{Global} memory is shared among all threads executing a
 kernel, but can only be safely accessed by the host application before
-or after kernel execution.  Local memory is shared among all threads
-in the same workgroup: each workgroup has its own portion of local
-memory, which can be used for fast intra-workgroup communication.
-Each thread has an allocation of very fast private memory, where
+or after kernel execution.  Each workgroup has its own portion of \emph{local},
+which can be used for fast intra-workgroup communication, and every thread has
+an allocation of very fast \emph{private} memory, where
 function-local variables are allocated.
 
 Fine-grained communication between threads, and also with the host in
 the case of SVM, is enabled via a set of atomic data types and
-operations, based on the C11 memory model~\cite{...}.  In particular,
+operations, based on the C11 memory model~\cite{...}.  \ADComment{Could cut:} In particular,
 atomic SVM operations enable fine-grained communication between host
 and device.  Our implementation of cooperative kernels
 (Section~\ref{sec:implementation}) depends on this recent OpenCL
 feature.
 
-\paragraph{Work stealing example}
-Figure~\ref{fig:workstealing} shows a simplified version of an OpenCL
-kernel that uses a work stealing queue.
-%
-The work stealing paradigm is useful when a computation can be split into multiple
-tasks that can be processed independently, but where the number of
-tasks is not known ahead of time because processing a given task may
-create an arbitrary number of new tasks. Work stealing enables dynamic
-balancing of tasks across several processing units, OpenCL workgroups
-in our case. Each workgroup has an associated task pool from which it
-obtains tasks to process, and to which it stores newly created
-tasks. When a workgroup's pool becomes empty, a workgroup---rather
-than terminating---tries to \emph{steal} a task from an other
-pool. Hence, workgroups keep on processing tasks until all the work is
-done.
-
-\myfiglong\ref{fig:workstealing} illustrates an OpenCL implementation
-of a work stealing algorithm. All threads start their execution at the
-function marked with the $\mathsf{kernel}$ keyword. They receive a
-pointer to the task pools, which reside in global memory, and which
-were initialized by the host program beforehand to contain the initial
-tasks. Each thread can identify the workgroup it belongs to via the
-function $\getgroupid()$.  Here the group id is stored into the
-variable $\mathsf{pool\_id}$ (which is, by default, in private memory)
-and used to access the relevant task pool. The
-$\mathsf{pop\_or\_steal}$ function is called by all threads of a
-workgroup, although inside only the thread with a local id equal to
-$0$, also called the \emph{master thread} of the workgroup,
-\ADComment{Hugues, I changed; please check:} will try to pop a task
-from the workgroup's pool, or steal a task from a different pool. The
-master thread uses local memory inside $\mathsf{pop\_or\_steal}$ to
-ensure that the returned value is valid for all threads of its
-workgroup. If a task was obtained, then all threads of the workgroup
-participate in the processing of the task inside the
-$\mathsf{process\_task}$ function. \HEComment{Manage to say that a
-  task is considered big enough to benefit from parallel computation}
-\ADComment{I think that would be too much detail given the space we
-  have, so I would not delve into this. Remove both comments if you
-  agree.} Processing this task may lead to the creation of further
-tasks, which the master thread will push to the workgroup's pool.
-
-Although not depicted here, concurrent accesses to each pool inside
-$\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
-mutex which is implemented using atomic compare and swap operations on
-global memory.  As a result, the kernel presents two opportunities for
-spin-waiting: spinning to obtain a mutex, and spinning in the main
-kernel loop to obtain a task to process.  The algorithm thus depends
-on a fair scheduler, which, as discussed in Section~\ref{sec:intro},
-is not provided by current GPU programming models.  In
-Section~\ref{sec:cooperativeexamples} we show how the example can be
-updated to use our cooperative threads programming model to resolve
-the scheduling issue.
-
-\ADComment{Describe some
-  aspects of the example, saying that the global barrier is not a
-  primitive, and can be coded up using the memory model but is not
-  safe due to the execution model.  Make it clear that the barrier
-  uses busy-waiting.}
-
-\paragraph{Graph traversal example} Figure~\ref{fig:graphsearch} shows the
-skeleton of a frontier based graph traversal algorithm (this approach
-has been shown to be efficient on GPUs in~\ref{...}). The kernel is
-given three arguments in global memory: a graph structure, and two
-arrays that can contain graph nodes. Initially, {\tt n0} contains the
-starting nodes to process. Threads keep three local variables: {\tt
-  level} which indicates the frontier level which is currently being
-processed, {\tt in\_nodes} and {\tt out\_nodes} which point to
-distinct node arrays. {\tt in\_nodes} contains the nodes to be
-processed for the current frontier, while {\tt out\_nodes} contains
-the nodes to be processed during the next frontier.
-
-The application iterates as long as the current frontier contains
-nodes to process (line~\ref{line:graph:iterate}). At each frontier,
-the nodes to be processed are evenly distributed between the executing
-threads. This is done through \emph{stride} based processing. A thread
-retrieves its global thread id and the total number of threads
-(obtained through the {\tt get\_global\_id()} and {\tt
-  get\_global\_size()} OpenCL primitives). A thread then processes
-each node associated with id (i.e.\ indices with its thread id value
-added to any integer multiple of the total number of threads up to the
-list size). A thread processes a node via the {\tt process\_node}
-function, which may (a) push nodes to process in the next frontier to
-the {\tt out\_nodes} list and (b) use the frontier level in
-computation. After processing the frontier, the threads swap their
-local node array pointers (line~\ref{line:graph:swap}), i.e.\ the {\tt
-  out\_nodes} of the current frontier becomes the input of the next
-frontier.
-
-At this point, the GPU threads must wait for all other threads to
-finishing processing the frontier before they can continue. To achieve
-this, we use a global barrier construct
-(line~\ref{line:graph:gb1}). After all threads reach this point, the
-output node array is reset (line~\ref{line:graph:reset}) and the level
-is incremented. Again, threads must wait until the output node is
-reset at a global barrier (line~\ref{line:graph:gb2}). At this point
-threads can continue to the next frontier.
-
-The global barrier used in this application is not provided as a GPU
-primitive, though many previous works have shown that such a global
-barrier can be implemented~\cite{...}. These implementations use well
-defined atomic memory operations to ensure memory consistency and use
-spinning to ensure threads wait at the barrier for the remaining
-threads to reach the barrier. Even though such barriers appear to run
-reliably on current GPUs, they violate GPU language specifications,
-which do not provide fair scheduling of workgroups. These barriers
-require fair workgroup scheduling in order to function correctly. That
-is, \emph{all} workgroups must be fairly scheduled in order to reach
-the barrier, otherwise, the workgroups waiting at the barrier will not
-make progress.
-
-
 \paragraph{Execution model}
-
-Two barrier primitives are provided in OpenCL.  A workgroup barrier
-synchronises all threads in a workgroup and ensures memory
-consistency.  This barrier is a \emph{workgroup-level} function: it
-must be encountered uniformly by all or none of the threads of a
-workgroup, thus can only appear in conditional code if all threads in
-a workgroup that reach the barrier agree on the guards of all
-enclosing conditional statements.  A subgroup barrier works
-analogously at the subgroup level.  As discussed below, a
-\emph{global} barrier (synchronising all threads running a kernel) is
-not provided as a primitive.
 
 OpenCL specifically makes no guarantees about fair scheduling between
 workgroups executing the same kernel, stating~\cite{...}: \emph{``A
@@ -635,24 +476,166 @@ one-way communication is not sufficient so support either the
 work stealing or graph application examples of
 Figures~\ref{fig:workstealing} and \ref{fig:graphsearch}. As described
 above, both require \emph{symmetric} communication between
-threads. \ADComment{Tyler, can you state the HSA guarantee?},
-\TSComment{How is this?}~\cite{...}.
-
-Revisiting the examples of Figures~\ref{fig:workstealing}
-and~\ref{fig:graphsearch}: the mutex function of
-Figure~\ref{fig:workstealing} will cause starvation if a workgroup
-that holds the mutex is not scheduled again and so does not release
-the mutex.  A similar issue affects the global barrier function of
-Figure~\ref{fig:graphsearch}.  Because the barrier is implemented
-using busy-waiting, a set of workgroups waiting at the barrier may be
-continuously scheduled, starving a workgroup that has not yet arrived
-at the barrier and meaning that no workgroup proceeds past the
-barrier.
+threads.
 
 
+\subsection{Motivating Examples}\label{sec:openclexamples}
+
+\begin{figure}
+
+\begin{lstlisting}
+kernel work_stealing(global Task * pools) {
+  while (more_work(pools)) {
+    int pool_id = get_group_id();
+    Task * t = pop_or_steal(pools, pool_id);
+    if (t) {
+      // task processing may create more work
+      process_task(t, pools, pool_id);
+    }
+  }
+}
+\end{lstlisting}
+
+\caption{An excerpt of a work stealing algorithm in OpenCL}\label{fig:workstealing}
+\end{figure}
+
+\begin{figure}
+
+\begin{lstlisting}
+kernel graph_app(global graph * g, 
+                 global nodes * n0, global nodes * n1) {
+  int level = 0;
+  global nodes * in_nodes = n0;
+  global nodes * out_nodes = n1;
+
+  int tid = get_global_id();
+  int stride = get_global_size();
+
+(*@\label{line:graph:iterate}@*)  while(in_nodes.size > 0) {
+
+    for (int i = tid; i < nodes.size; i += stride) {
+      process_node(g, in_nodes[i], out_nodes, level);
+    }
+
+(*@\label{line:graph:swap}@*)    swap(in_nodes, out_nodes);
+(*@\label{line:graph:gb1}@*)    global_barrier();
+(*@\label{line:graph:reset}@*)    reset(out_nodes);
+    level++;
+(*@\label{line:graph:gb2}@*)    global_barrier();
+  }
+}
+\end{lstlisting}
+\caption{An OpenCL graph traversal algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
+\end{figure}
+
+\paragraph{Work stealing example}
+%
+The work stealing paradigm is useful when a computation can be split into multiple
+tasks that can be processed independently, but where the number of
+tasks is not known ahead of time because processing a given task may
+create an arbitrary number of new tasks. Work stealing enables dynamic
+balancing of tasks across several processing units, OpenCL workgroups
+in our case. Each workgroup has an associated task pool from which it
+obtains tasks to process, and to which it stores newly created
+tasks. When a workgroup's pool becomes empty, a workgroup---rather
+than terminating---tries to \emph{steal} a task from an other
+pool. Workgroups keep on processing tasks until all the work is
+done.
+
+\myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
+kernel that uses a work stealing queue. All threads start their execution at the
+function marked with the $\mathsf{kernel}$ keyword. They receive a
+pointer to the task pools, which reside in global memory, and which
+were initialized by the host program beforehand to contain the initial
+tasks. Each thread can identify the workgroup it belongs to via the
+function $\getgroupid()$.  Here the group id is stored into the
+variable $\mathsf{pool\_id}$ (which is, by default, in private memory)
+and used to access the relevant task pool. The
+$\mathsf{pop\_or\_steal}$ function is called by all threads of a
+workgroup.  Inside $\mathsf{pop\_or\_steal}$ only the thread with a local id equal to
+$0$, also called the \emph{master thread} of the workgroup,
+\ADComment{Hugues, I changed; please check:} will try to pop a task
+from the workgroup's pool, or steal a task from a different pool. The
+master thread uses local memory inside $\mathsf{pop\_or\_steal}$ to
+ensure that the returned value is valid for all threads of its
+workgroup. If a task was obtained, then all threads of the workgroup
+participate in the processing of the task via the
+$\mathsf{process\_task}$ function. \HEComment{Manage to say that a
+  task is considered big enough to benefit from parallel computation}
+\ADComment{I think that would be too much detail given the space we
+  have, so I would not delve into this. Remove both comments if you
+  agree.} Processing this task may lead to the creation of further
+tasks, which the master thread will push to the workgroup's pool.
+
+Although not depicted here, concurrent accesses to each pool inside
+$\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
+mutex, implemented using atomic compare and swap operations on
+global memory.  As a result, the kernel presents two opportunities for
+spin-waiting: spinning to obtain a mutex, and spinning in the main
+kernel loop to obtain a task to process.  The algorithm thus depends
+on a fair scheduler, which, as discussed in Section~\ref{sec:intro},
+is not provided by current GPU programming models.
+
+\paragraph{Graph traversal example} Figure~\ref{fig:graphsearch} shows the
+skeleton of a frontier-based graph traversal algorithm; such algorithms have
+been shown to be execute efficiently on GPUs~\cite{...}.
+The kernel is
+given three arguments in global memory: a graph structure, and two
+arrays that can contain graph nodes. Initially, $\keyword{n0}$ contains the
+starting nodes to process. Threads keep three local variables: $\keyword{level}$, which indicates the frontier level currently being
+processed, and $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$, which point to
+distinct node arrays. The nodes to be
+processed for the current frontier are contained in $\keyword{in\_nodes}$, while $\keyword{out\_nodes}$ contains
+the nodes to be processed during the next frontier.
+
+The application iterates as long as the current frontier contains
+nodes to process (line~\ref{line:graph:iterate}). At each frontier,
+the nodes to be processed are evenly distributed between the executing
+threads. This is done through \emph{stride} based processing. A thread
+retrieves its global thread id and the total number of threads
+(obtained through the $\getglobalid()$ and $\getglobalsize()$ primitives). A thread then processes
+each node associated with its id, i.e.\ nodes at indices that are a multiple of the total number of threads, plus the thread's id. A thread processes a node via the $\keyword{process\_node}$
+function, which may (a) push nodes to process in the next frontier to
+$\keyword{out\_nodes}$ and (b) use the current frontier, $\keyword{level}$, in
+the computation. \ADComment{Tyler: should swap take the addresses of the pointers?} After processing the frontier, the threads swap their
+local node array pointers (line~\ref{line:graph:swap}), i.e.\ the $\keyword{out\_nodes}$ of the current frontier becomes the $\keyword{in\_nodes}$ of the next
+frontier.
+
+At this point, the GPU threads must wait for all other threads to
+finishing processing the frontier before they can continue. To achieve
+this, we use a global barrier construct
+(line~\ref{line:graph:gb1}). After all threads reach this point, the
+output node array is reset (line~\ref{line:graph:reset}) and the level
+is incremented. Again, threads must wait until the output node is
+reset at a global barrier (line~\ref{line:graph:gb2}). At this point
+threads can continue to the next frontier.
+
+The global barrier used in this application is not provided as a GPU
+primitive, though many previous works have shown that such a global
+barrier can be implemented~\cite{...}. These implementations use well
+defined atomic memory operations to ensure memory consistency, and
+employ spinning to ensure threads wait at the barrier until all
+threads have arrived.  This spinning behaviour requires fair
+scheduling between workgroups for the barrier to operate correctly,
+and as a result the barrier is \emph{not} guaranteed to work correctly
+under current GPU programming models.  Such barriers appear to run
+reliably on current GPUs for kernels that are executed with no more
+workgroups than there are compute units; this is due to the fairness
+of the occupancy-bound execution model that current GPUs appear to
+provide.  But, as discussed in \mysec\ref{sec:intro}, this
+occupancy-bound model is not mandated by language standards or vendor
+implementations, and is unlikely to be guaranteed in the future.
+
+In Section~\ref{sec:cooperativeexamples} we show how the work stealing
+and graph traversal examples of Figures~\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
+updated to use our cooperative kernels programming model to resolve
+the scheduling issue.
 
 
-\section{The Cooperative Kernels Programming Model}\label{sec:cooperativekernels}
+
+
+
+\section{Cooperative Kernels}\label{sec:cooperativekernels}
 
 We describe our cooperative kernels programming model as an extension
 to OpenCL.  However, the cooperative kernels concept is more general,
@@ -676,7 +659,7 @@ run on current GPU platforms
 
 \subsection{Semantics of Cooperative Kernels}\label{sec:semantics}
 
-As with a regular OpenCL kernel (see Section~\ref{sec:background}), a
+As with a regular OpenCL kernel (see Section~\ref{sec:opencl}), a
 cooperative kernel is launched by the host application.  The host
 application passes parameters to the kernel and specifies a desired
 number of workgroups, each consisting of a specified number of
@@ -693,7 +676,7 @@ inter-workgroup synchronisation.
 
 We now explain the semantics of these language extensions, after which
 we explain how the work stealing and graph traveral algorithms of
-Section~\ref{sec:background} can be turned into cooperative kernels
+Section~\ref{sec:openclexamples} can be turned into cooperative kernels
 that use the extensions.  We present the semantics intuitively, using English.
 In Appendix~\ref{appendix:semantics} we present an abstract operational semantics for our language extensions in a simple GPU-like programming model.
 
@@ -724,7 +707,7 @@ integer between $1$ and $N$.  The initial active workgroups have
 consecutive workgroup ids in the range $[0, M-1]$.
 
 The $\getgroupid()$ function retrieves the id of a workgroup as usual
-(see Section~\ref{sec:background}).  When executed by a cooperative
+(see Section~\ref{sec:opencl}).  When executed by a cooperative
 kernel, $\getnumgroups()$ returns $M$, the \emph{current} number of
 active workgroups.  This is in contrast to $\getnumgroups()$ for
 regular kernels, which returns the fixed number of workgroups that
@@ -753,7 +736,7 @@ these for work stealing and graph traversal below.
 Similar to the OpenCL workgroup $\mathsf{barrier}$ primitive,
 $\offerkill$, is a workgroup-level function---it must be encountered
 uniformly by all threads in a workgroup (see
-Section~\ref{sec:background}).
+Section~\ref{sec:opencl}).
 
 Suppose a workgroup with id $m$ executes $\offerkill$.  If $m < M-1$
 or $M=1$, i.e.\ the workgroup's id is not the largest among the active
@@ -929,7 +912,7 @@ kernel graph_app(global graph *g,
 \caption{Cooperative kernel port for Figure~\ref{fig:graphsearch}}\label{fig:cgraphsearch}
 \end{figure}
 
-\ADComment{TODO.  We want to show the examples from Section~\ref{sec:background} ported to use cooperative kernels.  We want to make it clear that it is easy to place the primitives.}
+\ADComment{TODO.  We want to show the examples from Section~\ref{sec:openclexamples} ported to use cooperative kernels.  We want to make it clear that it is easy to place the primitives.}
 
 In practice, we found that transforming traditional blocking GPU
 kernels into cooperative kernels was straightforward. For example,
