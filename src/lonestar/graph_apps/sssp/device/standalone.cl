@@ -137,6 +137,7 @@ uint processedge2(__global uint *dist, uint iteration, uint edge, uint src,
   return 0;
 }
 
+// Maybe more ckill and cfork could be added in here?
 uint processnode2(__global Discovery_ctx *__d_ctx, __global uint *dist,
                   __global int *in_wl, __global int *in_index,
                   __global int *out_wl, __global int *out_index,

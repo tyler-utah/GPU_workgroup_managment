@@ -53,6 +53,8 @@ void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
     }
   }
 
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
   if (get_local_id(0) == 0) {
     int finished = atomic_fetch_add(counter, 1);
     if (finished == (k_get_num_groups(__k_ctx) - 1)) {
@@ -68,7 +70,12 @@ __global int __junk_global;
 
 // mega_kernel: combines the color1 and color2 kernels using an
 // inter-workgroup barrier and the discovery protocol
-void color_combined(__global int *row,          // 0
+void color_combined(__global int *aA, const int aA_row, const int aA_col,
+                    __global int *aB, const int aB_row, const int aB_col,
+                    __global int *aC, __global atomic_int *acounter,
+                    __global atomic_int *ahash,
+
+                    __global int *row,          // 0
                     __global int *col,          // 1
                     __global float *node_value, // 2
                     __global int *color_array,  // 3
@@ -206,14 +213,20 @@ void color_combined(__global int *row,          // 0
 kernel void mega_kernel(__global int *A, const int A_row, const int A_col,
                         __global int *B, const int B_row, const int B_col,
                         __global int *C, __global atomic_int *counter,
-                        __global atomic_int *hash, __global int *row, // 0
-                        __global int *col,                            // 1
-                        __global float *node_value,                   // 2
-                        __global int *color_array,                    // 3
-                        __global int *stop1,                          // 4
-                        __global int *stop2,                          // 5
-                        __global float *max_d,                        // 6
-                        const int num_nodes,                          // 7
+                        __global atomic_int *hash, __global int *aA,
+                        const int aA_row, const int aA_col, __global int *aB,
+                        const int aB_row, const int aB_col, __global int *aC,
+                        __global atomic_int *acounter,
+                        __global atomic_int *ahash,
+
+                        __global int *row,          // 0
+                        __global int *col,          // 1
+                        __global float *node_value, // 2
+                        __global int *color_array,  // 3
+                        __global int *stop1,        // 4
+                        __global int *stop2,        // 5
+                        __global float *max_d,      // 6
+                        const int num_nodes,        // 7
                         const int num_edges, __global IW_barrier *bar,
                         __global Discovery_ctx *d_ctx,
                         __global Kernel_ctx *non_persistent_kernel_ctx,
@@ -223,7 +236,8 @@ kernel void mega_kernel(__global int *A, const int A_row, const int A_col,
   matmult(A, A_row, A_col, B, B_row, B_col, C, counter, hash,                  \
           non_persistent_kernel_ctx)
 #define PERSISTENT_KERNEL                                                      \
-  color_combined(row, col, node_value, color_array, stop1, stop2, max_d,       \
+  color_combined(aA, aA_row, aA_col, aB, aB_row, aB_col, aC, acounter, ahash,  \
+                 row, col, node_value, color_array, stop1, stop2, max_d,       \
                  num_nodes, num_edges, bar, persistent_kernel_ctx, s_ctx,      \
                  scratchpad, &r_ctx_local)
 #include "main_device_body.cl"

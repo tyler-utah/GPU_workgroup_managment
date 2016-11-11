@@ -53,6 +53,8 @@ void matmult(__global int *A, const int A_row, const int A_col, __global int *B,
     }
   }
 
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
   if (get_local_id(0) == 0) {
     int finished = atomic_fetch_add(counter, 1);
     if (finished == (k_get_num_groups(__k_ctx) - 1)) {
@@ -198,6 +200,7 @@ uint processedge2(__global uint *dist, uint iteration, uint edge, uint src,
   return 0;
 }
 
+// Maybe more ckill and cfork could be added in here?
 uint processnode2(__global IW_barrier *__bar, __global Kernel_ctx *__k_ctx,
                   __global uint *dist, __global int *in_wl,
                   __global int *in_index, __global int *out_wl,
