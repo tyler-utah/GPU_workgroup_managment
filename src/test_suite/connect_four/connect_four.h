@@ -270,55 +270,55 @@ bool check_persistent_task(CL_Execution *exec) {
   print_board(h_board);
 
   // Nodes
-  Node *h_nodes = (Node *)calloc(num_node, sizeof(Node));
-  if (h_nodes == NULL) {
-    cout << "calloc failed" << endl;
-    exit(EXIT_FAILURE);
-  }
-  err = exec->exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, num_node * sizeof(Node), h_nodes);
-  check_ocl(err);
+  // Node *h_nodes = (Node *)calloc(num_node, sizeof(Node));
+  // if (h_nodes == NULL) {
+  //   cout << "calloc failed" << endl;
+  //   exit(EXIT_FAILURE);
+  // }
+  // err = exec->exec_queue.enqueueReadBuffer(d_nodes, CL_TRUE, 0, num_node * sizeof(Node), h_nodes);
+  // check_ocl(err);
 
-  limit = num_node < 70 ? num_node : 70;
-  cout << "Nodes (limited to " << limit << "): " << endl;
-  for (int i = 0; i < limit; i++) {
-    printf("   [%2.2d]", i);
-    printf(" l:%+d", h_nodes[i].level);
-    printf(" p:%+2.2d", h_nodes[i].parent);
-    printf(" v:%+3.3d", h_nodes[i].value);
-    // moves
-    printf(" m[");
-    for (int j = 0; j < h_nodes[i].level; j++) {
-      printf(" %d", h_nodes[i].moves[j]);
-    }
-    printf(" ]\n");
-  }
-  cout << endl;
+  // limit = num_node < 70 ? num_node : 70;
+  // cout << "Nodes (limited to " << limit << "): " << endl;
+  // for (int i = 0; i < limit; i++) {
+  //   printf("   [%2.2d]", i);
+  //   printf(" l:%+d", h_nodes[i].level);
+  //   printf(" p:%+2.2d", h_nodes[i].parent);
+  //   printf(" v:%+3.3d", h_nodes[i].value);
+  //   // moves
+  //   printf(" m[");
+  //   for (int j = 0; j < h_nodes[i].level; j++) {
+  //     printf(" %d", h_nodes[i].moves[j]);
+  //   }
+  //   printf(" ]\n");
+  // }
+  // cout << endl;
 
   // print task pools and head
-  err = exec->exec_queue.enqueueReadBuffer(d_task_pool, CL_TRUE, 0, num_workgroups * FLAGS_pool_size * sizeof(Task), h_task_pool);
-  check_ocl(err);
+  // err = exec->exec_queue.enqueueReadBuffer(d_task_pool, CL_TRUE, 0, num_workgroups * FLAGS_pool_size * sizeof(Task), h_task_pool);
+  // check_ocl(err);
 
-  cl_int *h_task_pool_head = (cl_int *)calloc(num_workgroups, sizeof(cl_int));
-  if (h_task_pool_head == NULL) {
-    cout << "calloc failed" << endl;
-    exit(EXIT_FAILURE);
-  }
-  err = exec->exec_queue.enqueueReadBuffer(d_task_pool_head, CL_TRUE, 0, num_workgroups * sizeof(cl_int), h_task_pool_head);
-  check_ocl(err);
+  // cl_int *h_task_pool_head = (cl_int *)calloc(num_workgroups, sizeof(cl_int));
+  // if (h_task_pool_head == NULL) {
+  //   cout << "calloc failed" << endl;
+  //   exit(EXIT_FAILURE);
+  // }
+  // err = exec->exec_queue.enqueueReadBuffer(d_task_pool_head, CL_TRUE, 0, num_workgroups * sizeof(cl_int), h_task_pool_head);
+  // check_ocl(err);
 
-  limit = FLAGS_pool_size < 20 ? FLAGS_pool_size : 20;
-  printf("Pools (size limited to %d):\n", limit);
-  for (int i = 0; i < num_workgroups; i++) {
-    printf("Pool %2.2d (head %2.2d): ", i, h_task_pool_head[i]);
-    for (int j = 0; j < limit; j++) {
-      printf("%s", (j == h_task_pool_head[i]) ? "|" : " ");
-      printf("%3.3d", h_task_pool[(i * FLAGS_pool_size) + j]);
-    }
-    if (FLAGS_pool_size >= limit) {
-      printf(" ...");
-    }
-    printf("\n");
-  }
+  // limit = FLAGS_pool_size < 20 ? FLAGS_pool_size : 20;
+  // printf("Pools (size limited to %d):\n", limit);
+  // for (int i = 0; i < num_workgroups; i++) {
+  //   printf("Pool %2.2d (head %2.2d): ", i, h_task_pool_head[i]);
+  //   for (int j = 0; j < limit; j++) {
+  //     printf("%s", (j == h_task_pool_head[i]) ? "|" : " ");
+  //     printf("%3.3d", h_task_pool[(i * FLAGS_pool_size) + j]);
+  //   }
+  //   if (FLAGS_pool_size >= limit) {
+  //     printf(" ...");
+  //   }
+  //   printf("\n");
+  // }
 
   // Next move value
   cl_int *h_next_move_value = (cl_int *)calloc(NUM_COL, sizeof(cl_int));
@@ -341,16 +341,16 @@ bool check_persistent_task(CL_Execution *exec) {
   printf("Root done: %d\n", h_root_done);
 
   // debug
-  err = exec->exec_queue.enqueueReadBuffer(d_debug_board, CL_TRUE, 0, board_mem_size, h_board);
-  check_ocl(err);
-  cout << "Debug board" << endl;
-  print_board(h_board);
+  // err = exec->exec_queue.enqueueReadBuffer(d_debug_board, CL_TRUE, 0, board_mem_size, h_board);
+  // check_ocl(err);
+  // cout << "Debug board" << endl;
+  // print_board(h_board);
 
-  cl_int h_debug_int;
-  err = exec->exec_queue.enqueueReadBuffer(d_debug_int, CL_TRUE, 0, sizeof(cl_int), &h_debug_int);
-  check_ocl(err);
+  // cl_int h_debug_int;
+  // err = exec->exec_queue.enqueueReadBuffer(d_debug_int, CL_TRUE, 0, sizeof(cl_int), &h_debug_int);
+  // check_ocl(err);
 
-  cout << "Debug int: " << h_debug_int << endl;
+  // cout << "Debug int: " << h_debug_int << endl;
 
 }
 
