@@ -484,13 +484,13 @@ threads.
 \begin{figure}
 
 \begin{lstlisting}
-kernel work_stealing(global Task * pools) {
+(*@\label{line:wksteal:kernelfunc}@*) kernel work_stealing(global Task * pools) {
   while (more_work(pools)) {
-    int pool_id = get_group_id();
-    Task * t = pop_or_steal(pools, pool_id);
+(*@\label{line:wksteal:getgroupid}@*)    int pool_id = get_group_id();
+(*@\label{line:wksteal:poporsteal}@*)    Task * t = pop_or_steal(pools, pool_id);
     if (t) {
       // task processing may create more work
-      process_task(t, pools, pool_id);
+(*@\label{line:wksteal:processtask}@*)      process_task(t, pools, pool_id);
     }
   }
 }
@@ -530,38 +530,39 @@ kernel graph_app(global graph * g,
 
 \paragraph{Work stealing example}
 %
-The work stealing paradigm is useful when a computation can be split into multiple
-tasks that can be processed independently, but where the number of
-tasks is not known ahead of time because processing a given task may
-create an arbitrary number of new tasks. Work stealing enables dynamic
-balancing of tasks across several processing units, OpenCL workgroups
-in our case. Each workgroup has an associated task pool from which it
-obtains tasks to process, and to which it stores newly created
-tasks. When a workgroup's pool becomes empty, a workgroup---rather
-than terminating---tries to \emph{steal} a task from an other
-pool. Workgroups keep on processing tasks until all the work is
-done.
+The work stealing paradigm is useful when a computation can be split
+into multiple tasks that can be processed independently, but where the
+number of tasks is not known ahead of time because processing a given
+task may create an arbitrary number of new tasks. Work stealing enables
+dynamic balancing of tasks across several processing units, OpenCL
+workgroups in our case. Each workgroup has an associated task pool from
+which it obtains tasks to process, and to which it stores newly created
+tasks. When a workgroup's pool becomes empty, a workgroup---rather than
+terminating---tries to \emph{steal} a task from an other
+pool. Workgroups keep on processing tasks until all the work is done.
 
 \myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
-kernel that uses a work stealing queue. All threads start their execution at the
-function marked with the $\mathsf{kernel}$ keyword. They receive a
-pointer to the task pools, which reside in global memory, and which
-were initialized by the host program beforehand to contain the initial
-tasks. Each thread can identify the workgroup it belongs to via the
-function $\getgroupid()$.  Here the group id is stored into the
-variable $\mathsf{pool\_id}$ (which is, by default, in private memory)
-and used to access the relevant task pool. The
-$\mathsf{pop\_or\_steal}$ function is called by all threads of a
-workgroup.  Inside $\mathsf{pop\_or\_steal}$ only the thread with a local id equal to
-$0$, also called the \emph{master thread} of the workgroup,
-will try to pop a task
-from the workgroup's pool, or steal a task from a different pool. The
-master thread uses local memory inside $\mathsf{pop\_or\_steal}$ to
-ensure that the returned value is valid for all threads of its
-workgroup. If a task was obtained, then all threads of the workgroup
-participate in the processing of the task via the
-$\mathsf{process\_task}$ function.  Processing this task may lead to the creation of further
-tasks, which the master thread will push to the workgroup's pool.
+kernel that uses a work stealing queue. All threads start their
+execution at the function marked with the $\mathsf{kernel}$ keyword
+(line~\ref{line:wksteal:kernelfunc}). They receive a pointer to the task
+pools, which reside in global memory, and which were initialized by the
+host program beforehand to contain the initial tasks. Each thread can
+identify the workgroup it belongs to via the function $\getgroupid()$
+(line~\ref{line:wksteal:getgroupid}). Here the group id is stored into
+the variable $\mathsf{pool\_id}$ (which is, by default, in private
+memory) and used to access the relevant task pool. The
+$\mathsf{pop\_or\_steal}$ function (line~\ref{line:wksteal:poporsteal})
+is called by all threads of a workgroup.  Inside
+$\mathsf{pop\_or\_steal}$ only the thread with a local id equal to $0$,
+also called the \emph{master thread} of the workgroup, will try to pop a
+task from the workgroup's pool, or steal a task from a different
+pool. The master thread uses local memory inside
+$\mathsf{pop\_or\_steal}$ to ensure that the returned value is valid for
+all threads of its workgroup. If a task was obtained, then all threads
+of the workgroup participate in the processing of the task via the
+$\mathsf{process\_task}$ function (line~\ref{line:wksteal:processtask}).
+Processing this task may lead to the creation of further tasks, which
+the master thread will push to the workgroup's pool.
 
 Although not depicted here, concurrent accesses to each pool inside
 $\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
