@@ -979,7 +979,7 @@ $M$) may change after each resizing barrier
 call. To fix this, we re-distribute the work after each resizing
 barrier call by recomputing the thread id and stride
 (lines~\ref{line:cgraph:rechunking1} and
-\ref{line:cgraph:rechunking2}).  This example exploits the fact that the cooperative kernel does not issue $\offerkill$ nor $\offerfork$ directly: \ADComment{Actually I'm confused and need to discuss :-)}
+\ref{line:cgraph:rechunking2}).  \ADComment{Tyler: can you please add the line number references in the following?} This example exploits the fact that the cooperative kernel does not issue $\offerkill$ nor $\offerfork$ directly: the value of $\keyword{stride}$ obtained from $\getglobalsize()$ at line~\ref{...} is stable until the next resizing barrier at line~\ref{...}, and in particular can be safely used inside the $\keyword{for}$ loop.
 
 \begin{figure}
 
@@ -1036,7 +1036,7 @@ study, but more generally for at least these two patterns of irregular
 algorithm.
 
 
-\subsection{Non-Functional Requirements of Cooperative Kernels}\label{sec:nonfunctional}
+\subsection{Non-Functional Requirements}\label{sec:nonfunctional}
 
 The semantics presented in \mysec\ref{sec:semantics} describe the envelope of
 behaviour that a developer of a cooperative kernel should be prepared
@@ -1062,7 +1062,7 @@ graphics rendering, may have soft real-time constraints, the scheduler
 relies on the cooperative kernel to execute $\offerkill$ sufficiently
 frequently that the scheduler can meet such real-time constraints.
 
-Using work stealing as an example: in the kernel of \myfig\ref{...}, a
+Using work stealing as an example: in the kernel of \myfig\ref{fig:workstealing-cooperative}, a
 workgroup offers itself to the scheduler after processing each task.
 If tasks turn out to be very short then it might turn out to be
 reasonable to invoke $\offerkill$ less frequently, after every $k$
@@ -1074,11 +1074,11 @@ achieve a higher rate of calls to $\offerfork$.
 Getting this non-functional requirement right depends on the
 constraints of the tasks to be co-scheduled with a cooperative kernel,
 on properties of the cooperative kernel itself, and on the efficiency
-of the GPU that is used for execution.  In \mysec\ref{...} we conduct
+of the GPU that is used for execution.  In \mysec\ref{sec:representativeworkloads} we conduct
 experiments to understand the response rate that would be required to
 co-schedule graphics rendering with a cooperative kernel in order to
 achieve a smooth frame rate, and we evalaute responsiveness in
-practice in \mysec\ref{...}.
+practice in \mysec\ref{sec:responsiveness}.
 
 \paragraph{Sufficient workgroups for the cooperative kernel}
 
@@ -1090,7 +1090,7 @@ other constraints allow.  As a result, the scheduler should generally
 accept an $\offerkill$ only if a comput unit is required for another
 task, and should respond positively to $\offerfork$ calls by
 scheduling new workgroups if compute units are available.  Our
-implementation of cooperative scheduling (\mysec\ref{ }) is as
+implementation of cooperative scheduling (\mysec\ref{sec:implementation}) is as
 generous as possible to the cooperative kernel in this regard.
 However, these are not hard-and-fast rules: a scheduler might employ
 heuristics based on historical workloads to avoid thrashing.  For
@@ -1112,24 +1112,30 @@ We opted for a semantics whereby only the active workgroup with the
 highest id can be killed.  This has an appealing property: it means
 that the ids of active workgroups are contiguous, which is important
 for processing of contiguous data.  The cooperative graph traversal
-algorithm of \myfig\ref{ } illustrates this: the algorithm is prepared
+algorithm of \myfig\ref{fig:cgraphsearch} illustrates this: the algorithm is prepared
 for $\getglobalsize()$ to change after each resizing barrier call, but
 depends on the fact that $\getglobalid()$ returns a contiguous range
 of thread ids.
 
-\ADComment{Got here.}
+\ADComment{TODO: Discuss downside, which is that if WG with high id is
+  doing a chunky task, a WG with a lower id may be ready to be killed
+  but cannot be taken.  Work stealing algorithms, which do not depend
+  on thread id, could take advantage of this.}
 
 
 \paragraph{Keeping one workgroup alive}
 
+\ADComment{TODO: To simplify programming, avoiding the need to wrap all kills in conditionals, we always keep one workgroup alive.  This fits well with our decision to kill WGs in decreasing order.}
 
-\ADComment{Explain here where we could have done things differently.}
+\ADComment{TODO: There are possible use cases for allowing all WGs to be killed, though, and we might wish to allow them.}
 
-\ADComment{What are difficulties with other alternatives and why we didn't use them.}
 
-\ADComment{Allowing zero to be killed; the following is some text we had before:}
+\paragraph{Transmission of partial state from a single thread}
 
-\paragraph{Keeping at least one workgroup alive}
+\ADComment{TODO: explain why we have thread 0 transmit its state, and transmitting only annotated variables.}
+
+
+\ADComment{Something old to maybe work in:}
 
 The programmer is responsible for keeping at least one workgroup alive.  In particular, if all workgroups execute $\offerkill$, the scheduler is at liberty to destroy all workgroups, causing the cooperative kernel to exit.  This can be guarded against by wrapping each $\offerkill$ call in a conditional statement:
 
@@ -1146,10 +1152,6 @@ acceptable for the kernel to exit, although desirable for some
 remaining computation to be performed if competing workloads allow it.
 
 
-
-\ADComment{Allowing arbitrary workgroups to be killed (not just the largest workgroup)}
-
-\ADComment{Having thread 0 transmit its state, and transmitting only annotated variables.}
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
 
@@ -1204,7 +1206,7 @@ remaining computation to be performed if competing workloads allow it.
 
 \ADComment{Tyler and Hugues, please write.}
 
-\subsection{Determining Representative Workloads}
+\subsection{Determining Representative Workloads}\label{sec:representativeworkloads}
 
 \ADComment{Better section title?}
 
@@ -1223,7 +1225,7 @@ remaining computation to be performed if competing workloads allow it.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
 
-\subsection{Performance and Responsiveness of Cooperative Scheduling}
+\subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
 \ADComment{Preamble}
 
