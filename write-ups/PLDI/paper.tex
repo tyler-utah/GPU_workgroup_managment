@@ -91,7 +91,8 @@
   columns=fullfelxible,
   %commentstyle=\rmfamily\itshape,
   morekeywords={barrier,kernel,global,__device__,__syncthreads,__global__,bool,then},
-  escapeinside={(*@}{@*)}
+  escapeinside={(*@}{@*)},
+  numbers=left
 }
 
 \newcommand{\transmit}{\mathsf{transmit}}
@@ -135,6 +136,9 @@
 \newcommand{\getlocalid}{\mathsf{get\_local\_id}}
 \newcommand{\getglobalid}{\mathsf{get\_global\_id}}
 \newcommand{\getlocalsize}{\mathsf{get\_global\_id}}
+\newcommand{\getglobalsize}{\mathsf{get\_global\_size}}
+
+\newcommand{\keyword}[1]{\mathsf{#1}}
 
 \newcommand{\NumAlgorithms}{8}
 
@@ -356,35 +360,39 @@ Placing the $\offerkill$ and $\offerfork$ primitives requires manual
 effort and care, but our experience porting a representative set of
 GPU-accelerated irregular algorithms to use cooperative kernels
 suggests that this is straightforward in practice.  We discuss this in
-detail in Section~\ref{sec:portingalgorithms}.
+detail in \mysec\ref{sec:portingalgorithms}.
 
 In summary, our main contributions are:
 
 \begin{itemize}
 
-\item \emph{Cooperative kernels}, an extension to the GPU programming model to support the scheduling requirements of blocking algorithms.  We describe the semantics of the programming model in detail (Section~\ref{sec:cooperativekernels}). 
+\item \emph{Cooperative kernels}, an extension to the GPU programming model to support the scheduling requirements of blocking algorithms.  We describe the semantics of the programming model in detail (\mysec\ref{sec:cooperativekernels}). 
 
 \item A proof-of-concept portable implementation of cooperative
   kernels on top of the OpenCL 2.0 programming model
-  (Section~\ref{sec:implementation}).
+  (\mysec\ref{sec:implementation}).
 
 \item An experience report porting \NumAlgorithms{} irregular GPU
   algorithms to use cooperative kernels, and experimental results
   assessing the performance overhead associated with cooperation and
   the responsiveness to high priority tasks that cooperation enables,
-  across four GPUs from two vendors (Section~\ref{sec:experiments}).
+  across four GPUs from two vendors (\mysec\ref{sec:experiments}).
 
 \end{itemize}
 
 We begin by providing an overview of the OpenCL programming model and
-two motivating examples of irregular algorithms (Section~\ref{sec:background}).  At the end of the paper we discuss related work (Section~\ref{sec:relatedwork}) and avenues for future work (Section~\ref{sec:conclusion}).
+two motivating examples of irregular algorithms (\mysec\ref{sec:background}).  At the end of the paper we discuss related work (\mysec\ref{sec:relatedwork}) and avenues for future work (\mysec\ref{sec:conclusion}).
 
 \section{Background and Motivating Examples}\label{sec:background}
 
-We use two examples of irregular data-parallel algorithms---a work
-stealing queue and breadth-first graph search---to introduce the
-industry-standard OpenCL programming model on which we base cooperative
-kernels.
+We provide background on the industry-standard OpenCL programming
+model on which we base cooperative kernels (\mysec\ref{sec:opencl}),
+and illustrate OpenCL using two irregular data-parallel algorithms---a
+work stealing queue and breadth-first graph search---that also
+pinpoint the problems associated with unfair scheduling of workgroups
+and motivate our cooperative threads approach (\mysec\ref{sec:openclexamples}).
+
+\subsection{OpenCL Background}\label{sec:opencl}
 
 % \paragraph{OpenCL concepts}
 % An OpenCL program is typically executed by many \emph{threads} running
@@ -396,16 +404,93 @@ kernels.
 % storage and cannot be shared between threads. These concepts are
 % illustrated over the two examples.
 
+
+An OpenCL program is divided into \emph{host} and \emph{device}
+components.  A host application runs on the CPU and launches one or
+more \emph{kernels} that run on accelerator devices---GPUs in the
+context of this paper.  A kernel is written in OpenCL C, based on C99.
+All threads executing a kernel execute the same entry function with
+identical arguments, but a thread may invoke the $\getglobalid()$
+function to query its unique thread id in order to access different
+data or follow different control flow paths to other threads.
+
+The threads executing a kernel are hierarchically organised.  A kernel
+is executed by a number of \emph{workgroups}, and each workgroup
+consists of a fixed number of threads.  Builtin functions
+$\getlocalid()$ and $\getgroupid()$ return a thread's local id within
+its workgroup and the id of the workgroup, respectively.\footnote{In general, an OpenCL kernel is organised as a multi-dimensional grid
+of multi-dimensional workgroups, and the above functions each take
+an integer dimension argument.  For simplicity, we consider only the
+one-dimensional case throughout the paper, which captures all the
+GPU-accelerated irregular algorithms we are aware of, and use
+e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
+}  The number
+of threads per workgroup and the number of workgroups are obtained via
+$\getlocalsize()$ and $\getnumgroups()$.  A thread's local and global
+id are related via the equation $\getglobalid() = \getgroupid() \times
+\getlocalsize() + \getlocalid()$.  The total number of threads executing the kernel is given by $\getglobalsize()$, which is equal to $\getlocalsize()\times\getnumgroups()$.
+
+The execution of all threads in a workgroup can be synchronised via a
+workgroup barrier, which also ensures memory consistency.  This
+barrier is a \emph{workgroup-level} function: it must be encountered
+uniformly by all or none of the threads of a workgroup, thus can only
+appear in conditional code if all threads in a workgroup that reach
+the barrier agree on the guards of all enclosing conditional
+statements.  As discussed below, a \emph{global} barrier
+(synchronising all threads running a kernel) is \emph{not} provided as
+a primitive.
+
+\paragraph{Memory spaces and memory model}
+An OpenCL kernel has access to four memory spaces.  \emph{Shared virtual
+memory} (SVM) is accessible to all threads and the host application concurrently.  \emph{Global} memory is shared among all threads executing a
+kernel, but can only be safely accessed by the host application before
+or after kernel execution.  Each workgroup has its own portion of \emph{local},
+which can be used for fast intra-workgroup communication, and every thread has
+an allocation of very fast \emph{private} memory, where
+function-local variables are allocated.
+
+Fine-grained communication between threads, and also with the host in
+the case of SVM, is enabled via a set of atomic data types and
+operations, based on the C11 memory model~\cite{...}.  \ADComment{Could cut:} In particular,
+atomic SVM operations enable fine-grained communication between host
+and device.  Our implementation of cooperative kernels
+(\mysec\ref{sec:implementation}) depends on this recent OpenCL
+feature.
+
+\paragraph{Execution model}
+
+OpenCL specifically makes no guarantees about fair scheduling between
+workgroups executing the same kernel, stating~\cite{...}: \emph{``A
+  conforming implementation may choose to serialize the workgroups so
+  a correct algorithm cannot assume that workgroups will execute in
+  parallel.  There is no safe and portable way to synchronize across
+  the independent execution of workgroups since once in the work-pool,
+  they can execute in any order.''}  OpenCL is not alone in this
+regard: CUDA similarly provides no guarantees~\cite{...}.
+
+HSA provides limited, one-way guarantees,
+stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
+  for values written by work-group B without deadlock provided ... A
+  comes after B in work-group flattened ID order}. However, this
+one-way communication is not sufficient so support either the
+work stealing or graph application examples of
+Figures~\ref{fig:workstealing} and \ref{fig:graphsearch}. As described
+above, both require \emph{symmetric} communication between
+threads.
+
+
+\subsection{Motivating Examples}\label{sec:openclexamples}
+
 \begin{figure}
 
 \begin{lstlisting}
-kernel work_stealing(global Task *pools) {
+(*@\label{line:wksteal:kernelfunc}@*)kernel work_stealing(global Task * pools) {
+(*@\label{line:wksteal:getgroupid}@*)  int pool_id = get_group_id();
   while (more_work(pools)) {
-    int pool_id = get_group_id();
-    Task *t = pop_or_steal(pools, pool_id);
+(*@\label{line:wksteal:poporsteal}@*)    Task * t = pop_or_steal(pools, pool_id);
     if (t) {
       // task processing may create more work
-      process_task(t, pools, pool_id);
+(*@\label{line:wksteal:processtask}@*)      process_task(t, pools, pool_id);
     }
   }
 }
@@ -417,9 +502,8 @@ kernel work_stealing(global Task *pools) {
 \begin{figure}
 
 \begin{lstlisting}
-kernel graph_app(global graph *g, 
-                 global nodes *n0, global nodes *n1) {
-
+kernel graph_app(global graph * g, 
+                 global nodes * n0, global nodes * n1) {
   int level = 0;
   global nodes * in_nodes = n0;
   global nodes * out_nodes = n1;
@@ -444,125 +528,61 @@ kernel graph_app(global graph *g,
 \caption{An OpenCL graph traversal algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
 \end{figure}
 
-\paragraph{OpenCL kernels}
-
-An OpenCL program is divided into \emph{host} and \emph{device}
-components.  A host application runs on the CPU and launches one or
-more \emph{kernels} that run on accelerator devices---GPUs in the
-context of this paper.  A kernel is writen in OpenCL C, based on C99.
-All threads executing a kernel execute the same entry function with
-identical arguments, but a thread may invoke the $\getglobalid()$
-function to query its unique thread id in order to access different
-data or follow different control flow paths to other threads.
-
-The threads executing a kernel are hierarchically organised.  A kernel
-is executed by a number of \emph{workgroups}, and each workgroup
-consists of a fixed number of threads.  Builtin functions
-$\getlocalid()$ and $\getgroupid()$ return a thread's local id within
-its workgroup and the id of the workgroup, respectively.\footnote{In general, an OpenCL kernel is organised as a multi-dimensional grid
-of multi-dimensional workgroups, and the above functions each take
-an integer dimension argument.  For simplicity, we consider only the
-one-dimensional case throughout the paper, which captures all the
-GPU-accelerated irregular algorithms we are aware of, and use
-e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
-}  The number
-of threads per workgroup and the number of workgroups are obtained via
-$\getlocalsize()$ and $\getnumgroups()$.  A thread's local and global
-id are related via the equation $\getglobalid() = \getgroupid() \times
-\getlocalsize() + \getlocalid()$.
-
-\ADComment{Maybe cut?} Within a workgroup, threads may also be
-organised into \emph{subgroups} (termed \emph{warps} and
-\emph{wavefronts} on NVIDIA and AMD architectures, respectively).
-
-\paragraph{Memory spaces and memory model}
-An OpenCL kernel has access to four memory spaces.  Shared virtual
-memory (SVM) is accessible to all threads, and to the host
-application.  Global memory is shared among all threads executing a
-kernel, but can only be safely accessed by the host application before
-or after kernel execution.  Local memory is shared among all threads
-in the same workgroup: each workgroup has its own portion of local
-memory, which can be used for fast intra-workgroup communication.
-Each thread has an allocation of very fast private memory, where
-function-local variables are allocated.
-
-Fine-grained communication between threads, and also with the host in
-the case of SVM, is enabled via a set of atomic data types and
-operations, based on the C11 memory model~\cite{...}.  In particular,
-atomic SVM operations enable fine-grained communication between host
-and device.  Our implementation of cooperative kernels
-(Section~\ref{sec:implementation}) depends on this recent OpenCL
-feature.
-
 \paragraph{Work stealing example}
-Figure~\ref{fig:workstealing} shows a simplified version of an OpenCL
-kernel that uses a work stealing queue.
 %
-The work stealing paradigm is useful when a computation can be split into multiple
-tasks that can be processed independently, but where the number of
-tasks is not known ahead of time because processing a given task may
-create an arbitrary number of new tasks. Work stealing enables dynamic
-balancing of tasks across several processing units, OpenCL workgroups
-in our case. Each workgroup has an associated task pool from which it
-obtains tasks to process, and to which it stores newly created
-tasks. When a workgroup's pool becomes empty, a workgroup---rather
-than terminating---tries to \emph{steal} a task from an other
-pool. Hence, workgroups keep on processing tasks until all the work is
-done.
+The work stealing paradigm is useful when a computation can be split
+into multiple tasks that can be processed independently, but where the
+number of tasks is not known ahead of time because processing a given
+task may create an arbitrary number of new tasks. Work stealing enables
+dynamic balancing of tasks across several processing units, OpenCL
+workgroups in our case. Each workgroup has an associated task pool from
+which it obtains tasks to process, and to which it stores newly created
+tasks. When a workgroup's pool becomes empty, a workgroup---rather than
+terminating---tries to \emph{steal} a task from an other
+pool. Workgroups keep on processing tasks until all the work is done.
 
-\myfiglong\ref{fig:workstealing} illustrates an OpenCL implementation
-of a work stealing algorithm. All threads start their execution at the
-function marked with the $\mathsf{kernel}$ keyword. They receive a
-pointer to the task pools, which reside in global memory, and which
-were initialized by the host program beforehand to contain the initial
-tasks. Each thread can identify the workgroup it belongs to via the
-function $\getgroupid()$.  Here the group id is stored into the
-variable $\mathsf{pool\_id}$ (which is, by default, in private memory)
-and used to access the relevant task pool. The
-$\mathsf{pop\_or\_steal}$ function is called by all threads of a
-workgroup, although inside only the thread with a local id equal to
-$0$, also called the \emph{master thread} of the workgroup,
-\ADComment{Hugues, I changed; please check:} will try to pop a task
-from the workgroup's pool, or steal a task from a different pool. The
-master thread uses local memory inside $\mathsf{pop\_or\_steal}$ to
-ensure that the returned value is valid for all threads of its
-workgroup. If a task was obtained, then all threads of the workgroup
-participate in the processing of the task inside the
-$\mathsf{process\_task}$ function. \HEComment{Manage to say that a
-  task is considered big enough to benefit from parallel computation}
-\ADComment{I think that would be too much detail given the space we
-  have, so I would not delve into this. Remove both comments if you
-  agree.} Processing this task may lead to the creation of further
-tasks, which the master thread will push to the workgroup's pool.
+\myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
+kernel that uses a work stealing queue. All threads start their
+execution at the function marked with the $\mathsf{kernel}$ keyword
+(line~\ref{line:wksteal:kernelfunc}). They receive a pointer to the task
+pools, which reside in global memory, and which were initialized by the
+host program beforehand to contain the initial tasks. Each thread can
+identify the workgroup it belongs to via the function $\getgroupid()$
+(line~\ref{line:wksteal:getgroupid}). Here the group id is stored into
+the variable $\mathsf{pool\_id}$ (which is, by default, in private
+memory) and used to access the relevant task pool. The
+$\mathsf{pop\_or\_steal}$ function (line~\ref{line:wksteal:poporsteal})
+is called by all threads of a workgroup.  Inside
+$\mathsf{pop\_or\_steal}$ only the thread with a local id equal to $0$,
+also called the \emph{master thread} of the workgroup, will try to pop a
+task from the workgroup's pool, or steal a task from a different
+pool. The master thread uses local memory inside
+$\mathsf{pop\_or\_steal}$ to ensure that the returned value is valid for
+all threads of its workgroup. If a task was obtained, then all threads
+of the workgroup participate in the processing of the task via the
+$\mathsf{process\_task}$ function (line~\ref{line:wksteal:processtask}).
+Processing this task may lead to the creation of further tasks, which
+the master thread will push to the workgroup's pool.
 
 Although not depicted here, concurrent accesses to each pool inside
 $\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
-mutex which is implemented using atomic compare and swap operations on
+mutex, implemented using atomic compare and swap operations on
 global memory.  As a result, the kernel presents two opportunities for
 spin-waiting: spinning to obtain a mutex, and spinning in the main
 kernel loop to obtain a task to process.  The algorithm thus depends
-on a fair scheduler, which, as discussed in Section~\ref{sec:intro},
-is not provided by current GPU programming models.  In
-Section~\ref{sec:cooperativeexamples} we show how the example can be
-updated to use our cooperative threads programming model to resolve
-the scheduling issue.
+on a fair scheduler, which, as discussed in \mysec\ref{sec:intro},
+is not provided by current GPU programming models.
 
-\ADComment{Describe some
-  aspects of the example, saying that the global barrier is not a
-  primitive, and can be coded up using the memory model but is not
-  safe due to the execution model.  Make it clear that the barrier
-  uses busy-waiting.}
-
-\paragraph{Graph traversal example} Figure~\ref{fig:graphsearch} shows the
-skeleton of a frontier based graph traversal algorithm (this approach
-has been shown to be efficient on GPUs in~\ref{...}). The kernel is
+\paragraph{Graph traversal example} \myfiglong\ref{fig:graphsearch} shows the
+skeleton of a frontier-based graph traversal algorithm; such algorithms have
+been shown to be execute efficiently on GPUs~\cite{...}.
+The kernel is
 given three arguments in global memory: a graph structure, and two
-arrays that can contain graph nodes. Initially, {\tt n0} contains the
-starting nodes to process. Threads keep three local variables: {\tt
-  level} which indicates the frontier level which is currently being
-processed, {\tt in\_nodes} and {\tt out\_nodes} which point to
-distinct node arrays. {\tt in\_nodes} contains the nodes to be
-processed for the current frontier, while {\tt out\_nodes} contains
+arrays that can contain graph nodes. Initially, $\keyword{n0}$ contains the
+starting nodes to process. Threads keep three local variables: $\keyword{level}$, which indicates the frontier level currently being
+processed, and $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$, which point to
+distinct node arrays. The nodes to be
+processed for the current frontier are contained in $\keyword{in\_nodes}$, while $\keyword{out\_nodes}$ contains
 the nodes to be processed during the next frontier.
 
 The application iterates as long as the current frontier contains
@@ -570,16 +590,12 @@ nodes to process (line~\ref{line:graph:iterate}). At each frontier,
 the nodes to be processed are evenly distributed between the executing
 threads. This is done through \emph{stride} based processing. A thread
 retrieves its global thread id and the total number of threads
-(obtained through the {\tt get\_global\_id()} and {\tt
-  get\_global\_size()} OpenCL primitives). A thread then processes
-each node associated with id (i.e.\ indices with its thread id value
-added to any integer multiple of the total number of threads up to the
-list size). A thread processes a node via the {\tt process\_node}
+(obtained through the $\getglobalid()$ and $\getglobalsize()$ primitives). A thread then processes
+each node associated with its id, i.e.\ nodes at indices that are a multiple of the total number of threads, plus the thread's id. A thread processes a node via the $\keyword{process\_node}$
 function, which may (a) push nodes to process in the next frontier to
-the {\tt out\_nodes} list and (b) use the frontier level in
-computation. After processing the frontier, the threads swap their
-local node array pointers (line~\ref{line:graph:swap}), i.e.\ the {\tt
-  out\_nodes} of the current frontier becomes the input of the next
+$\keyword{out\_nodes}$ and (b) use the current frontier, $\keyword{level}$, in
+the computation. \ADComment{Tyler: should swap take the addresses of the pointers?} After processing the frontier, the threads swap their
+local node array pointers (line~\ref{line:graph:swap}), i.e.\ the $\keyword{out\_nodes}$ of the current frontier becomes the $\keyword{in\_nodes}$ of the next
 frontier.
 
 At this point, the GPU threads must wait for all other threads to
@@ -594,65 +610,26 @@ threads can continue to the next frontier.
 The global barrier used in this application is not provided as a GPU
 primitive, though many previous works have shown that such a global
 barrier can be implemented~\cite{...}. These implementations use well
-defined atomic memory operations to ensure memory consistency and use
-spinning to ensure threads wait at the barrier for the remaining
-threads to reach the barrier. Even though such barriers appear to run
-reliably on current GPUs, they violate GPU language specifications,
-which do not provide fair scheduling of workgroups. These barriers
-require fair workgroup scheduling in order to function correctly. That
-is, \emph{all} workgroups must be fairly scheduled in order to reach
-the barrier, otherwise, the workgroups waiting at the barrier will not
-make progress.
+defined atomic memory operations to ensure memory consistency, and
+employ spinning to ensure threads wait at the barrier until all
+threads have arrived.  This spinning behaviour requires fair
+scheduling between workgroups for the barrier to operate correctly,
+and as a result the barrier is \emph{not} guaranteed to work correctly
+under current GPU programming models.  Such barriers appear to run
+reliably on current GPUs for kernels that are executed with no more
+workgroups than there are compute units; this is due to the fairness
+of the occupancy-bound execution model that current GPUs appear to
+provide.  But, as discussed in \mysec\ref{sec:intro}, this
+occupancy-bound model is not mandated by language standards or vendor
+implementations, and is unlikely to be guaranteed in the future.
+
+In \mysec\ref{sec:programmingguidelines} we show how the work stealing
+and graph traversal examples of \myfigs\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
+updated to use our cooperative kernels programming model to resolve
+the scheduling issue.
 
 
-\paragraph{Execution model}
-
-Two barrier primitives are provided in OpenCL.  A workgroup barrier
-synchronises all threads in a workgroup and ensures memory
-consistency.  This barrier is a \emph{workgroup-level} function: it
-must be encountered uniformly by all or none of the threads of a
-workgroup, thus can only appear in conditional code if all threads in
-a workgroup that reach the barrier agree on the guards of all
-enclosing conditional statements.  A subgroup barrier works
-analogously at the subgroup level.  As discussed below, a
-\emph{global} barrier (synchronising all threads running a kernel) is
-not provided as a primitive.
-
-OpenCL specifically makes no guarantees about fair scheduling between
-workgroups executing the same kernel, stating~\cite{...}: \emph{``A
-  conforming implementation may choose to serialize the workgroups so
-  a correct algorithm cannot assume that workgroups will execute in
-  parallel.  There is no safe and portable way to synchronize across
-  the independent execution of workgroups since once in the work-pool,
-  they can execute in any order.''}  OpenCL is not alone in this
-regard: CUDA similarly provides no guarantees~\cite{...}.
-
-HSA provides limited, one-way guarantees,
-stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
-  for values written by work-group B without deadlock provided ... A
-  comes after B in work-group flattened ID order}. However, this
-one-way communication is not sufficient so support either the
-work stealing or graph application examples of
-Figures~\ref{fig:workstealing} and \ref{fig:graphsearch}. As described
-above, both require \emph{symmetric} communication between
-threads. \ADComment{Tyler, can you state the HSA guarantee?},
-\TSComment{How is this?}~\cite{...}.
-
-Revisiting the examples of Figures~\ref{fig:workstealing}
-and~\ref{fig:graphsearch}: the mutex function of
-Figure~\ref{fig:workstealing} will cause starvation if a workgroup
-that holds the mutex is not scheduled again and so does not release
-the mutex.  A similar issue affects the global barrier function of
-Figure~\ref{fig:graphsearch}.  Because the barrier is implemented
-using busy-waiting, a set of workgroups waiting at the barrier may be
-continuously scheduled, starving a workgroup that has not yet arrived
-at the barrier and meaning that no workgroup proceeds past the
-barrier.
-
-
-
-
-\section{The Cooperative Kernels Programming Model}\label{sec:cooperativekernels}
+\section{Cooperative Kernels}\label{sec:cooperativekernels}
 
 We describe our cooperative kernels programming model as an extension
 to OpenCL.  However, the cooperative kernels concept is more general,
@@ -660,23 +637,25 @@ and could be applied to extend other GPU programming models, such as
 CUDA and HSA.
 
 We describe the semantics of cooperative kernels
-(Section~\ref{sec:semantics}), then summarise the important
+(\mysec\ref{sec:semantics}) and summarise the important
 differences between programming with regular vs.\ cooperative kernels
-(Section~\ref{sec:programmingguidelines}) and the non-functional
+by showing how the motivating examples of \mysec\ref{sec:openclexamples} can be adapted to use cooperative kernels
+(\mysec\ref{sec:programmingguidelines}).
+We then focus on the non-functional
 properties that a developer of a cooperative kernel, and the
 implementer of a scheduler for cooperative kernels, should strive for
-(Section~\ref{sec:nonfunctional}).  The semantics of cooperative
-kernels has been guided by the applications that we have studied
-(described in Section~\ref{sec:portingalgorithms}), and we discuss several cases where we
-might have taken different, equally reasonable, semantic decisions (Section~\ref{sec:semanticalternatives}).
+(\mysec\ref{sec:nonfunctional}).  The semantics of cooperative
+kernels has been guided by the practical applications we have studied
+(described in \mysec\ref{sec:portingalgorithms}), and we discuss several cases where we
+might have taken different and also reasonable semantic decisions (\mysec\ref{sec:semanticalternatives}).
 We conclude the section by discussing the backwards-compatible nature
 of cooperative kernels with respect to blocking algorithms designed to
 run on current GPU platforms
-(Section~\ref{sec:backwardscompatibility}).
+(\mysec\ref{sec:backwardscompatibility}).
 
 \subsection{Semantics of Cooperative Kernels}\label{sec:semantics}
 
-As with a regular OpenCL kernel (see Section~\ref{sec:background}), a
+As with a regular OpenCL kernel (see \mysec\ref{sec:opencl}), a
 cooperative kernel is launched by the host application.  The host
 application passes parameters to the kernel and specifies a desired
 number of workgroups, each consisting of a specified number of
@@ -691,11 +670,8 @@ $\offerfork$, the key functions that enable cooperative scheduling;
 $\globalbarrier$ and $\resizingglobalbarrier$, two primitives to allow
 inter-workgroup synchronisation.
 
-We now explain the semantics of these language extensions, after which
-we explain how the work stealing and graph traveral algorithms of
-Section~\ref{sec:background} can be turned into cooperative kernels
-that use the extensions.  We present the semantics intuitively, using English.
-In Appendix~\ref{appendix:semantics} we present an abstract operational semantics for our language extensions in a simple GPU-like programming model.
+We now explain the semantics of these language extensions.  We present the semantics intuitively, using English.
+In Appendix~\ref{appendix:semantics} (see supplementary material) we present an abstract operational semantics for our language extensions in a simple GPU-like programming model.
 
 \paragraph{Transmitted variables}
 
@@ -724,7 +700,7 @@ integer between $1$ and $N$.  The initial active workgroups have
 consecutive workgroup ids in the range $[0, M-1]$.
 
 The $\getgroupid()$ function retrieves the id of a workgroup as usual
-(see Section~\ref{sec:background}).  When executed by a cooperative
+(see \mysec\ref{sec:opencl}).  When executed by a cooperative
 kernel, $\getnumgroups()$ returns $M$, the \emph{current} number of
 active workgroups.  This is in contrast to $\getnumgroups()$ for
 regular kernels, which returns the fixed number of workgroups that
@@ -745,7 +721,7 @@ inherently unfair.
 The $\offerkill$ primitive allows the cooperative kernel to return
 compute units to the scheduler by offering to sacrifice workgroups.
 The idea is that while having the scheduler be permitted to terminate
-the execution of workgroups in an arbitary fashion would be drastic,
+the execution of workgroups in an arbitrary fashion would be drastic,
 the kernel may contain identifiable points of execution at which a
 workgroup could gracefully leave the computation.  We give examples of
 these for work stealing and graph traversal below.
@@ -753,7 +729,7 @@ these for work stealing and graph traversal below.
 Similar to the OpenCL workgroup $\mathsf{barrier}$ primitive,
 $\offerkill$, is a workgroup-level function---it must be encountered
 uniformly by all threads in a workgroup (see
-Section~\ref{sec:background}).
+\mysec\ref{sec:opencl}).
 
 Suppose a workgroup with id $m$ executes $\offerkill$.  If $m < M-1$
 or $M=1$, i.e.\ the workgroup's id is not the largest among the active
@@ -775,7 +751,7 @@ In this formulation of cooperative kernels, only the active workgroup
 with the largest id can be killed, and workgroup 0 can never be
 killed.  We discuss the rationale for these choices, as well as
 possible alternative choices, in
-Section~\ref{sec:semanticalternatives}.
+\mysec\ref{sec:semanticalternatives}.
 
 \paragraph{Semantics for $\offerfork$}
 
@@ -820,7 +796,7 @@ to this:
 
 In effect, thread 0 of the forking workgroup transmits the relevant
 portion of its local state to the threads of the forked workgroups.
-We discuss in Section~\ref{sec:semanticalternatives} the rationale for
+We discuss in \mysec\ref{sec:semanticalternatives} the rationale for
 having all new threads obtain this local state portion from thread 0,
 as well as our reasons for selecting which variables to transmit via
 annotations rather than transmitting the entire thread state.
@@ -832,12 +808,9 @@ guaranteed.
 
 \paragraph{Global barriers}
 
-\ADComment{Maybe refer back to motivating examples?}
 Many irregular algorithms require synchronisation across workgroups.
-This can be achieved via a \emph{global barrier}, but a global barrier
-is not provided as a primitive in OpenCL, CUDA or HSA.  This is
-because, as discussed in Section~\ref{sec:intro}, an inter-workgroup barrier
-requires fair scheduling of workgroups.
+This can be achieved via a \emph{global barrier}, as illustrated in the graph traversal example of \mysec\ref{sec:openclexamples} and \myfig\ref{fig:graphsearch}.
+Because a global barrier requires fair scheduling of workgroups it cannot be safely implemented in OpenCL, CUDA or HSA, and thus is not provided as a primitive in any of these programming models.
 
 Because workgroups of a cooperative kernel are fairly scheduled, a
 global barrier primitive can be provided.  We specify two such primitives: $\globalbarrier$
@@ -866,7 +839,7 @@ kernel is prepared to proceed after the barrier with fewer workgroups,
 or with additional workgroups joining the computation.
 
 Semantically, when all threads have reached $\resizingglobalbarrier$,
-the number of active workgroups, $M$, is set to a new value, $M'$ say.
+the number of active workgroups, $M$, is set to a new value, $M'$ say, with $M' > 0$.
 If $M' = M$ then the active workgroups remain unchanged and proceed to
 execute after the barrier.  If $M' < M$, workgroups $[M', M-1]$ are
 killed.  If $M' > M$ then $M'-M$ new workgroups join the computation,
@@ -877,7 +850,7 @@ number of active workgroups from $M$ to $M'$ is atomic.
 
 The semantics of $\resizingglobalbarrier$ can be modelled via the following sequence of calls:
 
-\lstset{basicstyle=\tt}
+\lstset{basicstyle=\tt,numbers=none}
 \begin{lstlisting}
   $\globalbarrier()$;
   if($\getgroupid()$ == 0) $\offerfork$();
@@ -885,7 +858,7 @@ The semantics of $\resizingglobalbarrier$ can be modelled via the following sequ
   $\offerkill()$;
   $\globalbarrier()$;
 \end{lstlisting}
-\lstset{basicstyle=\scriptsize\tt}
+\lstset{basicstyle=\scriptsize\tt,numbers=left}
 
 The enclosing $\globalbarrier$ calls make the operation appear to be
 atomic.  The middle $\globalbarrier$ is required to ensure that if
@@ -894,11 +867,128 @@ $M'\geq M$, the workgroups with ids smaller than $M$ are left intact.
 Because $\resizingglobalbarrier$ can be implemented in the above
 manner, we do not regard it conceptually as a primitive of the
 cooperative kernels programming model.  However, we discuss in
-Section~\ref{sec:resizingbarrier} how $\resizingglobalbarrier$ can be
+\mysec\ref{sec:resizingbarrier} how $\resizingglobalbarrier$ can be
 implemented significantly more efficiently if it is treated as a
 primitive operation that interacts directly with the scheduler.
 
-\paragraph{Examples}
+\subsection{Programming With Cooperative Kernels}\label{sec:programmingguidelines}
+
+Working with cooperative kernels requires some manual effort on the
+part of the programmer: they must place the $\transmit$ qualifier and
+use the new language primitives described in
+\mysec\ref{sec:semantics}, and account for slight changes in the OpenCL semantics induced by these new features.
+
+The programming model and associated language constructs were inspired
+by the requirements of the irregular GPU algorithms proposed in the
+literature, and that at least for these algorithms it is usually easy
+to identify where to place the constructs.
+
+We discuss the main semantic change induced by our programming
+model---that the number of workgroups executing a kernel varies
+dynamically---and illustrate our programming model and the impact of
+this semantic change by adapting the work stealing and graph traversal
+algorithms of \mysec\ref{sec:openclexamples} to use cooperative
+kernels.
+
+\paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
+the value returned by $\getnumgroups()$ is not fixed during the
+lifetime of a cooperative kernel.  Although
+$\getnumgroups()$ has atomic semantics, and so can be called at any
+time to yield a well-defined value, the value returned by two
+successive calls may differ if workgroups have executed $\offerkill$,
+$\offerfork$ or $\resizingglobalbarrier$ in-between.  Because $\getglobalsize()$, which retrieves the total number of threads executing the kernel, is
+a function of $\getnumgroups()$, the value returned by $\getglobalsize()$ is also subject to change.
+The programmer
+must therefore write their cooperative kernel in a manner that is
+robust to changes in the values returned by these functions.
+
+\paragraph{Adapting work stealing}
+
+\myfiglong\ref{fig:workstealing-cooperative} shows a cooperative
+version of the work stealing example of \myfig\ref{fig:workstealing} that we
+discussed in \mysec\ref{sec:openclexamples}.
+
+For the work stealing example, there is no state to transmit since a
+computation is entirely parameterised by a task, which is retrieved from
+a task pool located in global memory. In the main loop, before trying to
+obtain a task, we make the workgroup offer itself to be forked or killed
+(lines~\ref{line:cwksteal:offerfork},\ref{line:cwksteal:offerkill}). Note
+that a workgroup may be killed even if its associated task pool is not
+empty, since remaining tasks could eventually be stealed by other
+workgroups.  Care must be taken on computing pool identifiers: the
+original version in \myfig\ref{fig:workstealing} can rely on the fact
+that there are as many pools as workgroups, but here the number of
+workgroups may change during execution. Therefore, the number of pools
+must now be explicitely given as an argument
+(line~\ref{line:cwksteal:argnumpool}) and used as an upper bound of pool
+indexes when scanning pools in $\mathsf{more\_work}$
+(line~\ref{line:cwksteal:morework}) and $\mathsf{pop\_or\_steal}$
+(line~\ref{line:cwksteal:poporsteal}). Besides, computation of the
+workgroup's pool index (line~\ref{line:cwksteal:getgroupid}) must not
+only be bounded by the number of pools but also be moved inside the main
+loop since a forked workgroup that starts to execute after $\offerfork$
+must re-compute its pool index.
+
+\begin{figure}
+
+\begin{lstlisting}
+kernel work_stealing(global Task * pools,
+(*@\label{line:cwksteal:argnumpool}@*)                     const int num_pools) {
+(*@\label{line:cwksteal:morework}@*)  while (more_work(pools, num_pools)) {
+(*@\label{line:cwksteal:offerfork}@*)    offer_fork();
+(*@\label{line:cwksteal:offerkill}@*)    offer_kill();
+(*@\label{line:cwksteal:getgroupid}@*)    int pool_id = get_group_id() % num_pools;
+(*@\label{line:cwksteal:poporsteal}@*)    Task * t = pop_or_steal(pools, pool_id, num_pools);
+    if (t) {
+      // task processing may create more work
+(*@\label{line:cwksteal:processtask}@*)      process_task(t, pools, pool_id);
+    }
+  }
+}
+\end{lstlisting}
+
+\caption{Cooperative version of the work stealing example from \myfig\ref{fig:workstealing}; the number of workpools
+must be explicitly passed as arguments since the number of workgroups
+is not a constant anymore}\label{fig:workstealing-cooperative}
+\end{figure}
+
+\paragraph{Cooperative kernels that only use barriers}
+
+The situation is more stable if a cooperative kernel does not directly
+issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
+only calls to $\resizingglobalbarrier$ can cause the number of active
+workgroups to change and, as discussed in \mysec\ref{sec:semantics},
+this function causes synchronisation between all threads and causes
+the number of active workgroups to change atomically.  At any point
+during execution, the threads of a kernel are executing between some
+pair of resizing barrier calls, which we call a \emph{resizing barrier
+  intervals} (here we consider the kernel entry and exit points
+conceptually to be special cases of resizing barriers).  The number of
+workgroups executing the kernel is thus constant within each resizing
+barrier interval, i.e.\ the result returned by repeated calls to
+$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
+
+This guarantee can be exploited by algorithms that perform strided
+data processing.  We now illustrate this using the graph traversal motivating example.
+
+\paragraph{Adapting graph traversal} \ADComment{Tyler, the original had two global barriers; the port has just one resizing barrier.  Is this right?}
+\myfiglong\ref{fig:cgraphsearch} shows a cooperative version of the graph traversal kernel
+of \myfig\ref{fig:graphsearch}, introduced in
+\mysec\ref{sec:openclexamples}.  
+On line~\ref{line:cgraph:resizing}, we change the original global barrier
+into a resizing barrier. Several variables are marked to be
+transmitted in the case of workgroups joining at the resizing barrier
+(lines~\ref{line:cgraph:transmit1}, \ref{line:cgraph:transmit2} and
+\ref{line:cgraph:transmit3}): $\keyword{level}$ must be restored so that
+new workgroups know which frontier they are processing; $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$ must be restored so that new
+workgroups know which of the node arrays are input and output. Lastly,
+the static work distribution of the original kernel is no longer valid
+in a cooperative kernel. This is because the stride (which is based on
+$M$) may change after each resizing barrier
+call. To fix this, we re-distribute the work after each resizing
+barrier call by recomputing the thread id and stride
+(lines~\ref{line:cgraph:rechunking1} and
+\ref{line:cgraph:rechunking2}).  \ADComment{Tyler: can you please add the line number references in the following?} This example exploits the fact that the cooperative kernel does not issue $\offerkill$ nor $\offerfork$ directly: the value of $\keyword{stride}$ obtained from $\getglobalsize()$ at line~\ref{...} is stable until the next resizing barrier at line~\ref{...}, and in particular can be safely used inside the $\keyword{for}$ loop.
 
 \begin{figure}
 
@@ -926,148 +1016,38 @@ kernel graph_app(global graph *g,
   }
 }
 \end{lstlisting}
-\caption{Cooperative kernel port for Figure~\ref{fig:graphsearch}}\label{fig:cgraphsearch}
+\caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing global barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
 \end{figure}
 
-\ADComment{TODO.  We want to show the examples from Section~\ref{sec:background} ported to use cooperative kernels.  We want to make it clear that it is easy to place the primitives.}
-
-In practice, we found that transforming traditional blocking GPU
-kernels into cooperative kernels was straightforward. For example,
-Figure~\ref{fig:cgraphsearch} shows the graph traversal example of
-Figure~\ref{fig:graphsearch} transformed into a cooperative kernel.
-On line~\ref{line:cgraph:resizing}, we change the original barrier
-into a resizing barrier. Several variables are marked to be
-transmitted in the case of workgroups joining at the resizing barrier
-(lines~\ref{line:cgraph:transmit1}, \ref{line:cgraph:transmit2} and
-\ref{line:cgraph:transmit3}): {\tt level} must be restored so that
-new workgroups know which frontier they are processing; {\tt
-  in\_nodes} and {\tt out\_nodes} must be restored so that new
-workgroups know which of the node arrays are input and output. Lastly,
-the static work distribution of the original kernel is no longer valid
-in a cooperative kernel. This is because the stride (which is based on
-$M$) may change after each resizing barrier
-call. To fix this, we re-distribute the work after each resizing
-barrier call by recomputing the thread id and stride
-(lines~\ref{line:cgraph:rechunking1} and
-\ref{line:cgraph:rechunking2}).
-
-\TSComment{Can Hugues talk about work stealing here?}
-
-For the work stealing example, there is no state to transmit since a
-computation is entirely parametrized by a task, which is retrieved from
-a task pool located in global memory. Care must be taken on the dynamic
-change of the number of workgroups though: we cannot assume that the
-total number of task pools is equal to $\getnumgroups$. Thus, the number
-of pools must be given as an argument, and the $\mathsf{pool}$ argument
-must be obtained from the group id modulo the total number of
-pools. This total number of pools must also be passed to
-$\mathsf{pop\_or\_steal}$, since when a workgroup wants to steal it must
-access other pool indexes, which are bounded by the total number of
-pools.
-
-\begin{figure}
-
-\begin{lstlisting}
-kernel work_stealing(global Task *pools, const int num_pools) {
-  while (more_work(pools)) {
-    int pool_id = get_group_id() % num_pools;
-    Task *t = pop_or_steal(pools, pool_id, num_pools);
-    if (t) {
-      // task processing may create more work
-      process_task(t, pools, pool_id);
-    }
-  }
-}
-\end{lstlisting}
-
-\caption{Cooperative version of work stealing: the number of workpools
-must be explicitely passed as arguments since the number of workgroups
-is not a constant anymore}\label{fig:workstealing-cooperative}
-\end{figure}
-
-\subsection{Programming Guidelines}\label{sec:programmingguidelines}
-
-We remark on some issues that programmer working with cooperative
-kernels should be aware of.
-
-\paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
-the value returned by $\getnumgroups()$ is not fixed during the
-lifetime of a cooperative kernel \TSComment{Neither is {\tt
-    get\_global\_size}, is that worth mentioning?}.  Although
-$\getnumgroups()$ has atomic semantics, and so can be called at any
-time to yield a well-defined value, the value returned by two
-successive calls may differ if workgroups have executed $\offerkill$,
-$\offerfork$ or $\resizingglobalbarrier$ in-between.  The programmer
-must therefore write their cooperative kernel in a manner that is
-robust to changes in the value returned by $\getnumgroups()$.
-
-\paragraph{Cooperative kernels that only use barriers}
-
-The situation is more stable if a cooperative kernel does not directly
-issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
-only calls to $\resizingglobalbarrier$ can cause the number of active
-workgroups to change and, as discussed in Section~\ref{sec:semantics},
-this function causes synchronisation between all threads and causes
-the number of active workgroups to change atomically.  At any point
-during execution, the threads of a kernel are executing between some
-pair of resizing barrier calls, which we call a \emph{resizing barrier
-  intervals} (here we consider the kernel entry and exit points
-conceptually to be special cases of resizing barriers).  The number of
-workgroups executing the kernel is thus constant within each resizing
-barrier interval, i.e.\ the result returned by repeated calls to
-$\getnumgroups()$ will be identical during such an interval.
-
-This guarantee can be exploited by algorithms that perform strided
-data processing.  \ADComment{Tyler, can we give an example of a data
-  processing loop that would have to be changed?} \TSComment{Done,
-its in figure~\ref{fig:cgraphsearch}}
-
-\paragraph{Placing the new constructs}
-
-It is up to the programmmer to decide where to place our new language
-constructs.  This must be done bearing in mind both the semantics of
-the constructs, as detailed in Section~\ref{ }, as well as the
-non-functional requirements of cooperative kernels that we describe in
-Section~\ref{sec:nonfunctional}.
-
-We note, however, that the programming model and associated language
-constructs were inspired by the requirements of the irregular GPU
-algorithms proposed in the literature, and that at least for these
-algorithms it is usually easy to identify where to place the
-constructs.
-
-The irregular algorithms we encountered either employ work stealing or
-operate on graph data structures.
-
-Work stealing algorithms have a transactional flavour, whereby tasks
-are repeatedly pulled from a queue and processed by a workgroup.  The
-point of task completion---the end of a transaction---is a natural
-place for a workgroup to invoke both $\offerkill$ and $\offerfork$, to
-indicate both that the workgroup could gracefully exit computation,
-but also that there is more work to be processed and that further
-workgroups would be useful in order to process this work.  Such
-algorithms usually require little state to persist between tasks;
-typically only the pointers to the queue data structures need to be
-pre-initialised, by annotating them with $\transmit$.
-\ADComment{Refer back to cooperative versions of examples in
-  Section~\ref{sec:semantics}.}
-
-The level-by-level approach employed by many graph algorithms tends to
-involve global barrier synchronisation.  In some cases, a global
-barrier is required in the midst of a transaction, in which case
-$\globalbarrier$, but not $\resizingglobalbarrier$, is suitable for
-achieving synchronization without disturbing the set of active
+In \mysec\ref{sec:portingalgorithms} we describe the set of irregular GPU algorithms used
+in our experiments, which largely captures the irregular blocking
+algorithms that are available as open source GPU kernels.  These all
+employ either work stealing or operate on graph data structures.
+Like the simplified example of \myfig\ref{fig:workstealing-cooperative}, the work stealing algorithms have a transactional flavour
+and require little or no state to be carried between transactions.  Thus the point at which a workgroup is ready to process a new task is a natural point to place $\offerkill$ and $\offerfork$, and few or no $\transmit$ annotations are required.
+%
+The example of \myfig\ref{fig:cgraphsearch} is simpler than, but representative of,
+most level-by-level graph algorithms.  These algorithms tend to
+require more state to be annotated with $\transmit$, and in some cases
+a global barrier is required in the midst of a transaction, in which
+case $\globalbarrier$, but not $\resizingglobalbarrier$, is suitable
+for achieving synchronization without disturbing the set of active
 workgroups.  But often it is the case that on completing a level of
 the graph algorithm, the next level could be processed by more or
 fewer workgroups, something which $\resizingglobalbarrier$
-facilitates.  Again, only a small amount of state is relevant to new
-workgroups joining the computation, such as the value of the level
-being processed; this relevant state must be annotated with
-$\transmit$.
+facilitates.
 
-\subsection{Non-Functional Requirements of Cooperative Kernels}\label{sec:nonfunctional}
+In summary, our experience so far indicates that cooperative kernels
+is a good fit for current irregular algorithms.  Of course this is, in
+part, because we designed the model with these algorithms in mind, but
+we argue that the fit is natural not just for the examples that we
+study, but more generally for at least these two patterns of irregular
+algorithm.
 
-The semantics presented in Section~\ref{sec:semantics} describe the envelope of
+
+\subsection{Non-Functional Requirements}\label{sec:nonfunctional}
+
+The semantics presented in \mysec\ref{sec:semantics} describe the envelope of
 behaviour that a developer of a cooperative kernel should be prepared
 for.
 %
@@ -1080,55 +1060,120 @@ tasks with soft real-time constraints.
 
 To achieve this balance, both an implementation of the cooperative
 kernels model, and the programmer of a cooperative kernel, must strive
-to meet a number of non-functional requirements, which we outline
-here.
-
-\ADComment{Sree mentioned TimeGraph paper.}
+to meet the following non-functional requirements.
 
 \paragraph{Sufficient $\offerkill$ calls}
 
-Recall that the purpose of $\offerkill$ is to provide the scheduler
-with an opportunity to destroy a workgroup in order to schedule
+The purpose of $\offerkill$ is to provide the scheduler with an
+opportunity to destroy a workgroup in order to schedule
 higher-priority tasks.  Because these higher-priority tasks, such as
 graphics rendering, may have soft real-time constraints, the scheduler
 relies on the cooperative kernel to execute $\offerkill$ sufficiently
 frequently that the scheduler can meet such real-time constraints.
 
-\ADComment{Forward reference to experiments with display freezing.}
+Using work stealing as an example: in the kernel of \myfig\ref{fig:workstealing-cooperative}, a
+workgroup offers itself to the scheduler after processing each task.
+If tasks turn out to be very short then it might turn out to be
+reasonable to invoke $\offerkill$ less frequently, after every $k$
+tasks for some appropriate $k$.  On the other hand, if individual
+tasks may be very time-consuming then it may be necessary to rewrite
+the algorithm so work on a larger number of shorter tasks, so as to
+achieve a higher rate of calls to $\offerfork$.
 
-\ADComment{Got here.}
+Getting this non-functional requirement right depends on the
+constraints of the tasks to be co-scheduled with a cooperative kernel,
+on properties of the cooperative kernel itself, and on the efficiency
+of the GPU that is used for execution.  In \mysec\ref{sec:representativeworkloads} we conduct
+experiments to understand the response rate that would be required to
+co-schedule graphics rendering with a cooperative kernel in order to
+achieve a smooth frame rate, and we evaluate responsiveness in
+practice in \mysec\ref{sec:responsiveness}.
 
-\ADComment{Generosity: initial number of workgroups, and responding to offer fork.}
+\paragraph{Sufficient workgroups for the cooperative kernel}
+
+Recall that the cooperative kernel would ideally utilise the $N$
+workgroups requested upon kernel launch, in order to conduct its
+processing efficiently.  The scheduler should thus aim to provide with
+cooperative kernel with as many workgroups, up to this number, as
+other constraints allow.  As a result, the scheduler should generally
+accept an $\offerkill$ only if a compute unit is required for another
+task, and should respond positively to $\offerfork$ calls by
+scheduling new workgroups if compute units are available.  Our
+implementation of cooperative scheduling (\mysec\ref{sec:implementation}) is as
+generous as possible to the cooperative kernel in this regard.
+However, these are not hard-and-fast rules: a scheduler might employ
+heuristics based on historical workloads to avoid thrashing.  For
+example, if graphics calls are known to arrive at a certain rate then
+the scheduler might decide that it is worth accepting an $\offerkill$
+from the cooperative kernel on the assumption that a graphics task
+will be requested momentarily.  Similarly, the scheduler might provide
+some, but not all, compute units to the cooperative kernel in response
+to an $\offerfork$ call if it has reason to believe that the remaining
+compute units are likely to be useful for other high priority tasks
+that are likely to arrive imminently.
+
 
 \subsection{Alternative Semantic Choices}\label{sec:semanticalternatives}
 
-\ADComment{Explain here where we could have done things differently.}
+\paragraph{Killing order}
 
-\ADComment{What are difficulties with other alternatives and why we didn't use them.}
+We opted for a semantics whereby only the active workgroup with the
+highest id can be killed.  This has an appealing property: it means
+that the ids of active workgroups are contiguous, which is important
+for processing of contiguous data.  The cooperative graph traversal
+algorithm of \myfig\ref{fig:cgraphsearch} illustrates this: the algorithm is prepared
+for $\getglobalsize()$ to change after each resizing barrier call, but
+depends on the fact that $\getglobalid()$ returns a contiguous range
+of thread ids.
 
-\ADComment{Allowing zero to be killed; the following is some text we had before:}
+A disadvantage of this decision is that it may provide sub-optimal
+responsiveness from the point of view of the scheduler.  Suppose the
+scheduler requires an additional compute unit, but the active thread
+with the larget id is processing some computationally intensive work
+and will take a while to reach $\offerkill$.  Our semantics means that
+the scheuduler cannot take advantage of the fact that another active
+workgroup may invoke $\offerkill$ sooner.
 
-\paragraph{Keeping at least one workgroup alive}
+Cooperative kernels that do not require contiguous thread ids might me
+more suited to a semantics in which workgroups can be killed in any
+order, but where workgroup ids (and thus thread global ids) are not
+guaranteed to be contiguous.
 
-The programmer is responsible for keeping at least one workgroup alive.  In particular, if all workgroups execute $\offerkill$, the scheduler is at liberty to destroy all workgroups, causing the cooperative kernel to exit.  This can be guarded against by wrapping each $\offerkill$ call in a conditional statement:
+\paragraph{Keeping one workgroup alive}
 
-\lstset{basicstyle=\tt}
+Our semantics dictate that the workgroup with id 0 will not be killed
+if it invokes $\offerkill$.  This avoids the possibility of the
+cooperative kernel terminating early due to the programmer
+inadvertantly allowing all workgroups to be killed, and the decision
+to keep workgroup 0 alive fits well with our choice to kill workgroups
+in descending order of id.
+
+However, there might be a use case for a cooperative kernel reaching a
+point where it would be acceptable for the kernel to exit, although
+desirable for some remaining computation to be performed if competing
+workloads allow it.  In this case, a semantics where all workgroups can be killed via $\offerkill$ would be appropriate, and the programmer would need to guard each $\offerkill$ with an id check in cases where killing all workgroups would be unacceptable.  For example:
+%
+\lstset{basicstyle=\tt,numbers=none}
 \begin{lstlisting}
   if($\getgroupid{0}$ != 0) $\offerkill$();
 \end{lstlisting}
-\lstset{basicstyle=\scriptsize\tt}
+\lstset{basicstyle=\scriptsize\tt,numbers=left}
+%
+would ensure that at least workgroup 0 is kept alive.
 
-We could, alternatively, have formulated the semantics of $\offerkill$
-so that workgroup 0 is never killed.  However, there might be a use
-case for a cooperative kernel reaching a point where it would be
-acceptable for the kernel to exit, although desirable for some
-remaining computation to be performed if competing workloads allow it.
+\paragraph{Transmission of partial state from a single thread}
 
+Recall from the semantics of $\offerfork$ that newly forked workgroups
+inherit the variable valuation associated with thread 0 of the forking
+workgroup, but only for $\transmit$-annotated variables.  Alternative
+choices here would be to have forked workgroups inherit values for
+\emph{all} variables from the forking workgroup, and to have thread
+$i$ in the forking workgroup provide the valuation for thread $i$ in
+each spawned workgroup, rather than having thread 0 transmit the
+valuation to all new threads.
 
+\ADComment{TODO: justify our choice: uniform variables and efficiency.}
 
-\ADComment{Allowing arbitrary workgroups to be killed (not just the largest workgroup)}
-
-\ADComment{Having thread 0 transmit its state, and transmitting only annotated variables.}
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
 
@@ -1183,7 +1228,7 @@ remaining computation to be performed if competing workloads allow it.
 
 \ADComment{Tyler and Hugues, please write.}
 
-\subsection{Determining Representative Workloads}
+\subsection{Determining Representative Workloads}\label{sec:representativeworkloads}
 
 \ADComment{Better section title?}
 
@@ -1194,7 +1239,7 @@ remaining computation to be performed if competing workloads allow it.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
 
-\subsection{The Overhad of Moving to Cooperative Kernels}
+\subsection{The Overhead of Moving to Cooperative Kernels}
 
 \ADComment{Results for stand-alone vs.\ cooperative without co-scheduling.}
 
@@ -1202,7 +1247,7 @@ remaining computation to be performed if competing workloads allow it.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
 
-\subsection{Performance and Responsiveness of Cooperative Scheduling}
+\subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
 \ADComment{Preamble}
 
@@ -1216,7 +1261,7 @@ remaining computation to be performed if competing workloads allow it.
 
 
 \cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
-  SMs, not to workgroups, so that tasks taht would benefit from being
+  SMs, not to workgroups, so that tasks that would benefit from being
   processed by the same SM can be scheduled to the same SM.  Has
   little to do with preemption, but more to do with irregular
   computation.}
