@@ -240,9 +240,10 @@ void octree_main(
 
     /* main loop */
   }
-  while (
-      __restoration_ctx->target !=
-      UCHAR_MAX /* substitute for 'true', which can cause compiler hangs */) {
+  // Hand hack: impose a non-trivial true
+  while (atomic_load(particlesDone) != 1000000000) {
+      /* __restoration_ctx->target != */
+      /* UCHAR_MAX /\* substitute for 'true', which can cause compiler hangs *\/) { */
     switch (__restoration_ctx->target) {
     case 0:
       if (!(true)) {
@@ -250,9 +251,17 @@ void octree_main(
       }
 
       /* only the first group can fork, to limit calls to offer_fork. */
-      /* if (get_group_id(0) == 0) { */
-      /*   offer_fork(); */
-      /* } */
+      if (k_get_group_id(__k_ctx) == 0) {
+        {
+          Restoration_ctx __to_fork;
+          __to_fork.target = 1;
+          int __junk_private;
+          offer_fork(__k_ctx, __s_ctx, __scratchpad, &__to_fork,
+                     &__junk_private, &__junk_global);
+        }
+      case 1:
+        __restoration_ctx->target = 0;
+      }
 
       // can be killed before handling a task, but always keep at least
       // one work-group alive.

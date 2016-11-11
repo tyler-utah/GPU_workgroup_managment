@@ -994,24 +994,30 @@ $\getnumgroups()$ will be identical during such an interval; the same holds for 
 This guarantee can be exploited by algorithms that perform strided
 data processing.  We now illustrate this using the graph traversal motivating example.
 
-\paragraph{Adapting graph traversal} \ADComment{Tyler, the original had two global barriers; the port has just one resizing barrier.  Is this right?}
-\myfiglong\ref{fig:cgraphsearch} shows a cooperative version of the graph traversal kernel
-of \myfig\ref{fig:graphsearch}, introduced in
-\mysec\ref{sec:openclexamples}.  
-On line~\ref{line:cgraph:resizing}, we change the original global barrier
-into a resizing barrier. Several variables are marked to be
-transmitted in the case of workgroups joining at the resizing barrier
+\paragraph{Adapting graph traversal} 
+\myfiglong\ref{fig:cgraphsearch} shows a cooperative version of the
+graph traversal kernel of \myfig\ref{fig:graphsearch}, introduced in
+\mysec\ref{sec:openclexamples}.  On lines~\ref{line:cgraph:resizing1}
+and ~\ref{line:cgraph:resizing2}, we change the original global
+barriers into a resizing barriers. Several variables are marked to be
+transmitted in the case of workgroups joining at the resizing barriers
 (lines~\ref{line:cgraph:transmit1}, \ref{line:cgraph:transmit2} and
-\ref{line:cgraph:transmit3}): $\keyword{level}$ must be restored so that
-new workgroups know which frontier they are processing; $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$ must be restored so that new
-workgroups know which of the node arrays are input and output. Lastly,
-the static work distribution of the original kernel is no longer valid
-in a cooperative kernel. This is because the stride (which is based on
-$M$) may change after each resizing barrier
+\ref{line:cgraph:transmit3}): $\keyword{level}$ must be restored so
+that new workgroups know which frontier they are processing;
+$\keyword{in\_nodes}$ and $\keyword{out\_nodes}$ must be restored so
+that new workgroups know which of the node arrays are input and
+output. Lastly, the static work distribution of the original kernel is
+no longer valid in a cooperative kernel. This is because the stride
+(which is based on $M$) may change after each resizing barrier
 call. To fix this, we re-distribute the work after each resizing
 barrier call by recomputing the thread id and stride
 (lines~\ref{line:cgraph:rechunking1} and
-\ref{line:cgraph:rechunking2}).  \ADComment{Tyler: can you please add the line number references in the following?} This example exploits the fact that the cooperative kernel does not issue $\offerkill$ nor $\offerfork$ directly: the value of $\keyword{stride}$ obtained from $\getglobalsize()$ at line~\ref{...} is stable until the next resizing barrier at line~\ref{...}, and in particular can be safely used inside the $\keyword{for}$ loop.
+\ref{line:cgraph:rechunking2}). This example exploits the fact that
+the cooperative kernel does not issue $\offerkill$ nor $\offerfork$
+directly: the value of $\keyword{stride}$ obtained from
+$\getglobalsize()$ at line~\ref{line:cgraph:rechunking2} is stable
+until the next resizing barrier at line~\ref{line:cgraph:resizing1},
+and in particular can be safely used inside the $\keyword{for}$ loop.
 
 \begin{figure}
 
@@ -1032,10 +1038,11 @@ kernel graph_app(global graph *g,
       process_node(g, in_nodes[i], out_nodes, level);
     }
 
-    level++;
-    swap(in_nodes, out_nodes);
+    swap(&in_nodes, &out_nodes);
+(*@\label{line:cgraph:resizing1}@*)    resizing_global_barrier();
     reset(out_nodes);
-(*@\label{line:cgraph:resizing}@*)    resizing_global_barrier();
+    level++;
+(*@\label{line:cgraph:resizing2}@*)    resizing_global_barrier();
   }
 }
 \end{lstlisting}
