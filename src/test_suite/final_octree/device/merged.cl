@@ -244,7 +244,11 @@ void octree_main(
 
     /* main loop */
   }
+<<<<<<< HEAD
   while (k_get_group_id(__k_ctx) != -1) {
+=======
+  while (atomic_load(particlesDone) < 10000000) {
+>>>>>>> c77284265d5ddccf34a8cfbdf35da39d4cc66a36
       /* __restoration_ctx->target != */
       /* UCHAR_MAX /\* substitute for 'true', which can cause compiler hangs *\/) { */
     switch (__restoration_ctx->target) {
