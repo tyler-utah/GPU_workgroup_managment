@@ -1313,9 +1313,17 @@ extensions.
 
 \section{Related Work}\label{sec:relatedwork}
 
+
+Lots of work on irregular algorithms (assumes fairness), and persistent threads (assumes OB model, which assumes a degree of fairness).  Our contribution can enable these to be safe.
+
+Work on multi-tasking to improve throughput, etc., but this does not relate to fairness and wouldn't help blocking algorithms.
+
+Proposals to implement preemption, but these require hardware support and may be overkill.  Advantage: fully automatic; disadvantage: doesn't capture domain knowledge.
+
+Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
+
 \ADComment{Kepler preemption support?  Mention in related work?}
 
-\ADComment{Mention dynamic parallelism and explain why it's no good.}
 
 \cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
   SMs, not to workgroups, so that tasks that would benefit from being
