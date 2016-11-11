@@ -8,6 +8,12 @@
 /* Hugues: octree_common.h hard-coded-included since kernel_merge does
    not provide option to indicate additionnal include dirs/files */
 
+/* TODO
+   - use pool with mutexes, cf connect_four
+   - use task donation when overflow of pool
+   - test with big number of particles
+ */
+
 /*---------------------------------------------------------------------------*/
 
 typedef struct {
@@ -27,154 +33,59 @@ typedef struct {
 
 /*---------------------------------------------------------------------------*/
 
-int myrand(__global int *randdata, int group_id) {
-  /* Hugues: size of randdata is set in host code, it is considered to
-     be an upper bound to the possible number of groups */
-  randdata[group_id] = randdata[group_id] * 1103515245 + 12345;
-  return ((unsigned)(randdata[group_id] / 65536) % 32768) + group_id;
-}
-
-/*---------------------------------------------------------------------------*/
-/* lbabp: load balance ABP style, aka work-stealing */
-
-void DLBABP_push(__global Task *deq, __global DequeHeader *dh,
-                 unsigned int maxlength, __local Task *val, int group_id) {
-  int private_tail = atomic_load_explicit(
-      &(dh[group_id].tail), memory_order_acquire, memory_scope_device);
-  deq[group_id * maxlength + private_tail] = *val;
-  private_tail++;
-  atomic_store_explicit(&(dh[group_id].tail), private_tail,
-                        memory_order_release, memory_scope_device);
+int pool_try_lock(__global atomic_int *task_pool_lock, int pool_id) {
+  int expected = false;
+  return atomic_compare_exchange_strong(&(task_pool_lock[pool_id]), &expected,
+                                        true);
 }
 
 /*---------------------------------------------------------------------------*/
 
-void DLBABP_enqueue(__global Task *deq, __global DequeHeader *dh,
-                    unsigned int maxlength, __local Task *val, int group_id) {
-  /* Hugues todo: check calls to DLBABP_enqueue, can any other thread
-   * than id0 can call it ? */
-  if (get_local_id(0) == 0) {
-    DLBABP_push(deq, dh, maxlength, val, group_id);
-  }
+void pool_unlock(__global atomic_int *task_pool_lock, int pool_id) {
+  atomic_store(&(task_pool_lock[pool_id]), false);
 }
 
 /*---------------------------------------------------------------------------*/
 
-/* Hugues: head is separated in ctr and index, ctr is useful to avoid
- * ABA problem. Since CAS operation deals with 32 bits int, a head is
- * declared as an int, and ctr/index is accessed with mask and logical
- * AND operations. */
-
-#define getIndex(head) (head & 0xffff)
-
-/*---------------------------------------------------------------------------*/
-
-int DLBABP_steal(__global Task *deq, __global DequeHeader *dh,
-                 unsigned int maxlength, __local Task *val, unsigned int idx) {
-  int remoteTail;
-  int oldHead;
-  int newHead;
-
-  oldHead = atomic_load_explicit(&(dh[idx].head), memory_order_acquire,
-                                 memory_scope_device);
-  /* We need to access dh[idx].tail but we do not modify it,
-     therefore a single load-acquire is enough */
-  remoteTail = atomic_load_explicit(&(dh[idx].tail), memory_order_acquire,
-                                    memory_scope_device);
-  if (remoteTail <= getIndex(oldHead)) {
-    return -1;
+/* wgm_task_pop() MUST be called by local_id 0. This function grabs a
+   task from a pool and stores it in the task argument. Returns true if
+   it works.  must local_fence after this function */
+int wgm_task_pop(__local Task *task, __global Task *pools,
+                 __global atomic_int *task_pool_lock, __global int *pool_head,
+                 const int pool_size, int pool_id) {
+  int poped = false;
+  /* spinwait on the pool lock */
+  while (!(pool_try_lock(task_pool_lock, pool_id)))
+    ;
+  /* If pool is not empty, pick up the latest inserted task. */
+  if (pool_head[pool_id] > 0) {
+    atomic_dec(&(pool_head[pool_id]));
+    *task = pools[(pool_size * pool_id) + pool_head[pool_id]];
+    poped = true;
   }
-
-  *val = deq[idx * maxlength + getIndex(oldHead)];
-  /* IncIndex */
-  newHead = oldHead + 1;
-  if (atomic_compare_exchange_strong_explicit(
-          &(dh[idx].head), &oldHead, newHead, memory_order_acq_rel,
-          memory_order_relaxed, memory_scope_device)) {
-    return 1;
-  }
-
-  return -1;
+  pool_unlock(task_pool_lock, pool_id);
+  return poped;
 }
 
 /*---------------------------------------------------------------------------*/
 
-int DLBABP_pop(__global Task *deq, __global DequeHeader *dh,
-               unsigned int maxlength, __local Task *val, int group_id) {
-  int localTail;
-  int oldHead;
-  int newHead;
-
-  localTail = atomic_load_explicit(&(dh[group_id].tail), memory_order_acquire,
-                                   memory_scope_device);
-  if (localTail == 0) {
-    return -1;
+/* wgm_task_push() adds the task argument to the indicated pool. Returns
+   true if it worked. */
+int wgm_task_push(__local Task *task, __global Task *pools,
+                  __global atomic_int *task_pool_lock, __global int *pool_head,
+                  const int pool_size, int pool_id) {
+  int pushed = false;
+  /* spinwait on the pool lock */
+  while (!(pool_try_lock(task_pool_lock, pool_id)))
+    ;
+  /* If pool is not full, insert task */
+  if (pool_head[pool_id] < pool_size) {
+    pools[(pool_size * pool_id) + pool_head[pool_id]] = *task;
+    atomic_inc(&(pool_head[pool_id]));
+    pushed = true;
   }
-
-  localTail--;
-
-  atomic_store_explicit(&(dh[group_id].tail), localTail, memory_order_release,
-                        memory_scope_device);
-
-  *val = deq[group_id * maxlength + localTail];
-
-  oldHead = atomic_load_explicit(&(dh[group_id].head), memory_order_acquire,
-                                 memory_scope_device);
-
-  if (localTail > getIndex(oldHead)) {
-    return 1;
-  }
-
-  atomic_store_explicit(&(dh[group_id].tail), 0, memory_order_release,
-                        memory_scope_device);
-  /* Hugues: inline getZeroIndexIncCtr below */
-  newHead = (oldHead + 0x10000) & 0xffff0000;
-  if (localTail == getIndex(oldHead)) {
-    if (atomic_compare_exchange_strong_explicit(
-            &(dh[group_id].head), &oldHead, newHead, memory_order_acq_rel,
-            memory_order_relaxed, memory_scope_device)) {
-      return 1;
-    }
-  }
-  atomic_store_explicit(&(dh[group_id].head), newHead, memory_order_release,
-                        memory_scope_device);
-  return -1;
-}
-
-/*---------------------------------------------------------------------------*/
-
-int DLBABP_dequeue2(__global Task *deq, __global DequeHeader *dh,
-                    unsigned int maxlength, __local Task *val,
-                    __global int *randdata, int num_pools, int group_id) {
-  if (DLBABP_pop(deq, dh, maxlength, val, group_id) == 1) {
-    return 1;
-  }
-
-  if (DLBABP_steal(deq, dh, maxlength, val,
-                   myrand(randdata, group_id) % num_pools) == 1) {
-    return 1;
-  } else {
-    return 0;
-  }
-}
-
-/*---------------------------------------------------------------------------*/
-
-int DLBABP_dequeue(__global Task *deq, __global DequeHeader *dh,
-                   unsigned int maxlength, __local Task *val,
-                   __global int *randdata, int num_pools,
-                   __local volatile int *rval, int group_id) {
-  int dval = 0;
-
-  if (get_local_id(0) == 0) {
-    *rval =
-        DLBABP_dequeue2(deq, dh, maxlength, val, randdata, num_pools, group_id);
-  }
-  barrier(CLK_LOCAL_MEM_FENCE);
-  dval = *rval;
-  barrier(CLK_LOCAL_MEM_FENCE);
-
-  return dval;
+  pool_unlock(task_pool_lock, pool_id);
+  return pushed;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -204,20 +115,21 @@ int whichbox(volatile float4 pos, float4 middle) {
 
 /*---------------------------------------------------------------------------*/
 
-void octree_init(__global Task *deq, __global DequeHeader *dh,
-                 unsigned int maxlength, __global unsigned int *treeSize,
-                 __global unsigned int *particlesDone, const int num_pools,
-                 unsigned int numParticles, __local Task *t) {
-  /* reset queues */
-  int i;
-  for (i = 0; i < num_pools; i++) {
-    atomic_store(&(dh[i].head), 0);
-    atomic_store(&(dh[i].tail), 0);
+void octree_init(__global Task *pools, __global atomic_int *task_pool_lock,
+                 __global int *pool_head, const int num_pools,
+                 const int pool_size, __global atomic_uint *treeSize,
+                 __global atomic_uint *particlesDone, unsigned int numParticles,
+                 __local Task *t) {
+  /* reset pools, no need to lock here since only global master thread
+     runs this function */
+  for (int i = 0; i < num_pools; i++) {
+    pool_head[i] = 0;
+    atomic_store(&(task_pool_lock[i]), false);
   }
 
   /* ---------- initOctree: global init ---------- */
-  *treeSize = 100;
-  *particlesDone = 0;
+  atomic_store(treeSize, 100);
+  atomic_store(particlesDone, 0);
 
   /* create and enqueue the first task */
   t->treepos = 0;
@@ -230,7 +142,8 @@ void octree_init(__global Task *deq, __global DequeHeader *dh,
   t->end = numParticles;
   t->flip = false;
 
-  DLBABP_enqueue(deq, dh, maxlength, t, 0);
+  /* push in pool_id zero */
+  wgm_task_push(t, pools, task_pool_lock, pool_head, pool_size, 0);
   /* ---------- end of initOctree ---------- */
 }
 
@@ -238,28 +151,22 @@ void octree_init(__global Task *deq, __global DequeHeader *dh,
 
 __kernel void octree_main(
     /* octree args */
-    __global int *randdata, __global float4 *particles,
-    __global float4 *newparticles, __global unsigned int *tree,
-    const unsigned int numParticles, __global unsigned int *treeSize,
-    __global unsigned int *particlesDone, const unsigned int maxchilds,
-    const int num_pools, __global Task *deq, __global DequeHeader *dh,
-    const unsigned int maxlength, __global float4 *frompart,
+    __global float4 *particles, __global float4 *newparticles,
+    __global unsigned int *tree, const unsigned int numParticles,
+    __global atomic_uint *treeSize, __global atomic_uint *particlesDone,
+    const unsigned int maxchilds, __global Task *pools,
+    __global atomic_int *task_pool_lock, __global int *pool_head,
+    const int num_pools, const int pool_size, __global float4 *frompart,
     __global float4 *topart, __global IW_barrier *__bar,
     __global Discovery_ctx *__d_ctx, SCHEDULER_ARGS) {
-  /* Hugues: pointers to global memory, but the pointers are stored in
-     local memory */
   __local int __scratchpad[2];
   DISCOVERY_PROTOCOL(__d_ctx, __scratchpad);
   INIT_SCHEDULER;
-  __local unsigned int count[8];
-  __local int sum[8];
-
+  __local uint count[8];
+  __local uint sum[8];
   __local Task t[1];
-  __local unsigned int check[1];
-
+  __local int got_new_task[1];
   __local Task newTask[1];
-
-  __local volatile int rval[1];
 
   /* ADD INIT HERE */
   if (p_get_group_id(__d_ctx) == 0) {
@@ -276,24 +183,19 @@ __kernel void octree_main(
     BARRIER;
   }
   global_barrier_disc(__bar, __d_ctx);
-  if (get_local_id(0) == 0) {
-    if (p_get_global_id(__d_ctx) == 0) {
-      octree_init(deq, dh, maxlength, treeSize, particlesDone, num_pools,
-                  numParticles, t);
-    }
+  if (p_get_global_id(__d_ctx) == 0) {
+    octree_init(pools, task_pool_lock, pool_head, num_pools, pool_size,
+                treeSize, particlesDone, numParticles, &(t[0]));
   }
   global_barrier_disc(__bar, __d_ctx);
 
   /* main loop */
   while (true) {
 
-    uint local_id = get_local_id(0);
-    uint local_size = get_local_size(0);
-
-    // only the first group can fork, to limit calls to offer_fork.
-    if (p_get_group_id(__d_ctx) == 0) {
-      ;
-    }
+    /* only the first group can fork, to limit calls to offer_fork. */
+    /* if (get_group_id(0) == 0) { */
+    /*   offer_fork(); */
+    /* } */
 
     // can be killed before handling a task, but always keep at least
     // one work-group alive.
@@ -301,18 +203,33 @@ __kernel void octree_main(
       ;
     }
 
-    int group_id = p_get_group_id(__d_ctx);
+    uint local_id = get_local_id(0);
+    uint local_size = get_local_size(0);
+    int pool_id = p_get_group_id(__d_ctx) % num_pools;
 
     // Try to acquire new task
-    if (DLBABP_dequeue(deq, dh, maxlength, &(t[0]), randdata, num_pools, rval,
-                       group_id) == 0) {
-      (check[0]) = *particlesDone;
-      barrier(CLK_LOCAL_MEM_FENCE);
-      if ((check[0]) == numParticles) {
-        break;
+    if (local_id == 0) {
+      // First try own task, then check neighbours
+      for (int i = 0; i < num_pools; i++) {
+        got_new_task[0] =
+            wgm_task_pop(&(t[0]), pools, task_pool_lock, pool_head, pool_size,
+                         (pool_id + i) % num_pools);
+        if (got_new_task[0]) {
+          break;
+        }
       }
-      continue;
     }
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
+    if (!got_new_task[0]) {
+      if (atomic_load(particlesDone) == numParticles) {
+        break;
+      } else {
+        continue;
+      }
+    }
+
+    // Process task
 
     if ((t[0]).flip) {
       frompart = newparticles;
@@ -331,33 +248,31 @@ __kernel void octree_main(
     barrier(CLK_LOCAL_MEM_FENCE);
 
     for (int i = (t[0]).beg + local_id; i < (t[0]).end; i += local_size) {
-      /* Hugues todo: use atomic_inc() here ? */
-      atomic_add(&count[whichbox(frompart[i], (t[0]).middle)], 1);
+      int box = whichbox(frompart[i], (t[0]).middle);
+      atomic_add(&(count[box]), 1);
     }
+
     barrier(CLK_LOCAL_MEM_FENCE);
 
     if (local_id == 0) {
       sum[0] = count[0];
-      for (int x = 1; x < 8; x++)
+      for (int x = 1; x < 8; x++) {
         sum[x] = sum[x - 1] + count[x];
+      }
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    for (unsigned int i = (t[0]).beg + local_id; i < (t[0]).end;
-         i += local_size) {
-      /* Hugues: use atomic_dec() here ? */
+    for (uint i = (t[0]).beg + local_id; i < (t[0]).end; i += local_size) {
       int toidx = (t[0]).beg +
-                  atomic_add(&sum[whichbox(frompart[i], (t[0]).middle)], -1) -
-                  1;
+                  atomic_dec(&(sum[whichbox(frompart[i], (t[0]).middle)])) - 1;
       topart[toidx] = frompart[i];
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    /* Hugues: todo: i+= 1 ---> i++ */
-    for (int i = 0; i < 8; i += 1) {
+    for (int i = 0; i < 8; i++) {
 
-      // Create new work or move to correct side
+      /* Create new work or move to correct side */
       if (count[i] > maxchilds) {
         if (local_id == 0) {
           newTask[0].middle.x = (t[0]).middle.x + (t[0]).middle.w * mc[i][0];
@@ -369,10 +284,23 @@ __kernel void octree_main(
           newTask[0].beg = (t[0]).beg + sum[i];
           newTask[0].end = newTask[0].beg + count[i];
 
-          tree[(t[0]).treepos + i] = atomic_add(treeSize, (unsigned int)8);
+          tree[(t[0]).treepos + i] = atomic_fetch_add(treeSize, (uint)8);
           newTask[0].treepos = tree[(t[0]).treepos + i];
-          DLBABP_enqueue(deq, dh, maxlength, &newTask[0], group_id);
+
+          int pushed = false;
+          while (!pushed) {
+            for (int j = 0; j < num_pools; j++) {
+              pushed =
+                  wgm_task_push(&(newTask[0]), pools, task_pool_lock, pool_head,
+                                pool_size, (pool_id + j) % num_pools);
+              if (pushed) {
+                break;
+              }
+            }
+          }
         }
+        barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+
       } else {
         if (!(t[0]).flip) {
           for (int j = (t[0]).beg + sum[i] + local_id;
@@ -380,12 +308,13 @@ __kernel void octree_main(
             particles[j] = topart[j];
           }
         }
-        barrier(CLK_LOCAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
         if (local_id == 0) {
-          atomic_add(particlesDone, count[i]);
-          unsigned int val = count[i];
+          atomic_fetch_add(particlesDone, count[i]);
+          uint val = count[i];
           tree[(t[0]).treepos + i] = 0x80000000 | val;
         }
+        barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
       }
     }
   }
