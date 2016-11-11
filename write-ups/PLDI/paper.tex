@@ -484,9 +484,9 @@ threads.
 \begin{figure}
 
 \begin{lstlisting}
-(*@\label{line:wksteal:kernelfunc}@*) kernel work_stealing(global Task * pools) {
+(*@\label{line:wksteal:kernelfunc}@*)kernel work_stealing(global Task * pools) {
+(*@\label{line:wksteal:getgroupid}@*)  int pool_id = get_group_id();
   while (more_work(pools)) {
-(*@\label{line:wksteal:getgroupid}@*)    int pool_id = get_group_id();
 (*@\label{line:wksteal:poporsteal}@*)    Task * t = pop_or_steal(pools, pool_id);
     if (t) {
       // task processing may create more work
@@ -627,9 +627,6 @@ In \mysec\ref{sec:programmingguidelines} we show how the work stealing
 and graph traversal examples of \myfigs\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
 updated to use our cooperative kernels programming model to resolve
 the scheduling issue.
-
-
-
 
 
 \section{Cooperative Kernels}\label{sec:cooperativekernels}
@@ -910,30 +907,41 @@ robust to changes in the values returned by these functions.
 \myfiglong\ref{fig:workstealing-cooperative} shows a cooperative
 version of the work stealing example of \myfig\ref{fig:workstealing} that we
 discussed in \mysec\ref{sec:openclexamples}.
-\ADComment{TODO: go through with Hugues; where are the offer functions?}
 
 For the work stealing example, there is no state to transmit since a
 computation is entirely parameterised by a task, which is retrieved from
-a task pool located in global memory. Care must be taken on the dynamic
-change of the number of workgroups though: we cannot assume that the
-total number of task pools is equal to $\getnumgroups$. Thus, the number
-of pools must be given as an argument, and the $\mathsf{pool}$ argument
-must be obtained from the group id modulo the total number of
-pools. This total number of pools must also be passed to
-$\mathsf{pop\_or\_steal}$, since when a workgroup wants to steal it must
-access other pool indexes, which are bounded by the total number of
-pools.
+a task pool located in global memory. In the main loop, before trying to
+obtain a task, we make the workgroup offer itself to be forked or killed
+(lines~\ref{line:cwksteal:offerfork},\ref{line:cwksteal:offerkill}). Note
+that a workgroup may be killed even if its associated task pool is not
+empty, since remaining tasks could eventually be stealed by other
+workgroups.  Care must be taken on computing pool identifiers: the
+original version in \myfig\ref{fig:workstealing} can rely on the fact
+that there are as many pools as workgroups, but here the number of
+workgroups may change during execution. Therefore, the number of pools
+must now be explicitely given as an argument
+(line~\ref{line:cwksteal:argnumpool}) and used as an upper bound of pool
+indexes when scanning pools in $\mathsf{more\_work}$
+(line~\ref{line:cwksteal:morework}) and $\mathsf{pop\_or\_steal}$
+(line~\ref{line:cwksteal:poporsteal}). Besides, computation of the
+workgroup's pool index (line~\ref{line:cwksteal:getgroupid}) must not
+only be bounded by the number of pools but also be moved inside the main
+loop since a forked workgroup that starts to execute after $\offerfork$
+must re-compute its pool index.
 
 \begin{figure}
 
 \begin{lstlisting}
-kernel work_stealing(global Task *pools, const int num_pools) {
-  while (more_work(pools)) {
-    int pool_id = get_group_id() % num_pools;
-    Task *t = pop_or_steal(pools, pool_id, num_pools);
+kernel work_stealing(global Task * pools,
+(*@\label{line:cwksteal:argnumpool}@*)                     const int num_pools) {
+(*@\label{line:cwksteal:morework}@*)  while (more_work(pools, num_pools)) {
+(*@\label{line:cwksteal:offerfork}@*)    offer_fork();
+(*@\label{line:cwksteal:offerkill}@*)    offer_kill();
+(*@\label{line:cwksteal:getgroupid}@*)    int pool_id = get_group_id() % num_pools;
+(*@\label{line:cwksteal:poporsteal}@*)    Task * t = pop_or_steal(pools, pool_id, num_pools);
     if (t) {
       // task processing may create more work
-      process_task(t, pools, pool_id);
+(*@\label{line:cwksteal:processtask}@*)      process_task(t, pools, pool_id);
     }
   }
 }
