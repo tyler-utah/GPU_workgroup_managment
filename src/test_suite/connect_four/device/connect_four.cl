@@ -416,15 +416,11 @@ connect_four(
 
     /* get task */
     if (local_id == 0) {
-      local_task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, pool_id);
-      /* if no more task in own pool, try to steal some from other pools */
-      if (local_task[0] == NULL_TASK) {
-        for (int i = 1; i < num_task_pool; i++) {
-          int steal_pool_id = (pool_id + i) % num_task_pool;
-          local_task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, steal_pool_id);
-          if (local_task[0] != NULL_TASK) {
-            break;
-          }
+      // try all pools, starting with own
+      for (int i = 0; i < num_task_pool; i++) {
+        local_task[0] = wgm_task_pop(task_pool, task_pool_lock, task_pool_head, task_pool_size, (pool_id + i) % num_task_pool);
+        if (local_task[0] != NULL_TASK) {
+          break;
         }
       }
       /* if task is still null, there may be no work left anymore */
