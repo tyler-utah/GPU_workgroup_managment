@@ -106,22 +106,40 @@ void reset_persistent_task(CL_Execution *exec) {
 int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {
 	// Set args for persistent kernel
 	int err = k.setArg(arg_index, row_d);
+	check_ocl(err);
+
 	arg_index++;
 	err |= k.setArg(arg_index, col_d);
+	check_ocl(err);
+
 	arg_index++;
-	err = k.setArg(arg_index, node_value_d);
+	err |= k.setArg(arg_index, node_value_d);
+	check_ocl(err);
+
 	arg_index++;
 	err |= k.setArg(arg_index, color_d);
+	check_ocl(err);
+
 	arg_index++;
-	err = k.setArg(arg_index, stop_d1);
+	err |= k.setArg(arg_index, stop_d1);
+	check_ocl(err);
+
 	arg_index++;
 	err |= k.setArg(arg_index, stop_d2);
+	check_ocl(err);
+
 	arg_index++;
-	err = k.setArg(arg_index, max_d);
+	err |= k.setArg(arg_index, max_d);
+	check_ocl(err);
+
 	arg_index++;
 	err |= k.setArg(arg_index, num_nodes);
+
+	check_ocl(err);
+
 	arg_index++;
 	err |= k.setArg(arg_index, num_edges);
+	check_ocl(err);
 	arg_index++;
 	check_ocl(err);
 

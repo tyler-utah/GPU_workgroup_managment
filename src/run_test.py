@@ -30,11 +30,11 @@ EXIT_THREAD      = 0
 
 PROGRAMS = {
 #    "lonestar_sssp"
-    "lonestar_bfs",
+#    "lonestar_bfs",
     "pannotia_color",
-    "pannotia_mis",
-    "pannotia_bc",
-    "pannotia_sssp"
+#    "pannotia_mis",
+#    "pannotia_bc",
+#    "pannotia_sssp"
 }
 
 PROGRAM_DATA = {
