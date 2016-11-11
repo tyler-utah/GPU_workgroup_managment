@@ -281,7 +281,7 @@ int wgm_task_pop(__global int *task_pool, __global atomic_int *task_pool_lock, _
   while (!(pool_try_lock(task_pool_lock, pool_id)));
   /* If pool is not empty, pick up the latest inserted task. */
   if (task_pool_head[pool_id] > 0) {
-    task_pool_head[pool_id]--;
+    atomic_dec(&(task_pool_head[pool_id]));
     task = task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]];
   }
   pool_unlock(task_pool_lock, pool_id);
@@ -300,7 +300,7 @@ int wgm_task_push(int task, __global int *task_pool, __global atomic_int *task_p
   /* If pool is not full, insert task */
   if (task_pool_head[pool_id] < task_pool_size) {
     task_pool[(task_pool_size * pool_id) +  task_pool_head[pool_id]] = task;
-    task_pool_head[pool_id]++;
+    atomic_inc(&(task_pool_head[pool_id]));
     task = NULL_TASK;
   }
   pool_unlock(task_pool_lock, pool_id);
