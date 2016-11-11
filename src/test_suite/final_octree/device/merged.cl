@@ -240,9 +240,10 @@ void octree_main(
 
     /* main loop */
   }
-  while (
-      __restoration_ctx->target !=
-      UCHAR_MAX /* substitute for 'true', which can cause compiler hangs */) {
+  // Hand hack: impose a non-trivial true
+  while (atomic_load(particlesDone) != 1000000000) {
+      /* __restoration_ctx->target != */
+      /* UCHAR_MAX /\* substitute for 'true', which can cause compiler hangs *\/) { */
     switch (__restoration_ctx->target) {
     case 0:
       if (!(true)) {
