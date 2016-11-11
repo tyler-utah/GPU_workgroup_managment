@@ -402,13 +402,11 @@ connect_four(
   /* MAIN LOOP */
   while (true) {
 
-    int group_id = get_group_id(0);
-
-    if (group_id > 0) {
+    if (get_group_id(0) > 0) {
       offer_kill();
     }
 
-    if (group_id == 0) {
+    if (get_group_id(0) == 0) {
       offer_fork();
     }
 
