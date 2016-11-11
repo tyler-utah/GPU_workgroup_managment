@@ -408,7 +408,7 @@ and motivate our cooperative threads approach (\mysec\ref{sec:openclexamples}).
 An OpenCL program is divided into \emph{host} and \emph{device}
 components.  A host application runs on the CPU and launches one or
 more \emph{kernels} that run on accelerator devices---GPUs in the
-context of this paper.  A kernel is writen in OpenCL C, based on C99.
+context of this paper.  A kernel is written in OpenCL C, based on C99.
 All threads executing a kernel execute the same entry function with
 identical arguments, but a thread may invoke the $\getglobalid()$
 function to query its unique thread id in order to access different
@@ -723,7 +723,7 @@ inherently unfair.
 The $\offerkill$ primitive allows the cooperative kernel to return
 compute units to the scheduler by offering to sacrifice workgroups.
 The idea is that while having the scheduler be permitted to terminate
-the execution of workgroups in an arbitary fashion would be drastic,
+the execution of workgroups in an arbitrary fashion would be drastic,
 the kernel may contain identifiable points of execution at which a
 workgroup could gracefully leave the computation.  We give examples of
 these for work stealing and graph traversal below.
@@ -873,7 +873,7 @@ cooperative kernels programming model.  However, we discuss in
 implemented significantly more efficiently if it is treated as a
 primitive operation that interacts directly with the scheduler.
 
-\subsection{Programming With Coopeative Kernels}\label{sec:programmingguidelines}
+\subsection{Programming With Cooperative Kernels}\label{sec:programmingguidelines}
 
 Working with cooperative kernels requires some manual effort on the
 part of the programmer: they must place the $\transmit$ qualifier and
@@ -912,7 +912,7 @@ discussed in \mysec\ref{sec:openclexamples}.
 \ADComment{TODO: go through with Hugues; where are the offer functions?}
 
 For the work stealing example, there is no state to transmit since a
-computation is entirely parametrized by a task, which is retrieved from
+computation is entirely parameterised by a task, which is retrieved from
 a task pool located in global memory. Care must be taken on the dynamic
 change of the number of workgroups though: we cannot assume that the
 total number of task pools is equal to $\getnumgroups$. Thus, the number
@@ -1029,7 +1029,7 @@ fewer workgroups, something which $\resizingglobalbarrier$
 facilitates.
 
 In summary, our experience so far indicates that cooperative kernels
-is a good fit for current irregular algorithms.  Of cousre this is, in
+is a good fit for current irregular algorithms.  Of course this is, in
 part, because we designed the model with these algorithms in mind, but
 we argue that the fit is natural not just for the examples that we
 study, but more generally for at least these two patterns of irregular
@@ -1077,7 +1077,7 @@ on properties of the cooperative kernel itself, and on the efficiency
 of the GPU that is used for execution.  In \mysec\ref{sec:representativeworkloads} we conduct
 experiments to understand the response rate that would be required to
 co-schedule graphics rendering with a cooperative kernel in order to
-achieve a smooth frame rate, and we evalaute responsiveness in
+achieve a smooth frame rate, and we evaluate responsiveness in
 practice in \mysec\ref{sec:responsiveness}.
 
 \paragraph{Sufficient workgroups for the cooperative kernel}
@@ -1087,7 +1087,7 @@ workgroups requested upon kernel launch, in order to conduct its
 processing efficiently.  The scheduler should thus aim to provide with
 cooperative kernel with as many workgroups, up to this number, as
 other constraints allow.  As a result, the scheduler should generally
-accept an $\offerkill$ only if a comput unit is required for another
+accept an $\offerkill$ only if a compute unit is required for another
 task, and should respond positively to $\offerfork$ calls by
 scheduling new workgroups if compute units are available.  Our
 implementation of cooperative scheduling (\mysec\ref{sec:implementation}) is as
@@ -1217,7 +1217,7 @@ remaining computation to be performed if competing workloads allow it.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
 
-\subsection{The Overhad of Moving to Cooperative Kernels}
+\subsection{The Overhead of Moving to Cooperative Kernels}
 
 \ADComment{Results for stand-alone vs.\ cooperative without co-scheduling.}
 
@@ -1239,7 +1239,7 @@ remaining computation to be performed if competing workloads allow it.
 
 
 \cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
-  SMs, not to workgroups, so that tasks taht would benefit from being
+  SMs, not to workgroups, so that tasks that would benefit from being
   processed by the same SM can be scheduled to the same SM.  Has
   little to do with preemption, but more to do with irregular
   computation.}
