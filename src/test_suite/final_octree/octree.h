@@ -44,8 +44,6 @@ double genrand_real1(void);
 
 void generate_particles(CL_Execution *exec)
 {
-  printf("Enter %s%\n", __func__);
-
   cl_float4* lparticles = new cl_float4[FLAGS_numParticles];
   char fname[256];
   snprintf(fname, 256, "octreecacheddata-%dparticles.dat", FLAGS_numParticles);
@@ -94,7 +92,6 @@ const char* persistent_kernel_name() {
 /*---------------------------------------------------------------------------*/
 
 void reset_persistent_task(CL_Execution *exec) {
-  printf("Enter %s%\n", __func__);
   // re-write 0 to the CL buffers, etc
   int err = 0;
 
@@ -108,14 +105,12 @@ void reset_persistent_task(CL_Execution *exec) {
   check_ocl(err);
 
   generate_particles(exec);
-  printf("Exit %s%\n", __func__);
 }
 
 /*---------------------------------------------------------------------------*/
 
 // Empty for Pannotia apps
 void init_persistent_app_for_real(CL_Execution *exec, int occupancy) {
-  printf("Enter %s%\n", __func__);
   num_workgroups = occupancy;
 
   particles = cl::Buffer(exec->exec_context, CL_MEM_READ_WRITE, sizeof(cl_float4) * FLAGS_numParticles);
@@ -140,7 +135,6 @@ void init_persistent_app_for_real(CL_Execution *exec, int occupancy) {
 /*---------------------------------------------------------------------------*/
 
 void set_persistent_app_args_for_real(int arg_index, cl::Kernel k) {
-  printf("Enter %s%\n", __func__);
   // Set args for persistent kernel
 
   check_ocl(k.setArg(arg_index++, particles));
@@ -165,12 +159,10 @@ void set_persistent_app_args_for_real(int arg_index, cl::Kernel k) {
 
 void init_persistent_app_for_occupancy(CL_Execution *exec)
 {
-  printf("Enter %s%\n", __func__);
   // nothing to do for octree
 }
 
 int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {
-  printf("Enter %s%\n", __func__);
   // Set dummy args for persistent kernel
   int err = 0;
   int num_args_octree = 14;
@@ -183,7 +175,6 @@ int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {
 }
 
 void output_persistent_solution(const char *fname, CL_Execution *exec) {
-  printf("Enter %s%\n", __func__);
   // write to a file, nothing to do for octree
   return;
 }
@@ -199,7 +190,6 @@ bool diff_solution_file_int(int * a, const char * solution_fname, int v) {
 }
 
 bool check_persistent_task(CL_Execution *exec) {
-  printf("Enter %s%\n", __func__);
   // check whether the output is correct, load cl buffer back in host
   // and check values
   cl_uint* htree;
