@@ -190,6 +190,8 @@ def exec_cmd(cmd, prefix="", record_file=""):
     cmd = cmd + ["--output_non_persistent_duration", prefix + "_non_persistent_duration"]
     cmd = cmd + ["--output_timestamp_executing_groups", prefix + "_timestamp_executing_groups"]
     cmd = cmd + ["--output_timestamp_non_persistent", prefix + "_timestamp_non_persistent"]
+    cmd = cmd + ["--output_summary2", record_file]
+
 
     if prefix in CHECK_POINT_DATA:
         print(prefix + " found in checkpoint")
@@ -198,25 +200,25 @@ def exec_cmd(cmd, prefix="", record_file=""):
     #time.sleep(30)
     EXIT_THREAD = 0
     local_time_begin = time.time()
-    thread = Thread(target = const_print_time)
-    thread.start()
+    #thread = Thread(target = const_print_time)
+    #thread.start()
 
     PRINT("====================== RUN START =========================")
     PRINT(prefix)
     for s in cmd:
         PRINT(s)
     PRINT("----------------------------------------------------------")
-    p_obj = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p_obj = subprocess.Popen(cmd)
     ret_code = p_obj.wait()
-    sout, serr = p_obj.communicate()
-    PRINT("* stdout:")
-    PRINT(sout.decode())
-    if record_file != "":
-        f = open(record_file, "w")
-        f.write(sout.decode())
-        f.close()
-    PRINT("* stderr:")
-    PRINT(serr.decode())
+    #sout, serr = p_obj.communicate()
+    #PRINT("* stdout:")
+    #PRINT(sout.decode())
+    #if record_file != "":
+    #    f = open(record_file, "w")
+    #    f.write(sout.decode())
+    #    f.close()
+    #PRINT("* stderr:")
+    #PRINT(serr.decode())
     local_time_end = time.time()
     PRINT("----------------------------------------------------------")
     str_ret_code = "Return code: " + str(ret_code)
@@ -225,7 +227,7 @@ def exec_cmd(cmd, prefix="", record_file=""):
     PRINT("time since start: " + str(local_time_end - TIME_BEGIN) + " seconds")
     PRINT("====================== RUN END ===========================")
     EXIT_THREAD = 1
-    thread.join();
+    #thread.join();
     if (ret_code != 0):
         print("Error running " + " ".join(cmd))
         return ret_code
@@ -345,7 +347,8 @@ def run_suite():
                         cmd = cmd + ["--non_persistent_wgs", npwg]
                         cmd = cmd + ["--matdim", c["matdim"]]
                         prefix = d["stat"] + "_" + c["name"] + "_" + npconfig + "_merged"
-                        err_code = exec_cmd(cmd, prefix)
+                        record_stdout = prefix + "_stdout.txt"
+                        err_code = exec_cmd(cmd, prefix, record_stdout)
                         if err_code != 0:
                             continue
                         collect_stats(d, prefix)

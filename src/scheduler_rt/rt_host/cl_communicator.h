@@ -196,7 +196,7 @@ class CL_Communicator {
 				if (groups == 0) {
 					break;
 				}
-				spinwait_microsec(1);
+				my_sleep(1);
 			}
 
 			persistent_end = gettime_chrono();
