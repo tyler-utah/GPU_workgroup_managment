@@ -879,10 +879,22 @@ primitive operation that interacts directly with the scheduler.
 
 \subsection{Programming With Coopeative Kernels}\label{sec:programmingguidelines}
 
-\ADComment{Revise: we're folding this into the overview of the examples.}
+Working with cooperative kernels requires some manual effort on the
+part of the programmer: they must place the $\transmit$ qualifier and
+use the new language primitives described in
+\mysec\ref{sec:semantics}, and account for slight changes in the OpenCL semantics induced by these new features.
 
-We remark on some issues that programmer working with cooperative
-kernels should be aware of.
+The programming model and associated language constructs were inspired
+by the requirements of the irregular GPU algorithms proposed in the
+literature, and that at least for these algorithms it is usually easy
+to identify where to place the constructs.
+
+We discuss the main semantic change induced by our programming
+model---that the number of workgroups executing a kernel varies
+dynamically---and illustrate our programming model and the impact of
+this semantic change by adapting the work stealing and graph traversal
+algorithms of \mysec\ref{sec:openclexamples} to use cooperative
+kernels.
 
 \paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
 the value returned by $\getnumgroups()$ is not fixed during the
@@ -896,131 +908,12 @@ The programmer
 must therefore write their cooperative kernel in a manner that is
 robust to changes in the values returned by these functions.
 
-\paragraph{Cooperative kernels that only use barriers}
+\paragraph{Adapting work stealing}
 
-The situation is more stable if a cooperative kernel does not directly
-issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
-only calls to $\resizingglobalbarrier$ can cause the number of active
-workgroups to change and, as discussed in Section~\ref{sec:semantics},
-this function causes synchronisation between all threads and causes
-the number of active workgroups to change atomically.  At any point
-during execution, the threads of a kernel are executing between some
-pair of resizing barrier calls, which we call a \emph{resizing barrier
-  intervals} (here we consider the kernel entry and exit points
-conceptually to be special cases of resizing barriers).  The number of
-workgroups executing the kernel is thus constant within each resizing
-barrier interval, i.e.\ the result returned by repeated calls to
-$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
-
-This guarantee can be exploited by algorithms that perform strided
-data processing.  \ADComment{Tyler, can we give an example of a data
-  processing loop that would have to be changed?} \TSComment{Done,
-its in figure~\ref{fig:cgraphsearch}}
-
-\paragraph{Placing the new constructs}
-
-It is up to the programmmer to decide where to place our new language
-constructs.  This must be done bearing in mind both the semantics of
-the constructs, as detailed in Section~\ref{ }, as well as the
-non-functional requirements of cooperative kernels that we describe in
-Section~\ref{sec:nonfunctional}.
-
-We note, however, that the programming model and associated language
-constructs were inspired by the requirements of the irregular GPU
-algorithms proposed in the literature, and that at least for these
-algorithms it is usually easy to identify where to place the
-constructs.
-
-The irregular algorithms we encountered either employ work stealing or
-operate on graph data structures.
-
-Work stealing algorithms have a transactional flavour, whereby tasks
-are repeatedly pulled from a queue and processed by a workgroup.  The
-point of task completion---the end of a transaction---is a natural
-place for a workgroup to invoke both $\offerkill$ and $\offerfork$, to
-indicate both that the workgroup could gracefully exit computation,
-but also that there is more work to be processed and that further
-workgroups would be useful in order to process this work.  Such
-algorithms usually require little state to persist between tasks;
-typically only the pointers to the queue data structures need to be
-pre-initialised, by annotating them with $\transmit$.
-\ADComment{Refer back to cooperative versions of examples in
-  Section~\ref{sec:semantics}.}
-
-The level-by-level approach employed by many graph algorithms tends to
-involve global barrier synchronisation.  In some cases, a global
-barrier is required in the midst of a transaction, in which case
-$\globalbarrier$, but not $\resizingglobalbarrier$, is suitable for
-achieving synchronization without disturbing the set of active
-workgroups.  But often it is the case that on completing a level of
-the graph algorithm, the next level could be processed by more or
-fewer workgroups, something which $\resizingglobalbarrier$
-facilitates.  Again, only a small amount of state is relevant to new
-workgroups joining the computation, such as the value of the level
-being processed; this relevant state must be annotated with
-$\transmit$.
-
-\ADComment{Fold this in:}
-
-Using coopeative kernels requires some programmer effort 
-
-\ADComment{Lifted:} , after which
-we explain how the work stealing and graph traveral algorithms of
-Section~\ref{sec:openclexamples} can be turned into cooperative kernels
-that use the extensions.
-
-\begin{figure}
-
-\begin{lstlisting}
-kernel graph_app(global graph *g, 
-                 global nodes *n0, global nodes *n1) {
-
-(*@\label{line:cgraph:transmit1}@*)  transmit int level = 0;
-(*@\label{line:cgraph:transmit2}@*)  transmit global nodes *in_nodes = n0;
-(*@\label{line:cgraph:transmit3}@*)  transmit global nodes *out_nodes = n1;
-
-  while(in_nodes.size > 0) {
-
-(*@\label{line:cgraph:rechunking1}@*)    int tid = get_global_id();
-(*@\label{line:cgraph:rechunking2}@*)    int stride = get_global_size();
-
-    for (int i = tid; i < nodes.size; i += stride) {
-      process_node(g, in_nodes[i], out_nodes, level);
-    }
-
-    level++;
-    swap(in_nodes, out_nodes);
-    reset(out_nodes);
-(*@\label{line:cgraph:resizing}@*)    resizing_global_barrier();
-  }
-}
-\end{lstlisting}
-\caption{Cooperative kernel port for Figure~\ref{fig:graphsearch}}\label{fig:cgraphsearch}
-\end{figure}
-
-\ADComment{TODO.  We want to show the examples from Section~\ref{sec:openclexamples} ported to use cooperative kernels.  We want to make it clear that it is easy to place the primitives.}
-
-In practice, we found that transforming traditional blocking GPU
-kernels into cooperative kernels was straightforward. For example,
-Figure~\ref{fig:cgraphsearch} shows the graph traversal example of
-Figure~\ref{fig:graphsearch} transformed into a cooperative kernel.
-On line~\ref{line:cgraph:resizing}, we change the original barrier
-into a resizing barrier. Several variables are marked to be
-transmitted in the case of workgroups joining at the resizing barrier
-(lines~\ref{line:cgraph:transmit1}, \ref{line:cgraph:transmit2} and
-\ref{line:cgraph:transmit3}): {\tt level} must be restored so that
-new workgroups know which frontier they are processing; {\tt
-  in\_nodes} and {\tt out\_nodes} must be restored so that new
-workgroups know which of the node arrays are input and output. Lastly,
-the static work distribution of the original kernel is no longer valid
-in a cooperative kernel. This is because the stride (which is based on
-$M$) may change after each resizing barrier
-call. To fix this, we re-distribute the work after each resizing
-barrier call by recomputing the thread id and stride
-(lines~\ref{line:cgraph:rechunking1} and
-\ref{line:cgraph:rechunking2}).
-
-\TSComment{Can Hugues talk about work stealing here?}
+\myfiglong\ref{fig:workstealing-cooperative} shows a cooperative
+version of the work stealing example of \myfig\ref{...} that we
+discussed in \mysec\ref{sec:openclexamples}.
+\ADComment{TODO: go through with Hugues; where are the offer functions?}
 
 For the work stealing example, there is no state to transmit since a
 computation is entirely parametrized by a task, which is retrieved from
@@ -1049,10 +942,103 @@ kernel work_stealing(global Task *pools, const int num_pools) {
 }
 \end{lstlisting}
 
-\caption{Cooperative version of work stealing: the number of workpools
-must be explicitely passed as arguments since the number of workgroups
+\caption{Cooperative version of the work stealing example from \myfig\ref{fig:XXX}; the number of workpools
+must be explicitly passed as arguments since the number of workgroups
 is not a constant anymore}\label{fig:workstealing-cooperative}
 \end{figure}
+
+\paragraph{Cooperative kernels that only use barriers}
+
+The situation is more stable if a cooperative kernel does not directly
+issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
+only calls to $\resizingglobalbarrier$ can cause the number of active
+workgroups to change and, as discussed in Section~\ref{sec:semantics},
+this function causes synchronisation between all threads and causes
+the number of active workgroups to change atomically.  At any point
+during execution, the threads of a kernel are executing between some
+pair of resizing barrier calls, which we call a \emph{resizing barrier
+  intervals} (here we consider the kernel entry and exit points
+conceptually to be special cases of resizing barriers).  The number of
+workgroups executing the kernel is thus constant within each resizing
+barrier interval, i.e.\ the result returned by repeated calls to
+$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
+
+This guarantee can be exploited by algorithms that perform strided
+data processing.  We now illustrate this using the graph traversal motivating example.
+
+\paragraph{Adapting graph traversal} \ADComment{Tyler, the original had two global barriers; the port has just one resizing barrier.  Is this right?}
+\myfiglong\ref{fig:cgraphsearch} shows a cooperative version of the graph traversal kernel
+of \myfig\ref{fig:graphsearch}, introduced in
+\mysec\ref{sec:openclexamples}.  
+On line~\ref{line:cgraph:resizing}, we change the original global barrier
+into a resizing barrier. Several variables are marked to be
+transmitted in the case of workgroups joining at the resizing barrier
+(lines~\ref{line:cgraph:transmit1}, \ref{line:cgraph:transmit2} and
+\ref{line:cgraph:transmit3}): $\keyword{level}$ must be restored so that
+new workgroups know which frontier they are processing; $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$ must be restored so that new
+workgroups know which of the node arrays are input and output. Lastly,
+the static work distribution of the original kernel is no longer valid
+in a cooperative kernel. This is because the stride (which is based on
+$M$) may change after each resizing barrier
+call. To fix this, we re-distribute the work after each resizing
+barrier call by recomputing the thread id and stride
+(lines~\ref{line:cgraph:rechunking1} and
+\ref{line:cgraph:rechunking2}).  This example exploits the fact that the cooperative kernel does not issue $\offerkill$ nor $\offerfork$ directly: \ADComment{Actually I'm confused and need to discuss :-)}
+
+\begin{figure}
+
+\begin{lstlisting}
+kernel graph_app(global graph *g, 
+                 global nodes *n0, global nodes *n1) {
+
+(*@\label{line:cgraph:transmit1}@*)  transmit int level = 0;
+(*@\label{line:cgraph:transmit2}@*)  transmit global nodes *in_nodes = n0;
+(*@\label{line:cgraph:transmit3}@*)  transmit global nodes *out_nodes = n1;
+
+  while(in_nodes.size > 0) {
+
+(*@\label{line:cgraph:rechunking1}@*)    int tid = get_global_id();
+(*@\label{line:cgraph:rechunking2}@*)    int stride = get_global_size();
+
+    for (int i = tid; i < nodes.size; i += stride) {
+      process_node(g, in_nodes[i], out_nodes, level);
+    }
+
+    level++;
+    swap(in_nodes, out_nodes);
+    reset(out_nodes);
+(*@\label{line:cgraph:resizing}@*)    resizing_global_barrier();
+  }
+}
+\end{lstlisting}
+\caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing global barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
+\end{figure}
+
+In \mysec\ref{ } we describe the set of irregular GPU algorithms used
+in our experiments, which largely captures the irregular blocking
+algorithms that are available as open source GPU kernels.  These all
+employ either work stealing or operate on graph data structures.
+Like the simplified example of \myfig\ref{ }, the work stealing algorithms have a transactional flavour
+and require little or no state to be carried between transactions.  Thus the point at which a workgroup is ready to process a new task is a natural point to place $\offerkill$ and $\offerfork$, and few or no $\transmit$ annotations are required.
+%
+The example of \myfig\ref{fig:cgraphsearch} is simpler than, but representative of,
+most level-by-level graph algorithms.  These algorithms tend to
+require more state to be annotated with $\transmit$, and in some cases
+a global barrier is required in the midst of a transaction, in which
+case $\globalbarrier$, but not $\resizingglobalbarrier$, is suitable
+for achieving synchronization without disturbing the set of active
+workgroups.  But often it is the case that on completing a level of
+the graph algorithm, the next level could be processed by more or
+fewer workgroups, something which $\resizingglobalbarrier$
+facilitates.
+
+In summary, our experience so far indicates that cooperative kernels
+is a good fit for current irregular algorithms.  Of cousre this is, in
+part, because we designed the model with these algorithms in mind, but
+we argue that the fit is natural not just for the examples that we
+study, but more generally for at least these two patterns of irregular
+algorithm.
+
 
 \subsection{Non-Functional Requirements of Cooperative Kernels}\label{sec:nonfunctional}
 
