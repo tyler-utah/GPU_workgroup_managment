@@ -392,7 +392,7 @@ work stealing queue and breadth-first graph search---that also
 pinpoint the problems associated with unfair scheduling of workgroups
 and motivate our cooperative threads approach (\mysec\ref{sec:openclexamples}.
 
-\subsection{OpenCL Background}
+\subsection{OpenCL Background}\label{sec:opencl}
 
 % \paragraph{OpenCL concepts}
 % An OpenCL program is typically executed by many \emph{threads} running
@@ -975,14 +975,15 @@ kernels should be aware of.
 
 \paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
 the value returned by $\getnumgroups()$ is not fixed during the
-lifetime of a cooperative kernel \TSComment{Neither is {\tt
-    get\_global\_size}, is that worth mentioning?}.  Although
+lifetime of a cooperative kernel.  Although
 $\getnumgroups()$ has atomic semantics, and so can be called at any
 time to yield a well-defined value, the value returned by two
 successive calls may differ if workgroups have executed $\offerkill$,
-$\offerfork$ or $\resizingglobalbarrier$ in-between.  The programmer
+$\offerfork$ or $\resizingglobalbarrier$ in-between.  Because $\getglobalsize()$, which retrieves the total number of threads executing the kernel, is
+a function of $\getnumgroups()$, the value returned by $\getglobalsize()$ is also subject to change.
+The programmer
 must therefore write their cooperative kernel in a manner that is
-robust to changes in the value returned by $\getnumgroups()$.
+robust to changes in the values returned by these functions.
 
 \paragraph{Cooperative kernels that only use barriers}
 
@@ -998,7 +999,7 @@ pair of resizing barrier calls, which we call a \emph{resizing barrier
 conceptually to be special cases of resizing barriers).  The number of
 workgroups executing the kernel is thus constant within each resizing
 barrier interval, i.e.\ the result returned by repeated calls to
-$\getnumgroups()$ will be identical during such an interval.
+$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
 
 This guarantee can be exploited by algorithms that perform strided
 data processing.  \ADComment{Tyler, can we give an example of a data
