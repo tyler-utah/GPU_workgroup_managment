@@ -215,18 +215,18 @@ bool check_persistent_task(CL_Execution *exec) {
   std::cout << "OCTREE: Particles in tree: " << sum << " (" << FLAGS_numParticles << ") [" << hparticlesDone << "]" << std::endl;
   delete(htree);
 
-  // for debug
-  cl_int *h_pool_head = (cl_int *)calloc(num_workgroups, sizeof(cl_int));
-  if (h_pool_head == NULL) {
-    cout << "calloc failed" << endl;
-    exit(EXIT_FAILURE);
-  }
-  err = exec->exec_queue.enqueueReadBuffer(pool_head, CL_TRUE, 0, num_workgroups * sizeof(cl_uint), h_pool_head);
-  check_ocl(err);
-  for (int i = 0; i < num_workgroups; i++) {
-    printf("pool head %.3d: %u\n", i, h_pool_head[i]);
-  }
-  free(h_pool_head);
+  // // For debug
+  // cl_int *h_pool_head = (cl_int *)calloc(num_workgroups, sizeof(cl_int));
+  // if (h_pool_head == NULL) {
+  //   cout << "calloc failed" << endl;
+  //   exit(EXIT_FAILURE);
+  // }
+  // err = exec->exec_queue.enqueueReadBuffer(pool_head, CL_TRUE, 0, num_workgroups * sizeof(cl_uint), h_pool_head);
+  // check_ocl(err);
+  // for (int i = 0; i < num_workgroups; i++) {
+  //   printf("pool head %.3d: %u\n", i, h_pool_head[i]);
+  // }
+  // free(h_pool_head);
 
   return (sum == FLAGS_numParticles) && (hparticlesDone == FLAGS_numParticles);
 }
