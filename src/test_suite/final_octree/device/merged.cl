@@ -122,7 +122,7 @@ int wgm_task_pop(__local Task *task, __global Task *pools,
     ;
   /* If pool is not empty, pick up the latest inserted task. */
   if (pool_head[pool_id] > 0) {
-    atomic_dec(&(pool_head[pool_id]));
+    pool_head[pool_id] -= 1;
     *task = pools[(pool_size * pool_id) + pool_head[pool_id]];
     poped = true;
   }
@@ -144,7 +144,7 @@ int wgm_task_push(__local Task *task, __global Task *pools,
   /* If pool is not full, insert task */
   if (pool_head[pool_id] < pool_size) {
     pools[(pool_size * pool_id) + pool_head[pool_id]] = *task;
-    atomic_inc(&(pool_head[pool_id]));
+    pool_head[pool_id] += 1;
     pushed = true;
   }
   pool_unlock(task_pool_lock, pool_id);
@@ -243,12 +243,9 @@ void octree_main(
 
     /* main loop */
   }
-  // Hand hack to have non-trivial true value
-  uint qqq = 0;
-  while (qqq < 1000000000) {
+  while (atomic_load(particlesDone) > 1000000000) {
       /* __restoration_ctx->target != */
       /* UCHAR_MAX /\* substitute for 'true', which can cause compiler hangs *\/) { */
-    qqq++;
     switch (__restoration_ctx->target) {
     case 0:
       if (!(true)) {
