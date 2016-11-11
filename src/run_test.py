@@ -17,7 +17,7 @@ def fake_placeholder(x):
 EXE_PATH      = ""
 DATA_PATH     = ""
 STAT_PATH     = ""
-ITERATIONS    = "2"
+ITERATIONS    = "10"
 PRINT         = fake_placeholder
 DATA_PRINT    = fake_placeholder
 NAME_OF_CHIP  = ""
@@ -158,18 +158,18 @@ def write_to_checkpoint(data):
     f.write(str(time.time() - TIME_BEGIN) + "\n")
     f.close()
 
-def get_check_point_data():
-    global CHECK_POINT_DATA
-    global TIME_BEGIN
-    #pdb.set_trace()
-    if (os.path.isfile(CHECK_POINT_FILE)):
-        print("HI THERE")
-        f = open(CHECK_POINT_FILE, "r")
-        CHECK_POINT_DATA = f.readlines()
-        CHECK_POINT_DATA = [x.replace("\n", "") for x in CHECK_POINT_DATA]
-        checked_time = float(CHECK_POINT_DATA[len(CHECK_POINT_DATA) - 1])
-        TIME_BEGIN = TIME_BEGIN - checked_time
-        f.close()
+#def get_check_point_data():
+#    global CHECK_POINT_DATA
+#    global TIME_BEGIN
+#    #pdb.set_trace()
+#    if (os.path.isfile(CHECK_POINT_FILE)):
+#        print("HI THERE")
+#        f = open(CHECK_POINT_FILE, "r")
+#        CHECK_POINT_DATA = f.readlines()
+#        CHECK_POINT_DATA = [x.replace("\n", "") for x in CHECK_POINT_DATA]
+#        checked_time = float(CHECK_POINT_DATA[len(CHECK_POINT_DATA) - 1])
+#        TIME_BEGIN = TIME_BEGIN - checked_time
+#        f.close()
 
 def const_print_time():
     global EXIT_THREAD
