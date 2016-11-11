@@ -643,15 +643,17 @@ and could be applied to extend other GPU programming models, such as
 CUDA and HSA.
 
 We describe the semantics of cooperative kernels
-(Section~\ref{sec:semantics}), then summarise the important
+(Section~\ref{sec:semantics}) and summarise the important
 differences between programming with regular vs.\ cooperative kernels
-(Section~\ref{sec:programmingguidelines}) and the non-functional
+by showing how the motivating examples of \mysec\ref{sec:openclexamples} can be adapted to use cooperative kernels
+(Section~\ref{sec:programmingguidelines}).
+We then focus on the non-functional
 properties that a developer of a cooperative kernel, and the
 implementer of a scheduler for cooperative kernels, should strive for
 (Section~\ref{sec:nonfunctional}).  The semantics of cooperative
-kernels has been guided by the applications that we have studied
+kernels has been guided by the practical applications we have studied
 (described in Section~\ref{sec:portingalgorithms}), and we discuss several cases where we
-might have taken different, equally reasonable, semantic decisions (Section~\ref{sec:semanticalternatives}).
+might have taken different and also reasonable semantic decisions (Section~\ref{sec:semanticalternatives}).
 We conclude the section by discussing the backwards-compatible nature
 of cooperative kernels with respect to blocking algorithms designed to
 run on current GPU platforms
@@ -674,11 +676,8 @@ $\offerfork$, the key functions that enable cooperative scheduling;
 $\globalbarrier$ and $\resizingglobalbarrier$, two primitives to allow
 inter-workgroup synchronisation.
 
-We now explain the semantics of these language extensions, after which
-we explain how the work stealing and graph traveral algorithms of
-Section~\ref{sec:openclexamples} can be turned into cooperative kernels
-that use the extensions.  We present the semantics intuitively, using English.
-In Appendix~\ref{appendix:semantics} we present an abstract operational semantics for our language extensions in a simple GPU-like programming model.
+We now explain the semantics of these language extensions.  We present the semantics intuitively, using English.
+In Appendix~\ref{appendix:semantics} (see supplementary material) we present an abstract operational semantics for our language extensions in a simple GPU-like programming model.
 
 \paragraph{Transmitted variables}
 
@@ -815,12 +814,9 @@ guaranteed.
 
 \paragraph{Global barriers}
 
-\ADComment{Maybe refer back to motivating examples?}
 Many irregular algorithms require synchronisation across workgroups.
-This can be achieved via a \emph{global barrier}, but a global barrier
-is not provided as a primitive in OpenCL, CUDA or HSA.  This is
-because, as discussed in Section~\ref{sec:intro}, an inter-workgroup barrier
-requires fair scheduling of workgroups.
+This can be achieved via a \emph{global barrier}, as illustrated in the graph traversal example of \mysec\ref{sec:openclexamples} and \myfig\ref{fig:graphsearch}.
+Because a global barrier requires fair scheduling of workgroups it cannot be safely implemented in OpenCL, CUDA or HSA, and thus is not provided as a primitive in any of these programming models.
 
 Because workgroups of a cooperative kernel are fairly scheduled, a
 global barrier primitive can be provided.  We specify two such primitives: $\globalbarrier$
@@ -860,7 +856,7 @@ number of active workgroups from $M$ to $M'$ is atomic.
 
 The semantics of $\resizingglobalbarrier$ can be modelled via the following sequence of calls:
 
-\lstset{basicstyle=\tt}
+\lstset{basicstyle=\tt,numbers=none}
 \begin{lstlisting}
   $\globalbarrier()$;
   if($\getgroupid()$ == 0) $\offerfork$();
@@ -868,7 +864,7 @@ The semantics of $\resizingglobalbarrier$ can be modelled via the following sequ
   $\offerkill()$;
   $\globalbarrier()$;
 \end{lstlisting}
-\lstset{basicstyle=\scriptsize\tt}
+\lstset{basicstyle=\scriptsize\tt,numbers=left}
 
 The enclosing $\globalbarrier$ calls make the operation appear to be
 atomic.  The middle $\globalbarrier$ is required to ensure that if
@@ -881,7 +877,97 @@ Section~\ref{sec:resizingbarrier} how $\resizingglobalbarrier$ can be
 implemented significantly more efficiently if it is treated as a
 primitive operation that interacts directly with the scheduler.
 
-\paragraph{Examples}
+\subsection{Programming With Coopeative Kernels}\label{sec:programmingguidelines}
+
+\ADComment{Revise: we're folding this into the overview of the examples.}
+
+We remark on some issues that programmer working with cooperative
+kernels should be aware of.
+
+\paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
+the value returned by $\getnumgroups()$ is not fixed during the
+lifetime of a cooperative kernel.  Although
+$\getnumgroups()$ has atomic semantics, and so can be called at any
+time to yield a well-defined value, the value returned by two
+successive calls may differ if workgroups have executed $\offerkill$,
+$\offerfork$ or $\resizingglobalbarrier$ in-between.  Because $\getglobalsize()$, which retrieves the total number of threads executing the kernel, is
+a function of $\getnumgroups()$, the value returned by $\getglobalsize()$ is also subject to change.
+The programmer
+must therefore write their cooperative kernel in a manner that is
+robust to changes in the values returned by these functions.
+
+\paragraph{Cooperative kernels that only use barriers}
+
+The situation is more stable if a cooperative kernel does not directly
+issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
+only calls to $\resizingglobalbarrier$ can cause the number of active
+workgroups to change and, as discussed in Section~\ref{sec:semantics},
+this function causes synchronisation between all threads and causes
+the number of active workgroups to change atomically.  At any point
+during execution, the threads of a kernel are executing between some
+pair of resizing barrier calls, which we call a \emph{resizing barrier
+  intervals} (here we consider the kernel entry and exit points
+conceptually to be special cases of resizing barriers).  The number of
+workgroups executing the kernel is thus constant within each resizing
+barrier interval, i.e.\ the result returned by repeated calls to
+$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
+
+This guarantee can be exploited by algorithms that perform strided
+data processing.  \ADComment{Tyler, can we give an example of a data
+  processing loop that would have to be changed?} \TSComment{Done,
+its in figure~\ref{fig:cgraphsearch}}
+
+\paragraph{Placing the new constructs}
+
+It is up to the programmmer to decide where to place our new language
+constructs.  This must be done bearing in mind both the semantics of
+the constructs, as detailed in Section~\ref{ }, as well as the
+non-functional requirements of cooperative kernels that we describe in
+Section~\ref{sec:nonfunctional}.
+
+We note, however, that the programming model and associated language
+constructs were inspired by the requirements of the irregular GPU
+algorithms proposed in the literature, and that at least for these
+algorithms it is usually easy to identify where to place the
+constructs.
+
+The irregular algorithms we encountered either employ work stealing or
+operate on graph data structures.
+
+Work stealing algorithms have a transactional flavour, whereby tasks
+are repeatedly pulled from a queue and processed by a workgroup.  The
+point of task completion---the end of a transaction---is a natural
+place for a workgroup to invoke both $\offerkill$ and $\offerfork$, to
+indicate both that the workgroup could gracefully exit computation,
+but also that there is more work to be processed and that further
+workgroups would be useful in order to process this work.  Such
+algorithms usually require little state to persist between tasks;
+typically only the pointers to the queue data structures need to be
+pre-initialised, by annotating them with $\transmit$.
+\ADComment{Refer back to cooperative versions of examples in
+  Section~\ref{sec:semantics}.}
+
+The level-by-level approach employed by many graph algorithms tends to
+involve global barrier synchronisation.  In some cases, a global
+barrier is required in the midst of a transaction, in which case
+$\globalbarrier$, but not $\resizingglobalbarrier$, is suitable for
+achieving synchronization without disturbing the set of active
+workgroups.  But often it is the case that on completing a level of
+the graph algorithm, the next level could be processed by more or
+fewer workgroups, something which $\resizingglobalbarrier$
+facilitates.  Again, only a small amount of state is relevant to new
+workgroups joining the computation, such as the value of the level
+being processed; this relevant state must be annotated with
+$\transmit$.
+
+\ADComment{Fold this in:}
+
+Using coopeative kernels requires some programmer effort 
+
+\ADComment{Lifted:} , after which
+we explain how the work stealing and graph traveral algorithms of
+Section~\ref{sec:openclexamples} can be turned into cooperative kernels
+that use the extensions.
 
 \begin{figure}
 
@@ -968,87 +1054,6 @@ must be explicitely passed as arguments since the number of workgroups
 is not a constant anymore}\label{fig:workstealing-cooperative}
 \end{figure}
 
-\subsection{Programming Guidelines}\label{sec:programmingguidelines}
-
-We remark on some issues that programmer working with cooperative
-kernels should be aware of.
-
-\paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
-the value returned by $\getnumgroups()$ is not fixed during the
-lifetime of a cooperative kernel.  Although
-$\getnumgroups()$ has atomic semantics, and so can be called at any
-time to yield a well-defined value, the value returned by two
-successive calls may differ if workgroups have executed $\offerkill$,
-$\offerfork$ or $\resizingglobalbarrier$ in-between.  Because $\getglobalsize()$, which retrieves the total number of threads executing the kernel, is
-a function of $\getnumgroups()$, the value returned by $\getglobalsize()$ is also subject to change.
-The programmer
-must therefore write their cooperative kernel in a manner that is
-robust to changes in the values returned by these functions.
-
-\paragraph{Cooperative kernels that only use barriers}
-
-The situation is more stable if a cooperative kernel does not directly
-issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
-only calls to $\resizingglobalbarrier$ can cause the number of active
-workgroups to change and, as discussed in Section~\ref{sec:semantics},
-this function causes synchronisation between all threads and causes
-the number of active workgroups to change atomically.  At any point
-during execution, the threads of a kernel are executing between some
-pair of resizing barrier calls, which we call a \emph{resizing barrier
-  intervals} (here we consider the kernel entry and exit points
-conceptually to be special cases of resizing barriers).  The number of
-workgroups executing the kernel is thus constant within each resizing
-barrier interval, i.e.\ the result returned by repeated calls to
-$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
-
-This guarantee can be exploited by algorithms that perform strided
-data processing.  \ADComment{Tyler, can we give an example of a data
-  processing loop that would have to be changed?} \TSComment{Done,
-its in figure~\ref{fig:cgraphsearch}}
-
-\paragraph{Placing the new constructs}
-
-It is up to the programmmer to decide where to place our new language
-constructs.  This must be done bearing in mind both the semantics of
-the constructs, as detailed in Section~\ref{ }, as well as the
-non-functional requirements of cooperative kernels that we describe in
-Section~\ref{sec:nonfunctional}.
-
-We note, however, that the programming model and associated language
-constructs were inspired by the requirements of the irregular GPU
-algorithms proposed in the literature, and that at least for these
-algorithms it is usually easy to identify where to place the
-constructs.
-
-The irregular algorithms we encountered either employ work stealing or
-operate on graph data structures.
-
-Work stealing algorithms have a transactional flavour, whereby tasks
-are repeatedly pulled from a queue and processed by a workgroup.  The
-point of task completion---the end of a transaction---is a natural
-place for a workgroup to invoke both $\offerkill$ and $\offerfork$, to
-indicate both that the workgroup could gracefully exit computation,
-but also that there is more work to be processed and that further
-workgroups would be useful in order to process this work.  Such
-algorithms usually require little state to persist between tasks;
-typically only the pointers to the queue data structures need to be
-pre-initialised, by annotating them with $\transmit$.
-\ADComment{Refer back to cooperative versions of examples in
-  Section~\ref{sec:semantics}.}
-
-The level-by-level approach employed by many graph algorithms tends to
-involve global barrier synchronisation.  In some cases, a global
-barrier is required in the midst of a transaction, in which case
-$\globalbarrier$, but not $\resizingglobalbarrier$, is suitable for
-achieving synchronization without disturbing the set of active
-workgroups.  But often it is the case that on completing a level of
-the graph algorithm, the next level could be processed by more or
-fewer workgroups, something which $\resizingglobalbarrier$
-facilitates.  Again, only a small amount of state is relevant to new
-workgroups joining the computation, such as the value of the level
-being processed; this relevant state must be annotated with
-$\transmit$.
-
 \subsection{Non-Functional Requirements of Cooperative Kernels}\label{sec:nonfunctional}
 
 The semantics presented in Section~\ref{sec:semantics} describe the envelope of
@@ -1096,11 +1101,11 @@ frequently that the scheduler can meet such real-time constraints.
 
 The programmer is responsible for keeping at least one workgroup alive.  In particular, if all workgroups execute $\offerkill$, the scheduler is at liberty to destroy all workgroups, causing the cooperative kernel to exit.  This can be guarded against by wrapping each $\offerkill$ call in a conditional statement:
 
-\lstset{basicstyle=\tt}
+\lstset{basicstyle=\tt,numbers=none}
 \begin{lstlisting}
   if($\getgroupid{0}$ != 0) $\offerkill$();
 \end{lstlisting}
-\lstset{basicstyle=\scriptsize\tt}
+\lstset{basicstyle=\scriptsize\tt,numbers=left}
 
 We could, alternatively, have formulated the semantics of $\offerkill$
 so that workgroup 0 is never killed.  However, there might be a use
