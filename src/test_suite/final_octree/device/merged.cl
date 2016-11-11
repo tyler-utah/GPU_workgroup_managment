@@ -222,9 +222,10 @@ void octree_main(
     const int num_pools, const int pool_size, __global float4 *frompart,
     __global float4 *topart, __local uint *count, __local uint *sum,
     __local Task *t, __local int *got_new_task, __local Task *newTask,
-    __global IW_barrier *__bar, __global Kernel_ctx *__k_ctx,
-    CL_Scheduler_ctx __s_ctx, __local int *__scratchpad,
-    Restoration_ctx *__restoration_ctx) {
+    __local int *game_over, __global IW_barrier *__bar,
+    __global Kernel_ctx *__k_ctx, CL_Scheduler_ctx __s_ctx,
+    __local int *__scratchpad, Restoration_ctx *__restoration_ctx) {
+  ;
   ;
   ;
   ;
@@ -242,10 +243,12 @@ void octree_main(
 
     /* main loop */
   }
-  // Hand hack: impose a non-trivial true
-  while (atomic_load(particlesDone) != 1000000000) {
+  // Hand hack to have non-trivial true value
+  uint qqq = 0;
+  while (qqq < 1000000000) {
       /* __restoration_ctx->target != */
       /* UCHAR_MAX /\* substitute for 'true', which can cause compiler hangs *\/) { */
+    qqq++;
     switch (__restoration_ctx->target) {
     case 0:
       if (!(true)) {
@@ -286,11 +289,16 @@ void octree_main(
             break;
           }
         }
+        game_over[0] = false;
+        if (!got_new_task[0]) {
+          /* test for end of computation */
+          game_over[0] = atomic_load(particlesDone) >= numParticles;
+        }
       }
       barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
       if (!got_new_task[0]) {
-        if (atomic_load(particlesDone) >= numParticles) {
+        if (game_over[0]) {
           return;
         } else {
           continue;
@@ -413,6 +421,7 @@ mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
   __local Task t[1];
   __local int got_new_task[1];
   __local Task newTask[1];
+  __local int game_over[1];
 #define NON_PERSISTENT_KERNEL                                                  \
   matmult(A, A_row, A_col, B, B_row, B_col, C, counter, hash,                  \
           non_persistent_kernel_ctx)
@@ -420,8 +429,8 @@ mega_kernel(__global int *A, const int A_row, const int A_col, __global int *B,
   octree_main(particles, newparticles, tree, numParticles, treeSize,           \
               particlesDone, maxchilds, pools, task_pool_lock, pool_head,      \
               num_pools, pool_size, frompart, topart, count, sum, t,           \
-              got_new_task, newTask, bar, persistent_kernel_ctx, s_ctx,        \
-              scratchpad, &r_ctx_local)
+              got_new_task, newTask, game_over, bar, persistent_kernel_ctx,    \
+              s_ctx, scratchpad, &r_ctx_local)
 #include "main_device_body.cl"
 }
 //

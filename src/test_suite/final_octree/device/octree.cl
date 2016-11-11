@@ -170,6 +170,7 @@ __kernel void octree_main (
   __local Task t[1];
   __local int got_new_task[1];
   __local Task newTask[1];
+  __local int game_over[1];
 
   /* ADD INIT HERE */
   if (get_global_id(0) == 0) {
@@ -204,11 +205,16 @@ __kernel void octree_main (
           break;
         }
       }
+      game_over[0] = false;
+      if (!got_new_task[0]) {
+        /* test for end of computation */
+        game_over[0] = atomic_load(particlesDone) >= numParticles;
+      }
     }
     barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
     if (!got_new_task[0]) {
-      if (atomic_load(particlesDone) >= numParticles) {
+      if (game_over[0]) {
         break;
       } else {
         continue;
