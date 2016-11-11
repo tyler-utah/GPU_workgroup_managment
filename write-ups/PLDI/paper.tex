@@ -839,7 +839,7 @@ kernel is prepared to proceed after the barrier with fewer workgroups,
 or with additional workgroups joining the computation.
 
 Semantically, when all threads have reached $\resizingglobalbarrier$,
-the number of active workgroups, $M$, is set to a new value, $M'$ say.
+the number of active workgroups, $M$, is set to a new value, $M'$ say, with $M' > 0$.
 If $M' = M$ then the active workgroups remain unchanged and proceed to
 execute after the barrier.  If $M' < M$, workgroups $[M', M-1]$ are
 killed.  If $M' > M$ then $M'-M$ new workgroups join the computation,
@@ -1126,40 +1126,53 @@ for $\getglobalsize()$ to change after each resizing barrier call, but
 depends on the fact that $\getglobalid()$ returns a contiguous range
 of thread ids.
 
-\ADComment{TODO: Discuss downside, which is that if WG with high id is
-  doing a chunky task, a WG with a lower id may be ready to be killed
-  but cannot be taken.  Work stealing algorithms, which do not depend
-  on thread id, could take advantage of this.}
+A disadvantage of this decision is that it may provide sub-optimal
+responsiveness from the point of view of the scheduler.  Suppose the
+scheduler requires an additional compute unit, but the active thread
+with the larget id is processing some computationally intensive work
+and will take a while to reach $\offerkill$.  Our semantics means that
+the scheuduler cannot take advantage of the fact that another active
+workgroup may invoke $\offerkill$ sooner.
 
+Cooperative kernels that do not require contiguous thread ids might me
+more suited to a semantics in which workgroups can be killed in any
+order, but where workgroup ids (and thus thread global ids) are not
+guaranteed to be contiguous.
 
 \paragraph{Keeping one workgroup alive}
 
-\ADComment{TODO: To simplify programming, avoiding the need to wrap all kills in conditionals, we always keep one workgroup alive.  This fits well with our decision to kill WGs in decreasing order.}
+Our semantics dictate that the workgroup with id 0 will not be killed
+if it invokes $\offerkill$.  This avoids the possibility of the
+cooperative kernel terminating early due to the programmer
+inadvertantly allowing all workgroups to be killed, and the decision
+to keep workgroup 0 alive fits well with our choice to kill workgroups
+in descending order of id.
 
-\ADComment{TODO: There are possible use cases for allowing all WGs to be killed, though, and we might wish to allow them.}
-
-
-\paragraph{Transmission of partial state from a single thread}
-
-\ADComment{TODO: explain why we have thread 0 transmit its state, and transmitting only annotated variables.}
-
-
-\ADComment{Something old to maybe work in:}
-
-The programmer is responsible for keeping at least one workgroup alive.  In particular, if all workgroups execute $\offerkill$, the scheduler is at liberty to destroy all workgroups, causing the cooperative kernel to exit.  This can be guarded against by wrapping each $\offerkill$ call in a conditional statement:
-
+However, there might be a use case for a cooperative kernel reaching a
+point where it would be acceptable for the kernel to exit, although
+desirable for some remaining computation to be performed if competing
+workloads allow it.  In this case, a semantics where all workgroups can be killed via $\offerkill$ would be appropriate, and the programmer would need to guard each $\offerkill$ with an id check in cases where killing all workgroups would be unacceptable.  For example:
+%
 \lstset{basicstyle=\tt,numbers=none}
 \begin{lstlisting}
   if($\getgroupid{0}$ != 0) $\offerkill$();
 \end{lstlisting}
 \lstset{basicstyle=\scriptsize\tt,numbers=left}
+%
+would ensure that at least workgroup 0 is kept alive.
 
-We could, alternatively, have formulated the semantics of $\offerkill$
-so that workgroup 0 is never killed.  However, there might be a use
-case for a cooperative kernel reaching a point where it would be
-acceptable for the kernel to exit, although desirable for some
-remaining computation to be performed if competing workloads allow it.
+\paragraph{Transmission of partial state from a single thread}
 
+Recall from the semantics of $\offerfork$ that newly forked workgroups
+inherit the variable valuation associated with thread 0 of the forking
+workgroup, but only for $\transmit$-annotated variables.  Alternative
+choices here would be to have forked workgroups inherit values for
+\emph{all} variables from the forking workgroup, and to have thread
+$i$ in the forking workgroup provide the valuation for thread $i$ in
+each spawned workgroup, rather than having thread 0 transmit the
+valuation to all new threads.
+
+\ADComment{TODO: justify our choice: uniform variables and efficiency.}
 
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
