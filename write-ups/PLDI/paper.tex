@@ -688,7 +688,7 @@ As with a regular OpenCL kernel (see \mysec\ref{sec:opencl}), a
 cooperative kernel is launched by the host application.  The host
 application passes parameters to the kernel and specifies a desired
 number of workgroups, each consisting of a specified number of
-threads.  The parameters to a cooperative kernel are \emph{immutable}, as if
+threads.  Unlike in a regular kernel, the parameters to a cooperative kernel are \emph{immutable}, as if
 they were qualified with the \texttt{const} keyword (though pointer
 parameters can refer to mutable data).
 
@@ -725,7 +725,7 @@ the lifetime of the kernel.
 The workgroups executing the kernel are called \emph{active
   workgroups}, and $M$ denotes the number of active workgroups.
 Initially, the number of active workgroups $M$ is initialised to some
-integer between $1$ and $N$.  The initial active workgroups have
+integer between $1$ and $N$---to ensure that at least one workgroup is scheduled, the scheduler will postpone execution of the kernel until a some compute unit becomes available.  The initial active workgroups have
 consecutive workgroup ids in the range $[0, M-1]$.
 
 The $\getgroupid()$ function retrieves the id of a workgroup as usual
