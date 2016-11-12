@@ -40,7 +40,10 @@
 \usepackage{booktabs}
 \usepackage{subfig}
 
+
 \newcommand{\doi}[1]{doi:~\href{http://dx.doi.org/#1}{\Hurl{#1}}}   % print a hyperlinked DOI
+
+\newcommand\crule[3][black]{\textcolor{#1}{\rule{#2}{#3}}}
 
 
 %\newcommand{\todo}[1]{}
@@ -76,7 +79,9 @@
 \newcommand{\cubscannf}{\emph{cub-scan-nf}\xspace}
 \newcommand{\heuristiccombinations}{eight\xspace}
 \newcommand{\effectivethreshold}{5\%\xspace}
-\definecolor{Gray}{gray}{0.85}
+\definecolor{Gray3}{gray}{0.9}
+\definecolor{Gray2}{gray}{0.75}
+\definecolor{Gray1}{gray}{0.6}
 
 % lstlisting macros
 \lstset{
@@ -1277,10 +1282,49 @@ extensions.
 
 \subsection{Porting Irregular GPU Algorithms to Cooperative Kernels}\label{sec:portingalgorithms}
 
+\begin{table}
+\small
+\centering
+\begin{tabular}{ l c c c }
+app & resizing barriers & ckill - cfork & tranmit vars\\
+\hline
+\rowcolor{Gray1}
+color & 2 / 2 & 0 - 0 & 4\\
+\rowcolor{Gray1}
+mis & 3 / 3 & 0 - 0 & 0\\
+\rowcolor{Gray1}
+bc & 3 / 6 & 0 - 0 & 3\\
+\rowcolor{Gray1}
+p-sssp & 3 / 3 & 0 - 0 & 0 \\
+\rowcolor{Gray2}
+bfs & 2 / 2 & 0 - 0  & 4 \\
+\rowcolor{Gray2}
+l-sssp & 2 / 2 & 0 - 0  & 4 \\
+\rowcolor{Gray3}
+octree & 0 / 0 & 1 - 1 & 0\\
+\rowcolor{Gray3}
+game & 0 / 0 & 1 - 1 & 0\\
+\end{tabular} \\
+\vspace{.2cm}
+\crule[Gray1]{.2cm}{.2cm} - Pannotia \hspace{.4cm} \crule[Gray2]{.2cm}{.2cm} - Lonestar GPU  \hspace{.4cm}  \crule[Gray3]{.2cm}{.2cm} - work stealing
+\caption{Blocking GPU applications investigated}
+\label{tab:applications}
+\end{table}
+
+
 \ADComment{Describe the algorithms that we ported.}
 
 \ADComment{Give stats on how many variables had to be marked with
-  $\transmit$ (i.e., occurred in the restoration context), how many barriers we changed to resizing, how many offer kill and offer fork calls we included.}
+  $\transmit$ (i.e., occurred in the restoration context), how many
+  barriers we changed to resizing, how many offer kill and offer fork
+  calls we included.}  \TSComment{check out
+  Table~\ref{tab:applications}. The barrier column shows how many of
+  the original barriers were ported to resizing barriers. In all cases
+  except bc we converted all of them. The only reason why bc is
+  different is because barriers occur deeper in the call stack and our
+  prototype cannot handle that. The algorithm itself is compatable
+  (i.e. changing these barriers is as easy as any other, there is
+  nothing special about them.)}
 
 \ADComment{Make sure we address the point that placing the primitives was pretty easy.}
 
