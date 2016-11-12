@@ -30,11 +30,11 @@ EXIT_THREAD      = 0
 
 PROGRAMS = {
 #    "lonestar_sssp"
-    "lonestar_bfs",
+#    "lonestar_bfs",
     "pannotia_color",
-    "pannotia_mis",
-    "pannotia_bc",
-    "pannotia_sssp"
+#    "pannotia_mis",
+#    "pannotia_bc",
+#    "pannotia_sssp"
 }
 
 PROGRAM_DATA = {
@@ -140,6 +140,12 @@ MATMULT_CONFIG_HD520 = [
     { "freq" : "70", "matdim" : "160", "name" : "light" },
     { "freq" : "40", "matdim" : "160", "name" : "medium" },
     { "freq" : "40", "matdim" : "260", "name" : "high" },
+]
+
+MATMULT_CONFIG_IRIS = [
+    { "freq" : "70", "matdim" : "290", "name" : "light" },
+    { "freq" : "40", "matdim" : "290", "name" : "medium" },
+    { "freq" : "40", "matdim" : "445", "name" : "high" },
 ]
 
 def my_print(file_handle, data):
@@ -383,10 +389,12 @@ def main():
     if NAME_OF_CHIP == "HD5500":
         MATMULT_CONFIG = MATMULT_CONFIG_HD5500
     elif NAME_OF_CHIP == "HD520":
-	MATMULT_CONFIG = MATMULT_CONFIG_HD520
+        MATMULT_CONFIG = MATMULT_CONFIG_HD520
+    elif NAME_OF_CHIP == "IRIS":
+        MATMULT_CONFIG = MATMULT_CONFIG_IRIS
     else:
         print("Cannot find a matmult for your chip! Exiting")
-	exit(0)
+        exit(0)
     PLATFORM_ID = sys.argv[6]
     IS_AMD = sys.argv[7]
     log_file = sys.argv[4] + ".log"
