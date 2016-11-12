@@ -406,9 +406,9 @@ connect_four(
       offer_kill();
     }
 
-    // if (get_group_id(0) == 0) {
-    //   offer_fork();
-    // }
+    if (get_group_id(0) == 0) {
+      offer_fork();
+    }
 
     int local_id = get_local_id(0);
     int local_size = get_local_size(0);
