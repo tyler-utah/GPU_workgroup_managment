@@ -1311,8 +1311,10 @@ game & 0 / 0 & 1 - 1 & 0\\
 \label{tab:applications}
 \end{table}
 
-
 \ADComment{Describe the algorithms that we ported.}
+
+\HEComment{This is more or less already done in section
+\ref{sec:programmingguidelines} , maybe no need to rewrite here?}
 
 \ADComment{Give stats on how many variables had to be marked with
   $\transmit$ (i.e., occurred in the restoration context), how many
@@ -1330,10 +1332,20 @@ game & 0 / 0 & 1 - 1 & 0\\
 
 \subsection{The GPUs we Tested}
 
-\ADComment{Describe the platforms.  Explain why we could not try other
-  platforms.}
+\HEComment{the reason we need SVM fine grain and atomics may be better
+discussed directly in the section on implementation?}
 
-\ADComment{Tyler and Hugues, please write.}
+Our implementation approach requires two optional features of OpenCL
+$2.0$, namely SVM fine-grained buffers and SVM atomics, which are
+currently not widely supported. \nvidia chips are ruled out since
+\nvidia does not support OpenCL $2.0$. AMD support SVM atomics only
+their Kaveri family of chips and only on Linux, requiring to compile the
+latest driver.  \HEComment{do we need to mention the struggle for AMD ?}
+Among the GPUs available to us, only 4 support our requirements: Intel
+HD 520, HD 5500 and IRIS 6100, and AMD Radeon R7.
+
+\ADComment{Describe the platforms.  Explain why we could not try other
+platforms.}
 
 \subsection{Determining Representative Workloads}\label{sec:representativeworkloads}
 
