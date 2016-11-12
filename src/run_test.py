@@ -142,6 +142,13 @@ MATMULT_CONFIG_HD520 = [
     { "freq" : "40", "matdim" : "260", "name" : "high" },
 ]
 
+MATMULT_CONFIG_RADEON_R7 = [
+    # This is for carrot
+    { "freq" : "70", "matdim" : "277", "name" : "light" },
+    { "freq" : "40", "matdim" : "277", "name" : "medium" },
+    { "freq" : "40", "matdim" : "431", "name" : "high" },
+]
+
 def my_print(file_handle, data):
     print(data)
     file_handle.write(data + os.linesep)
