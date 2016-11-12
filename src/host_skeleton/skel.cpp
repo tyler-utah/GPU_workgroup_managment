@@ -320,7 +320,7 @@ void run_persistent(CL_Execution *exec) {
 		reset_barrier(exec, d_bar);
 		reset_persistent_task(exec);
 		restart_scheduler(&s_ctx);
-		CL_Communicator::my_sleep(1000);
+		CL_Communicator::my_sleep(5000);
 		err = exec->exec_queue.flush();
 		check_ocl(err);
 		err = exec->exec_queue.finish();
@@ -599,7 +599,7 @@ void run_merged(CL_Execution *exec) {
 		
 
 		cout << endl;
-		CL_Communicator::my_sleep(1000);
+		CL_Communicator::my_sleep(5000);
 	}
 
 	free_scheduler_ctx(exec, &s_ctx);
