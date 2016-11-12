@@ -135,7 +135,7 @@
 \newcommand{\getnumgroups}{\mathsf{get\_num\_groups}}
 \newcommand{\getlocalid}{\mathsf{get\_local\_id}}
 \newcommand{\getglobalid}{\mathsf{get\_global\_id}}
-\newcommand{\getlocalsize}{\mathsf{get\_global\_id}}
+\newcommand{\getlocalsize}{\mathsf{get\_local\_size}}
 \newcommand{\getglobalsize}{\mathsf{get\_global\_size}}
 
 \newcommand{\keyword}[1]{\mathsf{#1}}
@@ -225,8 +225,8 @@ requiring fair scheduling of workgroups.  Without fairness, a
 workgroup may fail to make progress, leading to starvation.  For
 example, if workgroup $A$ holds a mutex, an unfair scheduler may cause
 another workgroup $B$ to spin-wait forever for the mutex to be
-released.  Similarly, an unfair scheduler can a workgroup to spin-wait
-at a global barrier so that other workgroups do not make progress
+released.  Similarly, an unfair scheduler can cause a workgroup to spin-wait
+indefinitely at a global barrier so that other workgroups do not make progress
 towards the barrier.
 
 \paragraph{A degree of fairness: occupancy-bound execution}
@@ -396,7 +396,7 @@ In summary, our main contributions are:
   kernels on top of the OpenCL 2.0 programming model
   (\mysec\ref{sec:implementation}).
 
-\item An experience report porting \NumAlgorithms{} irregular GPU
+\item An experience report of porting \NumAlgorithms{} irregular GPU
   algorithms to use cooperative kernels, and experimental results
   assessing the performance overhead associated with cooperation and
   the responsiveness to high priority tasks that cooperation enables,
@@ -467,15 +467,18 @@ a primitive.
 \paragraph{Memory spaces and memory model}
 An OpenCL kernel has access to four memory spaces.  \emph{Shared virtual
 memory} (SVM) is accessible to all threads and the host application concurrently.  \emph{Global} memory is shared among all threads executing a
-kernel, but can only be safely accessed by the host application before
-or after kernel execution.  Each workgroup has its own portion of \emph{local},
-which can be used for fast intra-workgroup communication, and every thread has
+kernel.  Each workgroup has its own portion of \emph{local} memory,
+which can be used for fast intra-workgroup communication.  Every thread has
 an allocation of very fast \emph{private} memory, where
 function-local variables are allocated.
 
-Fine-grained communication between threads, and also with the host in
-the case of SVM, is enabled via a set of atomic data types and
-operations, based on the C11 memory model~\cite{C11}.
+Communication between threads in the same workgroup can be achieved
+using the workgroup barrier construct described above.  Finer-grained
+communication within a workgroup, as well as inter-workgroup
+communication and communication with the host while the kernel is
+running, is enabled by a set of atomic data types and operations.  In
+particular, fine-grained host/device communication is via atomic
+operations on SVM.
 
 \paragraph{Execution model}
 
@@ -492,10 +495,8 @@ HSA provides limited, one-way guarantees,
 stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
   for values written by work-group B without deadlock provided ... A
   comes after B in work-group flattened ID order}. However, this
-one-way communication is not sufficient so support either the
-work stealing or graph application examples of
-Figures~\ref{fig:workstealing} and \ref{fig:graphsearch}. As described
-above, both require \emph{symmetric} communication between
+one-way communication is not sufficient to support blocking algorithms that use
+mutexes and inter-workgroup barriers, both of which require \emph{symmetric} communication between
 threads.
 
 
@@ -537,7 +538,7 @@ kernel graph_app(global graph * g,
       process_node(g, in_nodes[i], out_nodes, level);
     }
 
-(*@\label{line:graph:swap}@*)    swap(in_nodes, out_nodes);
+(*@\label{line:graph:swap}@*)    swap(&in_nodes, &out_nodes);
 (*@\label{line:graph:gb1}@*)    global_barrier();
 (*@\label{line:graph:reset}@*)    reset(out_nodes);
     level++;
@@ -593,7 +594,7 @@ global memory.  As a result, the kernel presents two opportunities for
 spin-waiting: spinning to obtain a mutex, and spinning in the main
 kernel loop to obtain a task to process.  The algorithm thus depends
 on a fair scheduler, which, as discussed in \mysec\ref{sec:intro},
-is not provided by current GPU programming models.
+is not guaranteed by current GPU programming models.
 
 \paragraph{Graph traversal example} \myfiglong\ref{fig:graphsearch} shows the
 skeleton of a frontier-based graph traversal algorithm; such algorithms have
@@ -610,13 +611,17 @@ the nodes to be processed during the next frontier.
 The application iterates as long as the current frontier contains
 nodes to process (line~\ref{line:graph:iterate}). At each frontier,
 the nodes to be processed are evenly distributed between the executing
-threads. This is done through \emph{stride} based processing. A thread
-retrieves its global thread id and the total number of threads
-(obtained through the $\getglobalid()$ and $\getglobalsize()$ primitives). A thread then processes
-each node associated with its id, i.e.\ nodes at indices that are a multiple of the total number of threads, plus the thread's id. A thread processes a node via the $\keyword{process\_node}$
+threads. This is done through \emph{stride} based processing. 
+%
+In this case, the stride is the total number of threads, obtained via 
+$\getglobalsize()$.  Each thread processes nodes with the following sequence of indices:
+\code{$\keyword{tid}$+$\keyword{stride}$*0},
+\code{$\keyword{tid}$+$\keyword{stride}$*1},
+\code{$\keyword{tid}$+$\keyword{stride}$*2}, etc., where $\keyword{tid}$ is a thread's global id.
+A thread processes a node via the $\keyword{process\_node}$
 function, which may (a) push nodes to process in the next frontier to
 $\keyword{out\_nodes}$ and (b) use the current frontier, $\keyword{level}$, in
-the computation. \ADComment{Tyler: should swap take the addresses of the pointers?} After processing the frontier, the threads swap their
+the computation. After processing the frontier, the threads swap their
 local node array pointers (line~\ref{line:graph:swap}), i.e.\ the $\keyword{out\_nodes}$ of the current frontier becomes the $\keyword{in\_nodes}$ of the next
 frontier.
 
@@ -635,15 +640,17 @@ barrier can be implemented~\cite{XF10,DBLP:conf/oopsla/SorensenDBGR16}. \ADComme
 defined atomic memory operations to ensure memory consistency, and
 employ spinning to ensure threads wait at the barrier until all
 threads have arrived.  This spinning behaviour requires fair
-scheduling between workgroups for the barrier to operate correctly,
-and as a result the barrier is \emph{not} guaranteed to work correctly
-under current GPU programming models.  Such barriers appear to run
+scheduling between workgroups for the barrier to operate correctly.
+Again, fairness is not guaranteed by current GPU programming models.
+
+The mutexes and barriers required by these two examples appear to run
 reliably on current GPUs for kernels that are executed with no more
 workgroups than there are compute units; this is due to the fairness
-of the occupancy-bound execution model that current GPUs appear to
-provide.  But, as discussed in \mysec\ref{sec:intro}, this
-occupancy-bound model is not mandated by language standards or vendor
-implementations, and is unlikely to be guaranteed in the future.
+of the occupancy-bound execution model that current GPUs have been
+shown, experimentally, to provide.  But, as discussed in
+\mysec\ref{sec:intro}, this occupancy-bound model is not mandated by
+language standards or vendor implementations, and is unlikely to be
+guaranteed in the future.
 
 In \mysec\ref{sec:programmingguidelines} we show how the work stealing
 and graph traversal examples of \myfigs\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
@@ -681,7 +688,7 @@ As with a regular OpenCL kernel (see \mysec\ref{sec:opencl}), a
 cooperative kernel is launched by the host application.  The host
 application passes parameters to the kernel and specifies a desired
 number of workgroups, each consisting of a specified number of
-threads.  The parameters to a cooperative kernel are \emph{immutable}, as if
+threads.  Unlike in a regular kernel, the parameters to a cooperative kernel are \emph{immutable}, as if
 they were qualified with the \texttt{const} keyword (though pointer
 parameters can refer to mutable data).
 
@@ -718,7 +725,7 @@ the lifetime of the kernel.
 The workgroups executing the kernel are called \emph{active
   workgroups}, and $M$ denotes the number of active workgroups.
 Initially, the number of active workgroups $M$ is initialised to some
-integer between $1$ and $N$.  The initial active workgroups have
+integer between $1$ and $N$---to ensure that at least one workgroup is scheduled, the scheduler will postpone execution of the kernel until a some compute unit becomes available.  The initial active workgroups have
 consecutive workgroup ids in the range $[0, M-1]$.
 
 The $\getgroupid()$ function retrieves the id of a workgroup as usual
@@ -1315,9 +1322,17 @@ extensions.
 
 \section{Related Work}\label{sec:relatedwork}
 
+
+Lots of work on irregular algorithms (assumes fairness), and persistent threads (assumes OB model, which assumes a degree of fairness).  Our contribution can enable these to be safe.
+
+Work on multi-tasking to improve throughput, etc., but this does not relate to fairness and wouldn't help blocking algorithms.
+
+Proposals to implement preemption, but these require hardware support and may be overkill.  Advantage: fully automatic; disadvantage: doesn't capture domain knowledge.
+
+Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
+
 \ADComment{Kepler preemption support?  Mention in related work?}
 
-\ADComment{Mention dynamic parallelism and explain why it's no good.}
 
 \cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
   SMs, not to workgroups, so that tasks that would benefit from being
