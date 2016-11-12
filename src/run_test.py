@@ -28,14 +28,14 @@ CHECK_POINT_DATA = []
 TIME_BEGIN       = 0.0
 EXIT_THREAD      = 0
 
-PROGRAMS = {
+PROGRAMS = [
 #    "lonestar_sssp"
 #    "lonestar_bfs",
     "pannotia_color",
-#    "pannotia_mis",
-#    "pannotia_bc",
-#    "pannotia_sssp"
-}
+    "pannotia_mis",
+    "pannotia_bc",
+    "pannotia_sssp"
+]
 
 PROGRAM_DATA = {
 
@@ -52,12 +52,12 @@ PROGRAM_DATA = {
     ],
 
     "pannotia_mis" : [ { "input" : os.path.join("pannotia","inputs", "color", "ecology1.graph"),
-                         "solution" : os.path.join("pannotia","solutions", "color_ecology.txt"),
+                         "solution" : os.path.join("pannotia","solutions", "mis_ecology.txt"),
                          "stat" : "mis_ecology",
                          "suite" : "pannotia",
                          "query_barrier" : [0,1]},
                        { "input" : os.path.join("pannotia","inputs", "color", "G3_circuit.graph"),
-                         "solution" : os.path.join("pannotia","solutions", "color_G3_circuit.txt"),
+                         "solution" : os.path.join("pannotia","solutions", "mis_G3_circuit.txt"),
                          "stat" : "mis_G3_circuit",
                          "suite" : "pannotia",
                          "query_barrier" : [0,1]}
