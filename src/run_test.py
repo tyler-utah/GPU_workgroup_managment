@@ -17,7 +17,7 @@ def fake_placeholder(x):
 EXE_PATH      = ""
 DATA_PATH     = ""
 STAT_PATH     = ""
-ITERATIONS    = "10"
+ITERATIONS    = "1"
 PRINT         = fake_placeholder
 DATA_PRINT    = fake_placeholder
 NAME_OF_CHIP  = ""
@@ -29,14 +29,14 @@ TIME_BEGIN       = 0.0
 EXIT_THREAD      = 0
 
 PROGRAMS = [
-#    "lonestar_sssp"
-#    "lonestar_bfs",
+    "lonestar_sssp",
+    "lonestar_bfs",
 #    "pannotia_color",
 #    "pannotia_mis",
-#    "pannotia_bc",
+    "pannotia_bc",
 #    "pannotia_sssp",
-    "final_octree",
-    "connect_four"
+#    "final_octree",
+#    "connect_four"
 ]
 
 PROGRAM_DATA = {
@@ -189,7 +189,7 @@ def const_print_time():
     i = 0
     local_time_begin = time.time()
     while (EXIT_THREAD != 1) and (time.time() - local_time_begin < 1200):
-        time.sleep(10)
+        time.sleep(20)
         print("time update: " + str(i) + " - " + str(time.time() - local_time_begin))
         i = i + 1
     if (EXIT_THREAD == 1):
@@ -292,7 +292,7 @@ def optional_solution(d, graph_sol):
     return []
 
 def special_case(app, npconfig):
-    if app in ["pannotia_bc","lonestar_sssp", "lonestar_bfs"] && CHIP_NAME in ["IRIS", "HD5500"] && npconfig == "npwg_all_but_one":
+    if app in ["pannotia_bc","lonestar_sssp", "lonestar_bfs"] and NAME_OF_CHIP in ["IRIS", "HD5500"] and npconfig == "npwg_all_but_one":
         return True
     return False
 
