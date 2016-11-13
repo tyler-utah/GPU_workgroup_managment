@@ -1402,9 +1402,53 @@ duration.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
 
-
-
 \section{Related Work}\label{sec:relatedwork}
+
+\HEComment{cooperative multitasking: OS: RISC OS, IBM CICS, Windows
+  before 95, old MacOS, maybe Oberon? TRON?. In GPU context: some
+  paper mention ``cooperative'' multitasking but they simply refer to
+  the fact that kernels should not compute for too long in order to
+  let other have access to it. Also, many prog languages implements
+  variations of coroutines, We can see blocking channels of CSP (or
+  Golang more recently) as yielding (sending a message is yielding
+  computation to the process which receives it)}
+
+Cooperative multitasking was offered in ancient operating systems
+(e.g. Windows before the 95 edition) and is still used nowadays in
+RISC OS for instance. In the context of GPU resources, cooperative
+multitasking seems to refer to sizing kernels such that they do not
+compute for too long in order to yield the whole GPU
+regularly~\cite{adriaens2012case}. Our contribution present a much
+more flexible cooperative multitasking, where the long-running
+application is never totally stopped.
+
+\HEComment{ RISC OS see :
+\url{http://www.riscos.info/index.php/Preemptive_multitasking}
+}
+
+% ###
+% Cooperative multitasking for GPU-accelerated grid systems
+
+% http://onlinelibrary.wiley.com/doi/10.1002/cpe.1722/full
+
+% @article {CPE:CPE1722,
+% author = {Ino, Fumihiko and Ogita, Akihiro and Oita, Kentaro and Hagihara, Kenichi},
+% title = {Cooperative multitasking for GPU-accelerated grid systems},
+% journal = {Concurrency and Computation: Practice and Experience},
+% volume = {24},
+% number = {1},
+% publisher = {John Wiley & Sons, Ltd},
+% issn = {1532-0634},
+% url = {http://dx.doi.org/10.1002/cpe.1722},
+% doi = {10.1002/cpe.1722},
+% pages = {96--107},
+% keywords = {multitasking, GPU, CUDA, grid computing},
+% year = {2012},
+% }
+
+% Not super interesting: they just divide blocking computation in
+% smaller independent kernels, and fires them at regular intervals to
+% let the system be responsive.
 
 \paragraph{Irregular algorithms and persistent kernels}
 %
