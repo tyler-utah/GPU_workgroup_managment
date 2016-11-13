@@ -6,5 +6,6 @@ typedef struct {
   MY_CL_GLOBAL CL_INT_TYPE * out_wl;
   MY_CL_GLOBAL CL_INT_TYPE * in_index;
   MY_CL_GLOBAL CL_INT_TYPE * out_index;
+  CL_INT_TYPE sense;
 } Restoration_ctx;
 
