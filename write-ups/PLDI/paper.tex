@@ -1345,21 +1345,18 @@ Cooperative kernels enables other \emph{non-persistent} workloads to
 access GPU resources without stopping the blocking algorithm
 computation entirely. We size these workloads to represent
 approximatively the workload required by a system to maintain smooth
-screen animations. We repetitively ran a kernel with a controlled
-workload and detected from which workload size the screen animation
-started to jitter. Given the kernel workload and its scheduling
-frequency, we can infer what is the workload and frequency needed by
-the system to maintain a smooth animation.
+screen animations.
 
-Based on this approach, we measured workloads required by the system
-to maintain smooth animations of three types: (\emph{light}) emphasis
-of desktop icons under the mouse pointer, (\emph{medium}) window
-dragging over the desktop, and (\emph{heavy}) WebGL animations in a
-browser. \mytab~\ref{tab:nonpersistentworkload} illustrates our
-results. In order to simulate such non-persistent workloads alongside
-kernels of blocking algorithms, we use a matrix multiplication kernel
-where matrix dimensions are tuned to trigger the relevant execution
-duration.
+\paragraph{Experimental setup} \ADComment{Describe the data we are
+  gathering.}  We repetitively run a kernel with a controlled workload
+and detect from which workload size the screen animation starts to
+jitter. Given the kernel workload and its scheduling frequency, we
+deduce what is the workload and frequency needed by the system to
+maintain a smooth animation. We use this approach to measure required
+by the system to maintain smooth animations of three types:
+(\emph{light}) emphasis of desktop icons under the mouse pointer,
+(\emph{medium}) window dragging over the desktop, and (\emph{heavy})
+WebGL animations in a browser.
 
 \begin{table}
 \small
@@ -1375,11 +1372,13 @@ heavy & 10 & 40\\
 \label{tab:nonpersistentworkload}
 \end{table}
 
-\paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
-
-
-
-\paragraph{Results}  \ADComment{Discuss the results.}
+\paragraph{Results} \ADComment{Discuss the results.}
+\mytab~\ref{tab:nonpersistentworkload} illustrates the caracteristics
+found for the three types of workloads. For the medium and heavy
+workloads, the 40ms period corresponds to an execution every $25^{th}$
+of seconds which coincide with the human persistence of vision. The
+3ms execution duration of both light and medium configurations may
+indicate a lower bound of GPU execution time for system workloads.
 
 \subsection{The Overhead of Moving to Cooperative Kernels}
 
@@ -1392,6 +1391,12 @@ heavy & 10 & 40\\
 \subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
 \ADComment{Preamble}
+
+In order to simulate non-persistent workloads alongside kernels of
+blocking algorithms, we use a matrix multiplication kernel where
+matrix dimensions are tuned to trigger the relevant execution
+duration.
+
 
 \paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
 
