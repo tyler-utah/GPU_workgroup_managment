@@ -28,14 +28,14 @@ CHECK_POINT_DATA = []
 TIME_BEGIN       = 0.0
 EXIT_THREAD      = 0
 
-PROGRAMS = {
+PROGRAMS = [
 #    "lonestar_sssp"
-    "lonestar_bfs",
+#    "lonestar_bfs",
     "pannotia_color",
     "pannotia_mis",
     "pannotia_bc",
     "pannotia_sssp"
-}
+]
 
 PROGRAM_DATA = {
 
@@ -52,12 +52,12 @@ PROGRAM_DATA = {
     ],
 
     "pannotia_mis" : [ { "input" : os.path.join("pannotia","inputs", "color", "ecology1.graph"),
-                         "solution" : os.path.join("pannotia","solutions", "color_ecology.txt"),
+                         "solution" : os.path.join("pannotia","solutions", "mis_ecology.txt"),
                          "stat" : "mis_ecology",
                          "suite" : "pannotia",
                          "query_barrier" : [0,1]},
                        { "input" : os.path.join("pannotia","inputs", "color", "G3_circuit.graph"),
-                         "solution" : os.path.join("pannotia","solutions", "color_G3_circuit.txt"),
+                         "solution" : os.path.join("pannotia","solutions", "mis_G3_circuit.txt"),
                          "stat" : "mis_G3_circuit",
                          "suite" : "pannotia",
                          "query_barrier" : [0,1]}
@@ -390,10 +390,12 @@ def main():
     if NAME_OF_CHIP == "HD5500":
         MATMULT_CONFIG = MATMULT_CONFIG_HD5500
     elif NAME_OF_CHIP == "HD520":
-	MATMULT_CONFIG = MATMULT_CONFIG_HD520
+        MATMULT_CONFIG = MATMULT_CONFIG_HD520
+    elif NAME_OF_CHIP == "IRIS":
+        MATMULT_CONFIG = MATMULT_CONFIG_IRIS
     else:
         print("Cannot find a matmult for your chip! Exiting")
-	exit(0)
+        exit(0)
     PLATFORM_ID = sys.argv[6]
     IS_AMD = sys.argv[7]
     log_file = sys.argv[4] + ".log"

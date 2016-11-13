@@ -40,7 +40,10 @@
 \usepackage{booktabs}
 \usepackage{subfig}
 
+
 \newcommand{\doi}[1]{doi:~\href{http://dx.doi.org/#1}{\Hurl{#1}}}   % print a hyperlinked DOI
+
+\newcommand\crule[3][black]{\textcolor{#1}{\rule{#2}{#3}}}
 
 
 %\newcommand{\todo}[1]{}
@@ -76,7 +79,9 @@
 \newcommand{\cubscannf}{\emph{cub-scan-nf}\xspace}
 \newcommand{\heuristiccombinations}{eight\xspace}
 \newcommand{\effectivethreshold}{5\%\xspace}
-\definecolor{Gray}{gray}{0.85}
+\definecolor{Gray3}{gray}{0.9}
+\definecolor{Gray2}{gray}{0.75}
+\definecolor{Gray1}{gray}{0.6}
 
 % lstlisting macros
 \lstset{
@@ -760,31 +765,22 @@ $\offerkill$, is a workgroup-level function---it must be encountered
 uniformly by all threads in a workgroup (see
 \mysec\ref{sec:opencl}).
 
-Suppose a workgroup with id $m$ executes $\offerkill$.  If $m < M-1$
+Suppose a workgroup with id $m$ executes $\offerkill$.  
+If the workgroup has the highest largest id of all active workgroups then it can be killed by the scheduler, except that workgroup 0 can never be killed (to ensure that the kernel computation does not terminate early).  More formally, if $m < M-1$
 or $M=1$, i.e.\ the workgroup's id is not the largest among the active
 workgroups, or if only a single workgroup is executing the cooperative
 kernel, then $\offerkill$ is a no-op.  If instead $M > 1$ and $m =
 M-1$, there is a non-deterministic choice between (a) $\offerkill$
 executing as a no-op, or (b) execution of the workgroup ceasing and
-the number of active workgroups $M$ being decremented by one.  Case
+the number of active workgroups $M$ being atomically decremented by one.  Case
 (b) corresponds to the scheduler accepting the workgroup's offer to
 cease execution, allowing the scheduler to schedule some other task on
 the compute unit on which the workgroup was executing.
 
-The semantics of $\offerkill$ is atomic.  That is, if multiple
-workgroups reach $\offerkill$ simultaneously, the semantics is as if
-each workgroup executes $\offerkill$ in some arbitrary sequential
-order.
-
-In this formulation of cooperative kernels, only the active workgroup
-with the largest id can be killed, and workgroup 0 can never be
-killed.  We discuss the rationale for these choices, as well as
-possible alternative choices, in
-\mysec\ref{sec:semanticalternatives}.
 
 \paragraph{Semantics for $\offerfork$}
 
-The $\offerfork$ primitive allows the cooperative kernel to indicate
+The $\offerfork$ primitive (also a workgroup-level function) allows the cooperative kernel to indicate
 to the scheduler that it could benefit from, and is prepared to
 handle, additional workgroups joining the computation.  Recall that
 the cooperative kernel was launched with a limit of $N$ workgroups,
@@ -797,12 +793,10 @@ $\offerfork$, the kernel and scheduler can work together to allow new
 workgroups to join the computation at an appropriate point and with
 appropriate state.
 
-Like $\offerkill$, $\offerfork$ is a workgroup-level function.
-
-Suppose a workgroup with id $m\leq M$ executes $\offerfork$.  An
-integer $k$ in the range $[0, N-M]$ is chosen nondeterministically,
+Suppose a workgroup with id $m\leq M$ executes $\offerfork$.  Then the following occurs: an
+integer $k$ in the range $[0, N-M]$ is chosen by the scheduler;
 $k$ new workgroups are spawned with consecutive ids in the range $[M,
-  M+k-1]$, and the active workgroup count $M$ is incremented by $k$.
+  M+k-1]$; the active workgroup count $M$ is atomically incremented by $k$.
 
 The $k$ new workgroups commence execution at the program point
 immediately following the $\offerfork$ call.  The variables that
@@ -866,7 +860,7 @@ kernel is prepared to proceed after the barrier with fewer workgroups,
 or with additional workgroups joining the computation.
 
 Semantically, when all threads have reached $\resizingglobalbarrier$,
-the number of active workgroups, $M$, is set to a new value, $M'$ say, with $M' > 0$.
+the number of active workgroups, $M$, is atomically set to a new value, $M'$ say, with $M' > 0$.
 If $M' = M$ then the active workgroups remain unchanged and proceed to
 execute after the barrier.  If $M' < M$, workgroups $[M', M-1]$ are
 killed.  If $M' > M$ then $M'-M$ new workgroups join the computation,
@@ -887,9 +881,9 @@ The semantics of $\resizingglobalbarrier$ can be modelled via the following sequ
 \end{lstlisting}
 \lstset{basicstyle=\scriptsize\tt,numbers=left}
 
-The enclosing $\globalbarrier$ calls make the operation appear to be
-atomic.  The middle $\globalbarrier$ is required to ensure that if
-$M'\geq M$, the workgroups with ids smaller than $M$ are left intact.
+The enclosing $\globalbarrier$ calls ensure that the change in number
+of active workgroups from $M$ to $M'$ occurs entirely within the
+resizing barrier, so that from a programmer's perspective, $M$ changes atomically.  The middle $\globalbarrier$ is required to ensure that forking occurs before killing, so that while the barrier may kill a workgroup with id $i$, it should not also fork a new workgroup with id $i$.  That is, workgroups $[0, \mathit{min}(M, M') - 1]$ should be left intact.
 
 Because $\resizingglobalbarrier$ can be implemented in the above
 manner, we do not regard it conceptually as a primitive of the
@@ -907,8 +901,8 @@ use the new language primitives described in
 
 The programming model and associated language constructs were inspired
 by the requirements of the irregular GPU algorithms proposed in the
-literature, and that at least for these algorithms it is usually easy
-to identify where to place the constructs.
+literature.  For these algorithms, it was usually easy to identify
+where to place the constructs.
 
 We discuss the main semantic change induced by our programming
 model---that the number of workgroups executing a kernel varies
@@ -919,15 +913,12 @@ kernels.
 
 \paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
 the value returned by $\getnumgroups()$ is not fixed during the
-lifetime of a cooperative kernel.  Although
-$\getnumgroups()$ has atomic semantics, and so can be called at any
-time to yield a well-defined value, the value returned by two
-successive calls may differ if workgroups have executed $\offerkill$,
-$\offerfork$ or $\resizingglobalbarrier$ in-between.  Because $\getglobalsize()$, which retrieves the total number of threads executing the kernel, is
-a function of $\getnumgroups()$, the value returned by $\getglobalsize()$ is also subject to change.
+lifetime of a cooperative kernel: it may change due to workgroups executing
+$\offerkill$, $\offerfork$ and $\resizingglobalbarrier$.  Because $\getglobalsize()$, which retrieves the total number of threads executing the kernel, is
+a function of $\getnumgroups()$, the value it returns is also subject to change.
 The programmer
 must therefore write their cooperative kernel in a manner that is
-robust to changes in the values returned by these functions.
+robust to changes in the values returned by these functions.  In our experience this either involves avoiding the use of $\getnumgroups()$ at all, or writing a kernel where the only opportunity for the number of groups to change comes from $\resizingglobalbarrier()$, in which case the number of active groups does offer some stability, as discussed below.
 
 \paragraph{Adapting work stealing}
 
@@ -941,7 +932,7 @@ a task pool located in global memory. In the main loop, before trying to
 obtain a task, we make the workgroup offer itself to be forked or killed
 (lines~\ref{line:cwksteal:offerfork},\ref{line:cwksteal:offerkill}). Note
 that a workgroup may be killed even if its associated task pool is not
-empty, since remaining tasks could eventually be stealed by other
+empty, since remaining tasks could eventually be stolen by other
 workgroups.  Care must be taken on computing pool identifiers: the
 original version in \myfig\ref{fig:workstealing} can rely on the fact
 that there are as many pools as workgroups, but here the number of
@@ -984,12 +975,10 @@ is not a constant anymore}\label{fig:workstealing-cooperative}
 The situation is more stable if a cooperative kernel does not directly
 issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
 only calls to $\resizingglobalbarrier$ can cause the number of active
-workgroups to change and, as discussed in \mysec\ref{sec:semantics},
-this function causes synchronisation between all threads and causes
-the number of active workgroups to change atomically.  At any point
+workgroups to change.  At any point
 during execution, the threads of a kernel are executing between some
 pair of resizing barrier calls, which we call a \emph{resizing barrier
-  intervals} (here we consider the kernel entry and exit points
+  interval} (here we consider the kernel entry and exit points
 conceptually to be special cases of resizing barriers).  The number of
 workgroups executing the kernel is thus constant within each resizing
 barrier interval, i.e.\ the result returned by repeated calls to
@@ -1135,6 +1124,7 @@ task, and should respond positively to $\offerfork$ calls by
 scheduling new workgroups if compute units are available.  Our
 implementation of cooperative scheduling (\mysec\ref{sec:implementation}) is as
 generous as possible to the cooperative kernel in this regard.
+
 However, these are not hard-and-fast rules: a scheduler might employ
 heuristics based on historical workloads to avoid thrashing.  For
 example, if graphics calls are known to arrive at a certain rate then
@@ -1144,7 +1134,7 @@ will be requested momentarily.  Similarly, the scheduler might provide
 some, but not all, compute units to the cooperative kernel in response
 to an $\offerfork$ call if it has reason to believe that the remaining
 compute units are likely to be useful for other high priority tasks
-that are likely to arrive imminently.
+that are likely to arrive imminently.  With some additional language extensions, it would be possible for the cooperative kernel to hint to the scheduler if, for example, the kernel is at a point of computation where there is less work to do than usual, so that $\offerkill$ calls could be accepted in order to save energy.
 
 
 \subsection{Alternative Semantic Choices}\label{sec:semanticalternatives}
@@ -1277,10 +1267,49 @@ extensions.
 
 \subsection{Porting Irregular GPU Algorithms to Cooperative Kernels}\label{sec:portingalgorithms}
 
+\begin{table}
+\small
+\centering
+\begin{tabular}{ l c c c }
+app & resizing barriers & ckill - cfork & tranmit vars\\
+\hline
+\rowcolor{Gray1}
+color & 2 / 2 & 0 - 0 & 4\\
+\rowcolor{Gray1}
+mis & 3 / 3 & 0 - 0 & 0\\
+\rowcolor{Gray1}
+bc & 3 / 6 & 0 - 0 & 3\\
+\rowcolor{Gray1}
+p-sssp & 3 / 3 & 0 - 0 & 0 \\
+\rowcolor{Gray2}
+bfs & 2 / 2 & 0 - 0  & 4 \\
+\rowcolor{Gray2}
+l-sssp & 2 / 2 & 0 - 0  & 4 \\
+\rowcolor{Gray3}
+octree & 0 / 0 & 1 - 1 & 0\\
+\rowcolor{Gray3}
+game & 0 / 0 & 1 - 1 & 0\\
+\end{tabular} \\
+\vspace{.2cm}
+\crule[Gray1]{.2cm}{.2cm} - Pannotia \hspace{.4cm} \crule[Gray2]{.2cm}{.2cm} - Lonestar GPU  \hspace{.4cm}  \crule[Gray3]{.2cm}{.2cm} - work stealing
+\caption{Blocking GPU applications investigated}
+\label{tab:applications}
+\end{table}
+
+
 \ADComment{Describe the algorithms that we ported.}
 
 \ADComment{Give stats on how many variables had to be marked with
-  $\transmit$ (i.e., occurred in the restoration context), how many barriers we changed to resizing, how many offer kill and offer fork calls we included.}
+  $\transmit$ (i.e., occurred in the restoration context), how many
+  barriers we changed to resizing, how many offer kill and offer fork
+  calls we included.}  \TSComment{check out
+  Table~\ref{tab:applications}. The barrier column shows how many of
+  the original barriers were ported to resizing barriers. In all cases
+  except bc we converted all of them. The only reason why bc is
+  different is because barriers occur deeper in the call stack and our
+  prototype cannot handle that. The algorithm itself is compatable
+  (i.e. changing these barriers is as easy as any other, there is
+  nothing special about them.)}
 
 \ADComment{Make sure we address the point that placing the primitives was pretty easy.}
 
@@ -1322,6 +1351,24 @@ extensions.
 
 \section{Related Work}\label{sec:relatedwork}
 
+\paragraph{Irregular algorithms and persistent kernels}
+%
+There has been a lot of work on accelerating blocking irregular
+algorithms using GPUs~\cite{...}, and on the \emph{persistent threads}
+programming style for long-running kernels.  These approaches rely on
+the occupancy-bound execution model, and aim to take ownership of the
+GPU by scheduling as many workgroups as the GPU has compute units,
+relying on fair scheduling between these workgroups.  These approaches
+render the GPU unavailable for other tasks, and are not future-proof
+because (as discussed throughout the paper) the occupancy-bound
+execution model is not guaranteed by GPU programming models and is
+unlikely to be guaranteed in practice by future GPU platforms.
+
+\ADComment{Now say that we could update these approaches to use cooperation.}
+
+
+
+\ADComment{Sreepathi mentioned the NCCL framework.}
 
 Lots of work on irregular algorithms (assumes fairness), and persistent threads (assumes OB model, which assumes a degree of fairness).  Our contribution can enable these to be safe.
 
