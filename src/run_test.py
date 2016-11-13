@@ -84,35 +84,25 @@ PROGRAM_DATA = {
                           "query_barrier" : [0,1]}
     ],
 
-    "lonestar_sssp" : [ { "input" : os.path.join("lonestar", "inputs","rmat22.gr"),
-                        "solution" : os.path.join("lonestar","solutions", "sssp_rmat22.txt"),
-                        "stat" : "sssp_rmat22",
+    "lonestar_sssp" : [ { "input" : os.path.join("lonestar", "inputs","rmat20.gr"),
+                        "solution" : os.path.join("lonestar","solutions", "sssp_rmat20.txt"),
+                        "stat" : "sssp_rmat20",
                         "suite" : "lonestar",
                         "query_barrier" : [0,1]},
-                      { "input" : os.path.join( "lonestar", "inputs", "r4-2e23.gr"),
-                        "solution" : os.path.join("lonestar","solutions", "sssp_r4-2e23.txt"),
-                        "stat" : "sssp_r4-2e23",
+                      { "input" : os.path.join( "lonestar", "inputs", "USA-road-d.NY.gr"),
+                        "solution" : os.path.join("lonestar","solutions", "sssp_usa_ny.txt"),
+                        "stat" : "sssp_usa_ny",
                         "suite" : "lonestar",
                         "query_barrier" : [0,1]},
-                   #   { "input" : os.path.join( "lonestar", "inputs", "USA-road-d.W.gr"),
-                   #     "solution" : os.path.join("lonestar","solutions", "sssp_USA_W.txt"),
-                   #     "stat" : "sssp_USA-road-d.W",
-                   #     "suite" : "lonestar",
-                   #     "query_barrier" : [0,1]}
     ],
     "lonestar_bfs" : [ { "input" : os.path.join( "lonestar", "inputs", "rmat22.gr"),
                         "solution" : os.path.join("lonestar","solutions", "bfs_rmat22.txt"),
                         "stat" : "bfs_rmat22",
                         "suite" : "lonestar",
                         "query_barrier" : [0,1]},
-                      { "input" : os.path.join( "lonestar", "inputs", "r4-2e23.gr"),
-                        "solution" : os.path.join("lonestar","solutions", "bfs_r4-2e23.txt"),
-                        "stat" : "bfs_r4-2e23",
-                        "suite" : "lonestar",
-                        "query_barrier" : [0,1]},
                       { "input" : os.path.join( "lonestar", "inputs", "USA-road-d.W.gr"),
                         "solution" : os.path.join("lonestar","solutions", "bfs_USA_W.txt"),
-                        "stat" : "bfs_USA-road-d.W",
+                        "stat" : "bfs_usa",
                         "suite" : "lonestar",
                         "query_barrier" : [0,1]}
 
@@ -301,6 +291,11 @@ def optional_solution(d, graph_sol):
         return ["--graph_solution_file", graph_sol]
     return []
 
+def special_case(app, npconfig):
+    if app in ["pannotia_bc","lonestar_sssp", "lonestar_bfs"] && CHIP_NAME in ["IRIS", "HD5500"] && npconfig == "npwg_all_but_one":
+        return True
+    return False
+
 def run_suite():
     for p in PROGRAMS:
         for d in PROGRAM_DATA[p]:
@@ -366,6 +361,8 @@ def run_suite():
 
                 for c in MATMULT_CONFIG:
                     for npconfig in ["npwg_one", "npwg_all_but_one", "npwg_half", "npwg_quarter"]:
+                        if special_case(p, npconfig):
+                            continue
                         cmd = [exe]
                         cmd = cmd + optional_graph(d, graph_in)
                         cmd = cmd + optional_solution(d, graph_sol)
