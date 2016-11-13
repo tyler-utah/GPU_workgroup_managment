@@ -35,7 +35,8 @@ PROGRAMS = [
 #    "pannotia_mis",
 #    "pannotia_bc",
 #    "pannotia_sssp",
-    "final_octree"
+    "final_octree",
+    "connect_four"
 ]
 
 PROGRAM_DATA = {
@@ -118,6 +119,10 @@ PROGRAM_DATA = {
     ],
     "final_octree" : [ { "stat" : "octree",
                    "suite" : os.path.join("test_suite","final_octree"),
+                   "query_barrier" : [0]},
+                 ],
+    "connect_four" : [ { "stat" : "connect_four",
+                   "suite" : os.path.join("test_suite","connect_four"),
                    "query_barrier" : [0]},
                  ],
 }
