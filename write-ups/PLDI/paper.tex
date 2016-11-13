@@ -1350,6 +1350,22 @@ platforms.}
 \subsection{Determining Representative Workloads}\label{sec:representativeworkloads}
 
 \ADComment{Better section title?}
+\HEComment{Dimensioning Non-persistent Workloads}
+
+To assess how cooperative blocking algorithms can be, we fire lightweight
+but still meaningful workloads that requires workgroups to be taken from
+the blocking algorithms.
+
+
+
+We tried to measure how much GPU computation is required to maintain
+smooth animation on the screen during typical desktop usage. We model
+these transient \HEComment{no sure about meaning if transient here}
+using
+
+The idea is
+to run an infinite loop that launches a given kernel 
+
 
 \ADComment{Hugues, can you please explain your experimental
   methodology for working out required response times here?}
