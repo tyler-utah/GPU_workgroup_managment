@@ -1351,6 +1351,23 @@ game & 0 / 0 & 1 - 1 & 0\\
 
 \section{Related Work}\label{sec:relatedwork}
 
+\paragraph{Irregular algorithms and persistent kernels}
+%
+There has been a lot of work on accelerating blocking irregular
+algorithms using GPUs~\cite{...}, and on the \emph{persistent threads}
+programming style for long-running kernels.  These approaches rely on
+the occupancy-bound execution model, and aim to take ownership of the
+GPU by scheduling as many workgroups as the GPU has compute units,
+relying on fair scheduling between these workgroups.  These approaches
+render the GPU unavailable for other tasks, and are not future-proof
+because (as discussed throughout the paper) the occupancy-bound
+execution model is not guaranteed by GPU programming models and is
+unlikely to be guaranteed in practice by future GPU platforms.
+
+\ADComment{Now say that we could update these approaches to use cooperation.}
+
+
+
 \ADComment{Sreepathi mentioned the NCCL framework.}
 
 Lots of work on irregular algorithms (assumes fairness), and persistent threads (assumes OB model, which assumes a degree of fairness).  Our contribution can enable these to be safe.
