@@ -346,6 +346,16 @@ bool check_persistent_task(CL_Execution *exec) {
   }
   printf("\n");
 
+  // check values for the board committed in the git repo
+  bool check = false;
+  check |= h_next_move_value[0] == (cl_int)0;
+  check |= h_next_move_value[1] == (cl_int)1;
+  check |= h_next_move_value[2] == (cl_int)PLUS_INF;
+  check |= h_next_move_value[3] == (cl_int)2;
+  check |= h_next_move_value[4] == (cl_int)2;
+  check |= h_next_move_value[5] == (cl_int)0;
+  check |= h_next_move_value[6] == (cl_int)0;
+
   // Root done
   cl_int h_root_done = 0;
   err = exec->exec_queue.enqueueReadBuffer(d_root_done, CL_TRUE, 0, sizeof(cl_int), &h_root_done);
@@ -364,6 +374,7 @@ bool check_persistent_task(CL_Execution *exec) {
 
   // cout << "Debug int: " << h_debug_int << endl;
 
+  return check;
 }
 
 /*---------------------------------------------------------------------------*/
