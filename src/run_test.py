@@ -137,9 +137,9 @@ MATMULT_CONFIG_HD5500 = [
 
 MATMULT_CONFIG_HD520 = [
     # This is for Hugues laptop
-    { "freq" : "70", "matdim" : "160", "name" : "light" },
-    { "freq" : "40", "matdim" : "160", "name" : "medium" },
-    { "freq" : "40", "matdim" : "260", "name" : "high" },
+    { "freq" : "70", "matdim" : "200", "name" : "light" },
+    { "freq" : "40", "matdim" : "200", "name" : "medium" },
+    { "freq" : "40", "matdim" : "322", "name" : "high" },
 ]
 
 MATMULT_CONFIG_IRIS = [
@@ -191,7 +191,7 @@ def const_print_time():
 
 def exec_cmd(cmd, prefix="", record_file=""):
     global EXIT_THREAD
-    
+
     cmd = cmd + ["--output_summary", prefix + "_summary"]
     cmd = cmd + ["--output_non_persistent_duration", prefix + "_non_persistent_duration"]
     cmd = cmd + ["--output_timestamp_executing_groups", prefix + "_timestamp_executing_groups"]
@@ -236,7 +236,7 @@ def exec_cmd(cmd, prefix="", record_file=""):
     if (ret_code != 0):
         print("Error running " + " ".join(cmd))
         return ret_code
-    
+
     write_to_checkpoint(prefix)
     return 0
 
@@ -310,7 +310,7 @@ def run_suite():
                     if finalsize == -1:
                         PRINT("Could not find finalsize after run of merged skiptask")
                         continue
-            
+
 
                 # RUN: standalone
                 if (q == 0):
@@ -404,7 +404,7 @@ def main():
     log_file_handle = ""
     if (os.path.isfile(log_file)):
         log_file_handle = open(log_file, "a")
-        
+
     log_file_handle = open(log_file, "w")
     PRINT = lambda x : my_print(log_file_handle,x)
 
