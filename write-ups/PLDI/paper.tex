@@ -202,10 +202,11 @@ implemented in practice.
 \section{Introduction}\label{sec:intro}
 
 \paragraph{The needs of irregular data-parallel algorithms}
-Acceleration of general-purpose computations on graphics processing
-units (GPUs) has tended to focus on \emph{regular} data-parallel
-algorithms, for which work to be processed can be evenly split between
-the workgroups that execute a GPU kernel ahead of time.  However, many
+%Acceleration of general-purpose computations on graphics processing
+%units (GPUs) has tended to focus on \emph{regular} data-parallel
+%algorithms, for which work to be processed can be evenly split between
+%the workgroups that execute a GPU kernel ahead of time.  However,
+Many
 interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
 by the computation itself.  The last decade has seen growing interest in accelerating irregular
@@ -214,15 +215,13 @@ traverse and manipulate linked data structures~\cite{owens-persistent,TPO10,DBLP
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
-results.  For example, many graph algorithms employ a level-by-level strategy, requiring a global barrier between each level.
-As another example, work stealing algorithms require each workgroup
+results.  Many graph algorithms employ a level-by-level strategy, requiring a global barrier between each level.
+Work stealing algorithms require each workgroup
 to maintain a queue, which is typically protected by a mutex to enable
 stealing by other workgroups.
 
 To operate correctly, a blocking concurrent algorithm requires
-\emph{fair} scheduling of threads.  In the context of irregular
-data-parallel algorithms accelerated on a GPU, this translates to
-requiring fair scheduling of workgroups.  Without fairness, a
+\emph{fair} scheduling, which in the context of GPUs means fair scheduling of workgroups.  Without fairness, a
 workgroup may fail to make progress, leading to starvation.  For
 example, if workgroup $A$ holds a mutex, an unfair scheduler may cause
 another workgroup $B$ to spin-wait forever for the mutex to be
@@ -234,7 +233,7 @@ towards the barrier.
 GPU schedulers are \emph{not} fair. the current GPU
 programming models---OpenCL~\cite{opencl2Spec}, \ADComment{Tyler, please add best CUDA since I've asked you to add it below in any case} CUDA~\cite{...}  and
 HSA~\cite{HSAprogramming11}---specify almost no guarantees regarding scheduling of
-workgroups, and implementations of these programming models do not
+workgroups, and current GPUs do not
 provide fair scheduling in practice.  Roughly speaking, each workgroup
 executing a GPU kernel is mapped to a hardware \emph{compute
   unit}.\footnote{In practice the situation can be more complex: if a
