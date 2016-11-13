@@ -17,7 +17,7 @@ def fake_placeholder(x):
 EXE_PATH      = ""
 DATA_PATH     = ""
 STAT_PATH     = ""
-ITERATIONS    = "1"
+ITERATIONS    = "10"
 PRINT         = fake_placeholder
 DATA_PRINT    = fake_placeholder
 NAME_OF_CHIP  = ""
