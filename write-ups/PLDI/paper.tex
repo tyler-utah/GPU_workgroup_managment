@@ -1332,28 +1332,44 @@ HD 520, HD 5500 and IRIS 6100, and AMD Radeon R7.
 \ADComment{Describe the platforms.  Explain why we could not try other
 platforms.}
 
-\subsection{Determining Representative Workloads}\label{sec:representativeworkloads}
+\subsection{Sizing Non-Persistent Workloads}\label{sec:representativeworkloads}
 
-\ADComment{Better section title?}
-\HEComment{Dimensioning Non-persistent Workloads}
+\HEComment{given the paper title, maybe ``non-blocking'' would be more
+  appropriate than ``non-persistent''?}
 
-To assess how cooperative blocking algorithms can be, we fire lightweight
-but still meaningful workloads that requires workgroups to be taken from
-the blocking algorithms.
+Cooperative kernels enables other \emph{non-persistent} workloads to
+access GPU resources without stopping the blocking algorithm
+computation entirely. We size these workloads to represent
+approximatively the workload required by a system to maintain smooth
+screen animations. We repetitively ran a kernel with a controlled
+workload and detected from which workload size the screen animation
+started to jitter. Given the kernel workload and its scheduling
+frequency, we can infer what is the workload and frequency needed by
+the system to maintain a smooth animation.
 
+Based on this approach, we measured workloads required by the system
+to maintain smooth animations of three types: (\emph{light}) emphasis
+of desktop icons under the mouse pointer, (\emph{medium}) window
+dragging over the desktop, and (\emph{heavy}) WebGL animations in a
+browser. \mytab~\ref{tab:nonpersistentworkload} illustrates our
+results. In order to simulate such non-persistent workloads alongside
+kernels of blocking algorithms, we use a matrix multiplication kernel
+where matrix dimensions are tuned to trigger the relevant execution
+duration.
 
-
-We tried to measure how much GPU computation is required to maintain
-smooth animation on the screen during typical desktop usage. We model
-these transient \HEComment{no sure about meaning if transient here}
-using
-
-The idea is
-to run an infinite loop that launches a given kernel 
-
-
-\ADComment{Hugues, can you please explain your experimental
-  methodology for working out required response times here?}
+\begin{table}
+\small
+\centering
+\begin{tabular}{ l c c }
+workload & duration (ms) & period (ms)\\
+\hline
+light & 3 & 70\\
+medium & 3 & 40\\
+heavy & 10 & 40\\
+\end{tabular}
+\caption{Caracteristics of non-persitent workloads}
+\label{tab:nonpersistentworkload}
+\end{table}
 
 \paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
 
