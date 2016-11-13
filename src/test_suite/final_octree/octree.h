@@ -1,5 +1,5 @@
 DEFINE_int32(numParticles, 3000000, "number of particles to treat");
-DEFINE_int32(maxChildren, 4, "maximum number of children");
+DEFINE_int32(maxChildren, 5, "maximum number of children");
 DEFINE_int32(threads, 128, "number of threads");
 DEFINE_int32(pool_size, 50000, "size of task pools");
 

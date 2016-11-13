@@ -11,7 +11,7 @@ DEFINE_string(persistent_kernel_file, "test_suite/connect_four/device/standalone
 
 // Pool size is quite arbitrary, may be tuned
 DEFINE_int32(pool_size, 10000, "Size of a task pool");
-DEFINE_int32(maxlevel, 2, "Max level of look-ahead");
+DEFINE_int32(maxlevel, 6, "Max level of look-ahead");
 
 DEFINE_string(board_file, "test_suite/connect_four/board.txt", "Path to board description");
 

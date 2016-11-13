@@ -31,10 +31,12 @@ EXIT_THREAD      = 0
 PROGRAMS = [
 #    "lonestar_sssp"
 #    "lonestar_bfs",
-    "pannotia_color",
-    "pannotia_mis",
-    "pannotia_bc",
-    "pannotia_sssp"
+#    "pannotia_color",
+#    "pannotia_mis",
+#    "pannotia_bc",
+#    "pannotia_sssp",
+    "final_octree",
+    "connect_four"
 ]
 
 PROGRAM_DATA = {
@@ -115,6 +117,14 @@ PROGRAM_DATA = {
                         "query_barrier" : [0,1]}
 
     ],
+    "final_octree" : [ { "stat" : "octree",
+                   "suite" : os.path.join("test_suite","final_octree"),
+                   "query_barrier" : [0]},
+                 ],
+    "connect_four" : [ { "stat" : "connect_four",
+                   "suite" : os.path.join("test_suite","connect_four"),
+                   "query_barrier" : [0]},
+                 ],
 }
 
 MATMULT_CONFIG = []
@@ -140,6 +150,13 @@ MATMULT_CONFIG_HD520 = [
     { "freq" : "70", "matdim" : "200", "name" : "light" },
     { "freq" : "40", "matdim" : "200", "name" : "medium" },
     { "freq" : "40", "matdim" : "322", "name" : "high" },
+]
+
+MATMULT_CONFIG_IRIS = [
+    # This is for purple laptop
+    { "freq" : "70", "matdim" : "290", "name" : "light" },
+    { "freq" : "40", "matdim" : "290", "name" : "medium" },
+    { "freq" : "40", "matdim" : "445", "name" : "high" },
 ]
 
 MATMULT_CONFIG_RADEON_R7 = [
@@ -192,7 +209,7 @@ def const_print_time():
 
 def exec_cmd(cmd, prefix="", record_file=""):
     global EXIT_THREAD
-
+    
     cmd = cmd + ["--output_summary", prefix + "_summary"]
     cmd = cmd + ["--output_non_persistent_duration", prefix + "_non_persistent_duration"]
     cmd = cmd + ["--output_timestamp_executing_groups", prefix + "_timestamp_executing_groups"]
@@ -203,7 +220,7 @@ def exec_cmd(cmd, prefix="", record_file=""):
         print(prefix + " found in checkpoint")
         return 0;
 
-    time.sleep(30)
+    #time.sleep(30)
     EXIT_THREAD = 0
     local_time_begin = time.time()
     #thread = Thread(target = const_print_time)
@@ -237,7 +254,7 @@ def exec_cmd(cmd, prefix="", record_file=""):
     if (ret_code != 0):
         print("Error running " + " ".join(cmd))
         return ret_code
-
+    
     write_to_checkpoint(prefix)
     return 0
 
@@ -274,18 +291,34 @@ def optional_query(q):
         return "_query"
     return ""
 
+def optional_graph(d, graph_in):
+    if "input" in d:
+        return ["--graph_file", graph_in]
+    return []
+
+def optional_solution(d, graph_sol):
+    if "solution" in d:
+        return ["--graph_solution_file", graph_sol]
+    return []
+
 def run_suite():
     for p in PROGRAMS:
         for d in PROGRAM_DATA[p]:
             for q in d["query_barrier"]:
                 exe = os.path.join(EXE_PATH, d["suite"], optional_debug(),  p)
-                graph_in = os.path.join(DATA_PATH, d["input"])
-                graph_sol = os.path.join(DATA_PATH, d["solution"])
+                graph_in = ""
+                if "input" in d:
+                     graph_in = os.path.join(DATA_PATH, d["input"])
+                graph_sol = ""
+                if "solution" in d:
+                    graph_sol = os.path.join(DATA_PATH, d["solution"])
 
                 # RUN: merged skip tasks
                 cmd = [exe]
-                cmd = cmd + ["--graph_file", graph_in]
-                cmd = cmd + ["--graph_solution_file", graph_sol]
+
+               
+                cmd = cmd + optional_graph(d, graph_in)
+                cmd = cmd + optional_solution(d, graph_sol)
                 cmd = cmd + ["--threads_per_wg", "128"]
                 # indicate very high number of workgroups to finally obtain occupancy
                 cmd = cmd + ["--num_wgs", "256"]
@@ -311,14 +344,13 @@ def run_suite():
                     if finalsize == -1:
                         PRINT("Could not find finalsize after run of merged skiptask")
                         continue
-
+            
 
                 # RUN: standalone
                 if (q == 0):
                     cmd = [exe]
-                    cmd = cmd + ["--graph_file", graph_in]
-                    cmd = cmd + ["--graph_solution_file", graph_sol]
-                    cmd = cmd + ["--num_wgs", "256"]
+                    cmd = cmd + optional_graph(d, graph_in)
+                    cmd = cmd + optional_solution(d, graph_sol)
 
                     cmd = cmd + ["--threads_per_wg", "128"]
                     cmd = cmd + ["--run_persistent", ITERATIONS]
@@ -335,8 +367,8 @@ def run_suite():
                 for c in MATMULT_CONFIG:
                     for npconfig in ["npwg_one", "npwg_all_but_one", "npwg_half", "npwg_quarter"]:
                         cmd = [exe]
-                        cmd = cmd + ["--graph_file", graph_in]
-                        cmd = cmd + ["--graph_solution_file", graph_sol]
+                        cmd = cmd + optional_graph(d, graph_in)
+                        cmd = cmd + optional_solution(d, graph_sol)
                         cmd = cmd + ["--threads_per_wg", "128"]
                         cmd = cmd + ["--merged_iterations", ITERATIONS]
                         # indicate very high number of workgroups to finally obtain occupancy
@@ -405,7 +437,7 @@ def main():
     log_file_handle = ""
     if (os.path.isfile(log_file)):
         log_file_handle = open(log_file, "a")
-
+        
     log_file_handle = open(log_file, "w")
     PRINT = lambda x : my_print(log_file_handle,x)
 
