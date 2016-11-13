@@ -147,6 +147,13 @@ MATMULT_CONFIG_HD520 = [
     { "freq" : "40", "matdim" : "322", "name" : "high" },
 ]
 
+MATMULT_CONFIG_IRIS = [
+    # This is for purple laptop
+    { "freq" : "70", "matdim" : "290", "name" : "light" },
+    { "freq" : "40", "matdim" : "290", "name" : "medium" },
+    { "freq" : "40", "matdim" : "445", "name" : "high" },
+]
+
 MATMULT_CONFIG_RADEON_R7 = [
     # This is for carrot
     { "freq" : "70", "matdim" : "277", "name" : "light" },
