@@ -215,19 +215,18 @@ traverse and manipulate linked data structures~\cite{owens-persistent,TPO10,DBLP
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
-results.  Many graph algorithms employ a level-by-level strategy, requiring a global barrier between each level.
-Work stealing algorithms require each workgroup
+results.  For example, many graph algorithms employ a level-by-level strategy, requiring a global barrier between each level, and 
+work stealing algorithms require each workgroup
 to maintain a queue, which is typically protected by a mutex to enable
 stealing by other workgroups.
 
 To operate correctly, a blocking concurrent algorithm requires
 \emph{fair} scheduling, which in the context of GPUs means fair scheduling of workgroups.  Without fairness, a
 workgroup may fail to make progress, leading to starvation.  For
-example, if workgroup $A$ holds a mutex, an unfair scheduler may cause
-another workgroup $B$ to spin-wait forever for the mutex to be
+example, if one workgroup holds a mutex, an unfair scheduler may cause
+another workgroup to spin-wait forever for the mutex to be
 released.  Similarly, an unfair scheduler can cause a workgroup to spin-wait
-indefinitely at a global barrier so that other workgroups do not make progress
-towards the barrier.
+indefinitely at a global barrier so that other workgroups do not reach the barrier.
 
 \paragraph{A degree of fairness: occupancy-bound execution}
 GPU schedulers are \emph{not} fair. the current GPU
@@ -240,9 +239,9 @@ executing a GPU kernel is mapped to a hardware \emph{compute
   kernel is sufficiently simple and if workgroups are small enough,
   multiple workgroups may be mapped to a single compute unit.  We assume, for the purpose of the current discussion, that the kernel is sufficiently complex that this does not happen.}
 %
-If a kernel is executed with more workgroups than there are compute
-units then at least two workgroups must share a single compute unit.
-The simplest way for a GPU driver to handle this is via an \emph{occupancy-bound}
+The simplest way for a GPU driver to handle 
+the case where more workgroups are launched than there are compute
+units is via an \emph{occupancy-bound}
 execution model~\cite{DBLP:conf/oopsla/SorensenDBGR16}. \ADComment{Tyler, please add best cite for OB model; I guess our OOPSLA paper introduced the term, but we should cite that + Owens?}  With this model, once a workgroup has commenced execution on a
 compute unit (it has become \emph{occupant}), the workgroup has
 exclusive access to the compute unit until it has finished execution,
@@ -255,28 +254,32 @@ The occupancy-bound execution model does not guarantee fair scheduling
 between workgroups: if all compute units are occupied then a
 not-yet-occupant workgroup will not be scheduled until some occupant
 workgroup completes execution.  Yet the execution model \emph{does}
-provide fair scheduling between \emph{occupant} workgroups, because
-they are bound to separate compute units that operate in parallel.
-Current implementations of irregular data parallel algorithms on GPUs
-assume that the target GPU device provides the occupancy-bound
-execution model.  They exploit the model by scheduling no more workgroups
-than there are available compute units~\cite{...}. \ADComment{Tyler, please pick best cite for previous claim.} This works
-because \emph{today}'s GPUs seem to provide the occupancy-bound
-execution model.
+provide fair scheduling between \emph{occupant} workgroups, which are
+bound to separate compute units that operate in parallel.  Current GPU
+implementations of irregular data parallel algorithms assume the
+occupancy-bound execution model, which they exploit by launching 
+no more workgroups than there are available compute
+units~\cite{...}. \ADComment{Tyler, please pick best cite for previous
+  claim.} This works because \emph{today}'s GPUs seem to provide the
+occupancy-bound execution model.
 
 \paragraph{Resistance to guaranteeing occupancy-bound execution}
 
 Despite its practical prevalence, none of the current GPU programming
 models actually mandate occupancy-bound execution.  Further, there are
-clear reasons why this model is undesirable from the point-of-view of
-GPU vendors and end users.  First, the execution model does not enable
+clear reasons why this model is undesirable.
+% from the point-of-view of
+%GPU vendors and end users.
+First, the execution model does not enable
 multi-tasking, because a workgroup effectively \emph{owns} a compute
 unit until the workgroup has completed execution.  If a long-running
 kernel occupies all compute units, the GPU cannot be used for other
-tasks, such as graphics rendering, in the meantime.  Precisely because
-of this problem, operating systems employ a GPU \emph{watchdog} to
-heuristically detect and kill long-running computations on the GPU
-being used for display rendering~\cite{DBLP:conf/iwocl/SorensenD16}.  Second, \emph{energy throttling} is
+tasks, such as graphics rendering, in the meantime.
+%Precisely because
+%of this problem, operating systems employ a GPU \emph{watchdog} to
+%heuristically detect and kill long-running computations on the GPU
+%being used for display rendering~\cite{DBLP:conf/iwocl/SorensenD16}.
+Second, \emph{energy throttling} is
 an important concern for battery-powered devices, such as smartphones
 and tablets~\cite{DBLP:journals/comsur/Vallina-RodriguezC13}.  In the future, it will be desirable for a mobile GPU driver to be able to
 power down one or more compute units if the battery level is low or if
@@ -296,8 +299,8 @@ implement, due to the need for multi-tasking and energy throttling,
 yet (2) GPU vendors will not guarantee fair scheduling, due to the
 runtime overhead associated with supporting full preemption of
 workgroups~\cite{ISCAPAPERSreeMentioned}.  Vendors instead wish to
-retain the essence of the occupancy-bound execution model, which is
-simple to implement efficiently, and provide support for preemption
+retain the essence of the occupancy-bound model, which is
+simple to implement efficiently, supporting preemption
 only in key special cases.
 
 
@@ -312,26 +315,25 @@ We propose \emph{cooperative kernels}, an extension to the GPU
 programming model that aims to resolve this impasse.  A GPU kernel
 that requires workgroups to be fairly scheduled is identified as a
 \emph{cooperative} kernel, and is written using two additional
-language primitives, $\offerkill$ and $\offerfork$, which must be
-placed carefully by the programmer.
+language primitives, $\offerkill$ and $\offerfork$, placed by the programmer.
 
 At a point where the cooperative kernel could proceed with fewer
 workgroups, a workgroup can execute $\offerkill$, offering to
-sacrifice itself to the scheduler.  This indicates to the scheduler
-that the workgroup would ideally continue with its execution, but that
-if required the scheduler may destroy the workgroup for good: the
-cooperative kernel is prepared to deal with either scenario.
+sacrifice itself to the scheduler.  This indicates that the workgroup
+would ideally continue with its execution but that, if required, the
+scheduler may destroy the workgroup for good: the cooperative kernel
+is prepared to deal with either scenario.
 
 At a point where the cooperative kernel could benefit from having
 additional workgroups join the computation, a workgroup can execute
-$\offerfork$.  This indicates to the scheduler that the cooperative
+$\offerfork$.  This indicates that the cooperative
 kernel is prepared to proceed with the existing set of workgroups, but
 is able to take advantage of having one or more additional workgroups
 commence execution directly after the $\offerfork$ program point.
 
 The use of $\offerfork$ and $\offerkill$ creates a contract between
-the scheduler and (the programmer of the) cooperative kernel, with
-both functional and non-functional requirements.  Functionally, the
+the scheduler and (the programmer of the) cooperative kernel.
+Functionally, the
 scheduler must guarantee that the workgroups executing a cooperative
 kernel are fairly scheduled, while the cooperative kernel must be
 robust to workgroups leaving and joining the computation in response
@@ -356,27 +358,22 @@ properties:
   data-parallel algorithms.
 
 \item The model has no impact on the development of regular
-  (non-cooperative) kernels: these can be programmed exactly as they
-  are now, as can graphics shading routines written using APIs such as
-  OpenGL, Vulkan and DirectX.
+  (non-cooperative) compute and graphics kernels: these can be programmed exactly as they
+  are now.
+%, as can graphics shading routines written using APIs such as
+%OpenGL, Vulkan and DirectX.
 
-\item The model is backwards-compatible: a non-blocking algorithm
-  implementation that works on today's GPU platforms can be upgraded
-  to use our language extensions for cooperative scheduling, and will
-  behave exactly as it does at present if the new $\offerkill$ and
-  $\offerfork$ functions are simply ignored.
+\item The model is backwards-compatible: if $\offerkill$ and
+  $\offerfork$ are ignored, a cooperative blocking kernel will behave
+  exactly as a regular blocking kernel does on current GPUs.
 
 \item The model can be implemented on top of the occupancy-bound
   execution model that current GPU platforms provide---we present a
   proof-of-concept implementation on top of OpenCL 2.0 that requires
   no special-purpose hardware or driver support.
 
-\item Our experiments across four GPUs from two vendors show that our
-  portable, proof-of-concept implementation of cooperative kernels can
-  provide efficient multi-tasking of cooperative and non-cooperative
-  tasks.  A GPU vendor implementation could likely provide even better
-  efficiency, by leveraging platform-specific hardware, driver and
-  compiler features.
+\item Our experiments with a range of applications using three GPUs show that the model can enable efficient multi-tasking of cooperative and non-cooperative
+  tasks.
 
 \end{enumerate}
 
@@ -390,7 +387,7 @@ In summary, our main contributions are:
 
 \begin{itemize}
 
-\item \emph{Cooperative kernels}, an extension to the GPU programming model to support the scheduling requirements of blocking algorithms.  We describe the semantics of the programming model in detail (\mysec\ref{sec:cooperativekernels}). 
+\item \emph{Cooperative kernels}, an extension to the GPU programming model to support the scheduling requirements of blocking algorithms (\mysec\ref{sec:cooperativekernels}). 
 
 \item A proof-of-concept portable implementation of cooperative
   kernels on top of the OpenCL 2.0 programming model
@@ -398,9 +395,9 @@ In summary, our main contributions are:
 
 \item An experience report of porting \NumAlgorithms{} irregular GPU
   algorithms to use cooperative kernels, and experimental results
-  assessing the performance overhead associated with cooperation and
-  the responsiveness to high priority tasks that cooperation enables,
-  across four GPUs from two vendors (\mysec\ref{sec:experiments}).
+  using three GPUs assessing the overhead associated with cooperative
+  kernels, and the responsiveness of the multi-tasking that the
+  approach enables (\mysec\ref{sec:experiments}).
 
 \end{itemize}
 
