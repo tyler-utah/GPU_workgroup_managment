@@ -124,10 +124,22 @@ void init_persistent_app_for_occupancy(CL_Execution *exec)
 
 int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {
   // Set dummy args for persistent kernel
-  int num_args = 14;
-  for (int i = 0; i < num_args; i++) {
-    check_ocl(k.setArg(arg_index++, NULL));
-  }
+
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, 0));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, 0));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, 0));
+  check_ocl(k.setArg(arg_index++, 0));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+
   return arg_index;
 }
 
