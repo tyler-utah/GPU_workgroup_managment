@@ -177,7 +177,7 @@ class CL_Communicator {
 			global_start = gettime_chrono();
 
 			std::atomic_store_explicit((std::atomic<int> *) (scheduler.scheduler_flag), DEVICE_TO_EXECUTE, std::memory_order_release);
-			
+
 			std::atomic_store(&executing_persistent, 1);
 
 
@@ -228,11 +228,11 @@ class CL_Communicator {
 		}
 
 		time_stamp get_persistent_time() {
-			assert(std::atomic_load(&executing_persistent) == 0);
+			while (std::atomic_load(&executing_persistent) != 0);
 			return persistent_end - persistent_begin;
 		}
 
-		
+
 
 		void set_record_groups_time_data(bool status) {
 			record_time_groups_data = status;
