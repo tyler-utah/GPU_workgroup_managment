@@ -124,10 +124,22 @@ void init_persistent_app_for_occupancy(CL_Execution *exec)
 
 int set_persistent_app_args_for_occupancy(int arg_index, cl::Kernel k) {
   // Set dummy args for persistent kernel
-  int num_args = 14;
-  for (int i = 0; i < num_args; i++) {
-    check_ocl(k.setArg(arg_index++, NULL));
-  }
+
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, 0));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, 0));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, 0));
+  check_ocl(k.setArg(arg_index++, 0));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+  check_ocl(k.setArg(arg_index++, NULL));
+
   return arg_index;
 }
 
@@ -334,6 +346,16 @@ bool check_persistent_task(CL_Execution *exec) {
   }
   printf("\n");
 
+  // check values for the board committed in the git repo
+  bool check = false;
+  check |= h_next_move_value[0] == (cl_int)0;
+  check |= h_next_move_value[1] == (cl_int)1;
+  check |= h_next_move_value[2] == (cl_int)PLUS_INF;
+  check |= h_next_move_value[3] == (cl_int)2;
+  check |= h_next_move_value[4] == (cl_int)2;
+  check |= h_next_move_value[5] == (cl_int)0;
+  check |= h_next_move_value[6] == (cl_int)0;
+
   // Root done
   cl_int h_root_done = 0;
   err = exec->exec_queue.enqueueReadBuffer(d_root_done, CL_TRUE, 0, sizeof(cl_int), &h_root_done);
@@ -352,6 +374,7 @@ bool check_persistent_task(CL_Execution *exec) {
 
   // cout << "Debug int: " << h_debug_int << endl;
 
+  return check;
 }
 
 /*---------------------------------------------------------------------------*/

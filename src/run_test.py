@@ -28,14 +28,14 @@ CHECK_POINT_DATA = []
 TIME_BEGIN       = 0.0
 EXIT_THREAD      = 0
 
-PROGRAMS = {
+PROGRAMS = [
 #    "lonestar_sssp"
-    "lonestar_bfs",
+#    "lonestar_bfs",
     "pannotia_color",
     "pannotia_mis",
     "pannotia_bc",
     "pannotia_sssp"
-}
+]
 
 PROGRAM_DATA = {
 
@@ -52,12 +52,12 @@ PROGRAM_DATA = {
     ],
 
     "pannotia_mis" : [ { "input" : os.path.join("pannotia","inputs", "color", "ecology1.graph"),
-                         "solution" : os.path.join("pannotia","solutions", "color_ecology.txt"),
+                         "solution" : os.path.join("pannotia","solutions", "mis_ecology.txt"),
                          "stat" : "mis_ecology",
                          "suite" : "pannotia",
                          "query_barrier" : [0,1]},
                        { "input" : os.path.join("pannotia","inputs", "color", "G3_circuit.graph"),
-                         "solution" : os.path.join("pannotia","solutions", "color_G3_circuit.txt"),
+                         "solution" : os.path.join("pannotia","solutions", "mis_G3_circuit.txt"),
                          "stat" : "mis_G3_circuit",
                          "suite" : "pannotia",
                          "query_barrier" : [0,1]}
@@ -137,9 +137,16 @@ MATMULT_CONFIG_HD5500 = [
 
 MATMULT_CONFIG_HD520 = [
     # This is for Hugues laptop
-    { "freq" : "70", "matdim" : "160", "name" : "light" },
-    { "freq" : "40", "matdim" : "160", "name" : "medium" },
-    { "freq" : "40", "matdim" : "260", "name" : "high" },
+    { "freq" : "70", "matdim" : "200", "name" : "light" },
+    { "freq" : "40", "matdim" : "200", "name" : "medium" },
+    { "freq" : "40", "matdim" : "322", "name" : "high" },
+]
+
+MATMULT_CONFIG_RADEON_R7 = [
+    # This is for carrot
+    { "freq" : "70", "matdim" : "277", "name" : "light" },
+    { "freq" : "40", "matdim" : "277", "name" : "medium" },
+    { "freq" : "40", "matdim" : "431", "name" : "high" },
 ]
 
 def my_print(file_handle, data):
@@ -185,7 +192,7 @@ def const_print_time():
 
 def exec_cmd(cmd, prefix="", record_file=""):
     global EXIT_THREAD
-    
+
     cmd = cmd + ["--output_summary", prefix + "_summary"]
     cmd = cmd + ["--output_non_persistent_duration", prefix + "_non_persistent_duration"]
     cmd = cmd + ["--output_timestamp_executing_groups", prefix + "_timestamp_executing_groups"]
@@ -230,7 +237,7 @@ def exec_cmd(cmd, prefix="", record_file=""):
     if (ret_code != 0):
         print("Error running " + " ".join(cmd))
         return ret_code
-    
+
     write_to_checkpoint(prefix)
     return 0
 
@@ -304,7 +311,7 @@ def run_suite():
                     if finalsize == -1:
                         PRINT("Could not find finalsize after run of merged skiptask")
                         continue
-            
+
 
                 # RUN: standalone
                 if (q == 0):
@@ -383,10 +390,12 @@ def main():
     if NAME_OF_CHIP == "HD5500":
         MATMULT_CONFIG = MATMULT_CONFIG_HD5500
     elif NAME_OF_CHIP == "HD520":
-	MATMULT_CONFIG = MATMULT_CONFIG_HD520
+        MATMULT_CONFIG = MATMULT_CONFIG_HD520
+    elif NAME_OF_CHIP == "IRIS":
+        MATMULT_CONFIG = MATMULT_CONFIG_IRIS
     else:
         print("Cannot find a matmult for your chip! Exiting")
-	exit(0)
+        exit(0)
     PLATFORM_ID = sys.argv[6]
     IS_AMD = sys.argv[7]
     log_file = sys.argv[4] + ".log"
@@ -396,7 +405,7 @@ def main():
     log_file_handle = ""
     if (os.path.isfile(log_file)):
         log_file_handle = open(log_file, "a")
-        
+
     log_file_handle = open(log_file, "w")
     PRINT = lambda x : my_print(log_file_handle,x)
 
