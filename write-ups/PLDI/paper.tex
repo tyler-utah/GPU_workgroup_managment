@@ -1271,7 +1271,7 @@ extensions.
 \small
 \centering
 \begin{tabular}{ l c c c }
-app & resizing barriers & ckill - cfork & tranmit vars\\
+app & resizing barriers & ckill - cfork & transmit vars\\
 \hline
 \rowcolor{Gray1}
 color & 2 / 2 & 0 - 0 & 4\\
@@ -1317,47 +1317,68 @@ game & 0 / 0 & 1 - 1 & 0\\
 
 \subsection{The GPUs we Tested}
 
+\ADComment{Describe the platforms.  Explain why we could not try other
+platforms.}
+
 \HEComment{the reason we need SVM fine grain and atomics may be better
 discussed directly in the section on implementation?}
 
 Our implementation approach requires two optional features of OpenCL
 $2.0$, namely SVM fine-grained buffers and SVM atomics, which are
 currently not widely supported. \nvidia chips are ruled out since
-\nvidia does not support OpenCL $2.0$. AMD support SVM atomics only
-their Kaveri family of chips and only on Linux, requiring to compile the
-latest driver.  \HEComment{do we need to mention the struggle for AMD ?}
-Among the GPUs available to us, only 4 support our requirements: Intel
-HD 520, HD 5500 and IRIS 6100, and AMD Radeon R7.
+\nvidia does not support OpenCL $2.0$. Intel drivers meet our
+requirements on Windows, but not on Linux, although we tried the
+upstream driver that requires a patched Linux kernel. AMD support SVM
+atomics only their Kaveri family of chips and only on Linux, requiring
+to compile the latest driver. Among the GPUs available to us, only 4
+turned out to provide our requirements: Intel HD 520, HD 5500 and IRIS
+6100, and AMD Radeon R7.
 
-\ADComment{Describe the platforms.  Explain why we could not try other
-platforms.}
+\HEComment{To decide: do we mention carrot AMD, in which terms?}
 
-\subsection{Determining Representative Workloads}\label{sec:representativeworkloads}
+\subsection{Sizing Non-Persistent Workloads}\label{sec:representativeworkloads}
 
-\ADComment{Better section title?}
-\HEComment{Dimensioning Non-persistent Workloads}
+\HEComment{given the paper title, maybe ``non-blocking'' would be more
+  appropriate than ``non-persistent''?}
 
-To assess how cooperative blocking algorithms can be, we fire lightweight
-but still meaningful workloads that requires workgroups to be taken from
-the blocking algorithms.
+Cooperative kernels enables other \emph{non-persistent} workloads to
+access GPU resources without stopping the blocking algorithm
+computation entirely. We size these workloads to represent
+approximatively the workload required by a system to maintain smooth
+screen animations.
 
+\paragraph{Experimental setup} \ADComment{Describe the data we are
+  gathering.}  We repetitively run a kernel with a controlled workload
+and detect from which workload size the screen animation starts to
+jitter. Given the kernel workload and its scheduling frequency, we
+deduce what is the workload and frequency needed by the system to
+maintain a smooth animation. We use this approach to measure required
+by the system to maintain smooth animations of three types:
+(\emph{light}) emphasis of desktop icons under the mouse pointer,
+(\emph{medium}) window dragging over the desktop, and (\emph{heavy})
+WebGL animations in a browser.
 
+\begin{table}
+\small
+\centering
+\begin{tabular}{ l c c }
+workload & duration (ms) & period (ms)\\
+\hline
+light & 3 & 70\\
+medium & 3 & 40\\
+heavy & 10 & 40\\
+\end{tabular}
+\caption{Caracteristics of non-persitent workloads}
+\label{tab:nonpersistentworkload}
+\end{table}
 
-We tried to measure how much GPU computation is required to maintain
-smooth animation on the screen during typical desktop usage. We model
-these transient \HEComment{no sure about meaning if transient here}
-using
-
-The idea is
-to run an infinite loop that launches a given kernel 
-
-
-\ADComment{Hugues, can you please explain your experimental
-  methodology for working out required response times here?}
-
-\paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
-
-\paragraph{Results}  \ADComment{Discuss the results.}
+\paragraph{Results} \ADComment{Discuss the results.}
+\mytab~\ref{tab:nonpersistentworkload} illustrates the caracteristics
+found for the three types of workloads. For the medium and heavy
+workloads, the 40ms period corresponds to an execution every $25^{th}$
+of seconds which coincide with the human persistence of vision. The
+3ms execution duration of both light and medium configurations may
+indicate a lower bound of GPU execution time for system workloads.
 
 \subsection{The Overhead of Moving to Cooperative Kernels}
 
@@ -1370,6 +1391,12 @@ to run an infinite loop that launches a given kernel
 \subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
 \ADComment{Preamble}
+
+In order to simulate non-persistent workloads alongside kernels of
+blocking algorithms, we use a matrix multiplication kernel where
+matrix dimensions are tuned to trigger the relevant execution
+duration.
+
 
 \paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
 
