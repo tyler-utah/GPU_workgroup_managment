@@ -324,7 +324,7 @@ void drelax2(__global uint *dist,
              __local int *queue_index, __local int *scan_arr,
              __local int *loc_tmp, __global IW_barrier *__bar,
              __global Kernel_ctx *__k_ctx, CL_Scheduler_ctx __s_ctx,
-             __local int *__scratchpad, Restoration_ctx *__restoration_ctx) {
+             __local int *__scratchpad, Restoration_ctx *__restoration_ctx, __local int * __sense) {
 
   int iteration = 0;
   __global int *in_wl = a_inwl_wl;
@@ -343,6 +343,7 @@ void drelax2(__global uint *dist,
     out_wl = __restoration_ctx->out_wl;
     in_index = __restoration_ctx->in_index;
     out_index = __restoration_ctx->out_index;
+	*__sense = __restoration_ctx->sense;
   }
   while (
       __restoration_ctx->target !=
@@ -365,6 +366,7 @@ void drelax2(__global uint *dist,
         __to_fork.out_wl = out_wl;
         __to_fork.in_index = in_index;
         __to_fork.out_index = out_index;
+		__to_fork.sense = *__sense;
         global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad,
                               &__to_fork);
       }
@@ -382,19 +384,9 @@ void drelax2(__global uint *dist,
 
       iteration++;
 
-      {
-        Restoration_ctx __to_fork;
-        __to_fork.target = 2;
-        __to_fork.iteration = iteration;
-        __to_fork.in_wl = in_wl;
-        __to_fork.out_wl = out_wl;
-        __to_fork.in_index = in_index;
-        __to_fork.out_index = out_index;
-        global_barrier_resize(__bar, __k_ctx, __s_ctx, __scratchpad,
-                              &__to_fork);
-      }
-    case 2:
-      __restoration_ctx->target = 0;
+     
+      global_barrier_robust_to_resizing(__bar, __sense, __k_ctx);
+
 
       if (*(in_index) <= 0) {
         return;
@@ -429,6 +421,8 @@ kernel void mega_kernel(__global int *A, const int A_row, const int A_col,
   __local int queue_index[1];
   __local int scan_arr[WGS];
   __local int loc_tmp[1];
+  __local int __sense;
+  __sense = 0;
 #define NON_PERSISTENT_KERNEL                                                  \
   matmult(A, A_row, A_col, B, B_row, B_col, C, counter, hash,                  \
           non_persistent_kernel_ctx)
@@ -436,7 +430,7 @@ kernel void mega_kernel(__global int *A, const int A_row, const int A_col,
   drelax2(dist, a_inwl_index, a_outwl_index, a_inwl_wl, a_outwl_wl, g_nnodes,  \
           g_edgessrcdst, g_psrc, gather_offsets, queue_index, scan_arr,        \
           loc_tmp, bar, persistent_kernel_ctx, s_ctx, scratchpad,              \
-          &r_ctx_local)
+          &r_ctx_local, &__sense)
 #include "main_device_body.cl"
 }
 //
