@@ -178,28 +178,24 @@ There is growing interest in accelerating irregular data-parallel
 algorithms on GPUs.  These algorithms are typically \emph{blocking},
 so require fair scheduling.  But GPU programming models (e.g.\ OpenCL)
 do not mandate fair scheduling, and GPU schedulers are inherently
-unfair in practice.  Current irregular algorithms only work on today's
-GPUs by identifying hardware compute units and scheduling workgroups
-exclusively to these compute units.  As well as being non-portable,
-this is unacceptable because the GPU cannot be used in the meantime
-for high-priority tasks with soft real-time constraints,
-such as graphics rendering.
-
-We propose \emph{cooperative kernels}, an extension to the traditional
-GPU programming model geared towards writing blocking algorithms.
-Cooperative kernels enable fair scheduling of workgroups executing a
-blocking algorithm, as well as co-scheduling of other tasks on the
-GPU, via a small set of language extensions that create a contract
-between the programmer and the scheduler.  We describe our cooperative
-kernels programming model and its semantics in detail, and our
-implementation of a portable prototype of cooperative kernels on top
-of OpenCL 2.0.  We evaluate the technique by porting a set of
-irregular work stealing and graph algorithms to our programming model
-and evaluate the performance and responsiveness of the approach across
-four GPUs from two vendors.  Because our implementation exploits no
-vendor-specific hardware, driver or compiler support, our encouraging
-experimental results provide a lower-bound on the efficiency with which
-cooperative kernels can be implemented in practice.
+unfair in practice.  This issue is currently circumvented by
+exploiting scheduling quirks particular to today's GPUs in a manner
+that does not allow the GPU to be shared with other workloads (such as
+graphics rendering tasks).  We propose \emph{cooperative kernels}, an
+extension to the traditional GPU programming model geared towards
+writing blocking algorithms.  Workgroups of a cooperative kernel are
+fairly scheduled, supporting blocking algorithms, and co-scheduling of
+other tasks is supported via a small set of language extensions that
+create a contract between the programmer and the scheduler.  We
+describe the semantics of the cooperative kernels programming model
+and discuss our portable prototype implementation.  We evaluate the
+technique by porting a set of irregular work stealing and graph
+algorithms to our programming model and assessing the performance and
+responsiveness of the approach across several GPUs.  Because our
+implementation exploits no vendor-specific hardware, driver or
+compiler support, our encouraging experimental results provide a
+lower-bound on the efficiency with which cooperative kernels can be
+implemented in practice.
 
 \end{abstract}
     
@@ -1418,23 +1414,34 @@ render the GPU unavailable for other tasks, and are not future-proof
 because (as discussed throughout the paper) the occupancy-bound
 execution model is not guaranteed by GPU programming models and is
 unlikely to be guaranteed in practice by future GPU platforms.
-
+%
 \ADComment{Now say that we could update these approaches to use cooperation.}
 
+\paragraph{GPU multitasking}
+%
+\cite{DBLP:journals/tog/SteinbergerKBKDS14} \ADComment{Shows how to
+  keep a GPU busy by flooding it with work.  Would absolutely not
+  stand up to preemption.}
 
+\cite{DBLP:conf/usenix/KatoLRI11} \ADComment{Idea seems to be to
+  accept that GPUs do not offer epreemption, but find a reasonable way
+  to schedule tasks to maximise responsiveness or throughput.}
+
+\paragraph{Preemption support for GPUs}
+%
+\cite{DBLP:conf/asplos/ParkPM15} \ADComment{Investigates how one might
+  implement preemption, i.e.\ shows that it can be achieved.
+  Simulator only preemption.  Not sure whether their approach would
+  give fair scheduling.}
+%
+Proposals to implement preemption, but these require hardware support and may be overkill.  Advantage: fully automatic; disadvantage: doesn't capture domain knowledge.
+%
+\ADComment{Kepler preemption support?  Mention in related work?}
 
 \ADComment{Sreepathi mentioned the NCCL framework.}
 
-Lots of work on irregular algorithms (assumes fairness), and persistent threads (assumes OB model, which assumes a degree of fairness).  Our contribution can enable these to be safe.
-
-Work on multi-tasking to improve throughput, etc., but this does not relate to fairness and wouldn't help blocking algorithms.
-
-Proposals to implement preemption, but these require hardware support and may be overkill.  Advantage: fully automatic; disadvantage: doesn't capture domain knowledge.
 
 Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
-
-\ADComment{Kepler preemption support?  Mention in related work?}
-
 
 \cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
   SMs, not to workgroups, so that tasks that would benefit from being
@@ -1448,19 +1455,6 @@ Dynamic parallelism could be extended to give barriers, but doesn't work with wo
 
 \cite{DBLP:conf/ppopp/Muyan-OzcelikO16} \ADComment{I have not read; we
   should understand this one carefully.}
-
-\cite{DBLP:conf/asplos/ParkPM15} \ADComment{Investigates how one might
-  implement preemption, i.e.\ shows that it can be achieved.
-  Simulator only preemption.  Not sure whether their approach would
-  give fair scheduling.}
-
-\cite{DBLP:journals/tog/SteinbergerKBKDS14} \ADComment{Shows how to
-  keep a GPU busy by flooding it with work.  Would absolutely not
-  stand up to preemption.}
-
-\cite{DBLP:conf/usenix/KatoLRI11} \ADComment{Idea seems to be to
-  accept that GPUs do not offer epreemption, but find a reasonable way
-  to schedule tasks to maximise responsiveness or throughput.}
 
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
