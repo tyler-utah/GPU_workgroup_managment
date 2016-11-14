@@ -893,30 +893,25 @@ located in global memory. In the main loop, before trying to obtain a
 task, we make the workgroup offer itself to be forked or killed
 (lines~\ref{line:cwksteal:offerfork}-\ref{line:cwksteal:offerkill}). Note
 that a workgroup may be killed even if its associated task queue is
-not empty, since the remaining tasks will be stolen by other
-workgroups.  Care must be taken on computing queue identifiers: the
-original version in \myfig\ref{fig:workstealing} can rely on the fact
-that there are as many queues as workgroups, but here the number of
-workgroups may change during execution. Therefore, the number of
-queues must now be explicitely given as an argument
-(line~\ref{line:cwksteal:argnbqueue}) and used as an upper bound of
-queue indexes when scanning queues in $\mathsf{more\_work}$
-(line~\ref{line:cwksteal:morework}) and $\mathsf{pop\_or\_steal}$
-(line~\ref{line:cwksteal:poporsteal}). Besides, computation of the
-workgroup's queue index (line~\ref{line:cwksteal:getgroupid}) must now
-be moved inside the main loop since a forked workgroup that starts to
-execute after $\offerfork$ must re-compute its group id.
+not empty, since remaining tasks will be stolen by other
+workgroups. Since $\offerfork$ may be the entry point of a workgroup,
+the queue id must now be computed after it (line~\ref{line:cwksteal:getgroupid}). In particular, the queue
+id cannot be transmitted since we want a newly spawned workgroup to
+read its own queue and not the one of the forking workgroup.
+
+% The queue id cannot be transmitted since it corresponds to the
+% workgroup id.
+>>>>>>> 65caf661ed1c47ada958a674a0605c42b495e409
 
 \begin{figure}
 
 \begin{lstlisting}
-kernel work_stealing(global Task * queues,
-(*@\label{line:cwksteal:argnbqueue}@*)                     const int nb_queues) {
-(*@\label{line:cwksteal:morework}@*)  while (more_work(queues, nb_queues)) {
+kernel work_stealing(global Task * queues) {
+(*@\label{line:cwksteal:morework}@*)  while (more_work(queues)) {
 (*@\label{line:cwksteal:offerfork}@*)    offer_fork();
 (*@\label{line:cwksteal:offerkill}@*)    offer_kill();
 (*@\label{line:cwksteal:getgroupid}@*)    int queue_id = get_group_id();
-(*@\label{line:cwksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id, nb_queues);
+(*@\label{line:cwksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id);
     if (t) {
       // task processing may create more work
 (*@\label{line:cwksteal:processtask}@*)      process_task(t, queues, queue_id);
@@ -926,9 +921,8 @@ kernel work_stealing(global Task * queues,
 \end{lstlisting}
 
 \caption{Cooperative version of the work stealing kernel of
-  \myfig~\ref{fig:workstealing}, using $\offerfork$ and $\offerkill$,
-  and passing the total number of queues
-  explicitely}\label{fig:workstealing-cooperative}
+  \myfig~\ref{fig:workstealing}, using $\offerfork$ and
+  $\offerkill$}\label{fig:workstealing-cooperative}
 \end{figure}
 
 \paragraph{Adapting graph traversal} 
@@ -1392,8 +1386,8 @@ $^{\ast}$color ecology, $^{\dagger}$bc 1k\_128k, $^{\ddagger}$sssp usa\_ny, $^{\
 
 \paragraph{Experimental setup}
 Cooperative scheduling primitives entails an overhead even if no
-killing, forking or resizing never happens. We measure this overhead
-via the execution time slowdown between the original kernel and the
+killing, forking or resizing happen. We measure this overhead via the
+execution time slowdown between the original kernel and the
 cooperative one, forcing the scheduler to never modify the number of
 active workgroups. Since the cooperative kernel contains the
 non-cooperative kernel code anyway, its occupancy bound may be less
@@ -1404,11 +1398,10 @@ relevant execution times. \HEComment{Do we need to mention the
 
 \paragraph{Results}
 \mytab~\ref{tab:overhead} lists both geometric mean and maximum value
-of measured slowdowns. The overhead is below a 2 times slowdown even
-in the worst case, and quite light in general. We consider these
-results as encouraging, given that our SVM-based scheduler performance
-is likely a far upper bound of what a scheduler implemented directly
-in the runtime could offer.
+of measured overheads. The slowdown is below 2 even in the worst case,
+and closer to 1 in general. We consider these results as encouraging,
+especially since our prototype performance is likely a far upper bound
+of what a scheduler implemented directly in the runtime could achieve.
 
 \subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
