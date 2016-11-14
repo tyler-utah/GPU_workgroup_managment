@@ -1376,7 +1376,16 @@ indicate a lower bound of GPU execution time for system workloads.
 
 \ADComment{Results for stand-alone vs.\ cooperative without co-scheduling.}
 
-\paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
+\paragraph{Experimental setup} \ADComment{Describe the data we are
+  gathering.}  The introduction of cooperative scheduling primitives
+introduces an overhead even if no killing, forking or resizing ever
+happen. We measure this overhead by comparing execution times of the
+original kernel and the cooperative one, forcing the scheduler to
+never modify the number of active workgroups. Since the cooperative
+kernel contains the non-persistent task code anyway, its occupancy
+bound may be less than the original kernel; we make sure to use this
+occupancy bound as the number of workgroups for the original kernel in
+order to compare relevant execution times.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
 
