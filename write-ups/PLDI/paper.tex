@@ -1312,8 +1312,8 @@ game & 0 / 0 & 1 - 1 & 0\\
 \ADComment{Describe the platforms.  Explain why we could not try other
 platforms.}
 
-\HEComment{the reason we need SVM fine grain and atomics may be better
-discussed directly in the section on implementation?}
+\HEComment{I consider that the reason why we need SVM fine grain and
+  atomics is discussed in the implementation section}
 
 Our implementation approach requires two optional features of OpenCL
 $2.0$, namely SVM fine-grained buffers and SVM atomics, which are
@@ -1331,7 +1331,7 @@ turned out to provide our requirements: Intel HD 520, HD 5500 and IRIS
 \subsection{Sizing Non-Persistent Workloads}\label{sec:representativeworkloads}
 
 \HEComment{given the paper title, maybe ``non-blocking'' would be more
-  appropriate than ``non-persistent''?}
+  appropriate than ``non-persistent''? Or ``non-cooperative'' ?}
 
 Cooperative kernels enables other \emph{non-persistent} workloads to
 access GPU resources without stopping the blocking algorithm
@@ -1364,7 +1364,7 @@ heavy & 10 & 40\\
 \label{tab:nonpersistentworkload}
 \end{table}
 
-\paragraph{Results} \ADComment{Discuss the results.}
+\paragraph{Results}
 \mytab~\ref{tab:nonpersistentworkload} illustrates the caracteristics
 found for the three types of workloads. For the medium and heavy
 workloads, the 40ms period corresponds to an execution every $25^{th}$
@@ -1373,8 +1373,6 @@ of seconds which coincide with the human persistence of vision. The
 indicate a lower bound of GPU execution time for system workloads.
 
 \subsection{The Overhead of Moving to Cooperative Kernels}
-
-\ADComment{Results for stand-alone vs.\ cooperative without co-scheduling.}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % chip: hd520
@@ -1450,8 +1448,6 @@ $^{\ast}$color ecology, $^{\dagger}$bc 1k\_128k, $^{\ddagger}$sssp usa\_ny, $^{\
 \end{figure}
 
 \paragraph{Experimental setup}
-\ADComment{Describe the data we are gathering.}
-
 Cooperative scheduling primitives entails an overhead even if no
 killing, forking or resizing ever happen. We measure this overhead via
 the execution time ratio between the original kernel and the
@@ -1463,7 +1459,7 @@ number of workgroups for the original kernel in order to compare
 relevant execution times. \HEComment{Do we need to mention the
   possible occupancy reduction as an overhead?}
 
-\paragraph{Results} \ADComment{Discuss the results.}
+\paragraph{Results}
 \mytab~\ref{tab:overhead} lists overhead slowdown ratios, both
 geometric mean and maximum value. The overhead is below a 2 times
 slowdown even in the worst case. We consider these results as
