@@ -1400,6 +1400,7 @@ blocking algorithms, we use a matrix multiplication kernel where
 matrix dimensions are tuned to trigger the relevant execution
 duration.
 
+
 \paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
 
 \paragraph{Results}  \ADComment{Discuss the results.}
@@ -1419,12 +1420,12 @@ Cooperative multitasking was offered in ancient operating systems
 (e.g. Windows before the 95 edition) and is still used nowadays in
 RISC OS for instance. Many programming languages offer cooperative
 multitasking via variations of coroutines, e.g. coroutine objects in
-Python\footnote{https://docs.python.org/3/reference/datamodel.html#coroutine-objects}}
-or Lua\footnote{https://www.lua.org/pil/9.1.html}, or Ruby's fiber
-\footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}. In the
-context of GPU resources, cooperative multitasking seems to refer to
-sizing kernels such that they do not compute for too long in order to
-yield the whole GPU regularly~\cite{adriaens2012case}. Our
+Python\footnote{\url{https://docs.python.org/3/reference/datamodel.html\#coroutine-objects}}
+or Lua\footnote{\url{https://www.lua.org/pil/9.1.html}}, or Ruby's
+fiber \footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}. In
+the context of GPU resources, cooperative multitasking seems to refer
+to sizing kernels such that they do not compute for too long in order
+to yield the whole GPU regularly~\cite{adriaens2012case}. Our
 contribution present a much more flexible cooperative multitasking,
 where the long-running application is never totally stopped.
 
