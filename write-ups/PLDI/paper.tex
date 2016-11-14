@@ -1098,7 +1098,7 @@ achieve a higher rate of calls to $\offerfork$.
 Getting this non-functional requirement right depends on the
 constraints of the tasks to be co-scheduled with a cooperative kernel,
 on properties of the cooperative kernel itself, and on the efficiency
-of the GPU that is used for execution.  In \mysec\ref{sec:representativeworkloads} we conduct
+of the GPU that is used for execution.  In \mysec\ref{sec:sizingnoncoop} we conduct
 experiments to understand the response rate that would be required to
 co-schedule graphics rendering with a cooperative kernel in order to
 achieve a smooth frame rate, and we evaluate responsiveness in
@@ -1328,27 +1328,22 @@ turned out to provide our requirements: Intel HD 520, HD 5500 and IRIS
 
 \HEComment{To decide: do we mention carrot AMD, in which terms?}
 
-\subsection{Sizing Non-Persistent Workloads}\label{sec:representativeworkloads}
+\subsection{Sizing Non-Cooperative Kernels}\label{sec:sizingnoncoop}
 
-\HEComment{given the paper title, maybe ``non-blocking'' would be more
-  appropriate than ``non-persistent''? Or ``non-cooperative'' ?}
-
-Cooperative kernels enables other \emph{non-persistent} workloads to
-access GPU resources without stopping the blocking algorithm
-computation entirely. We size these workloads to represent
+A cooperative kernel can yield workgroups to let a non-cooperative,
+transient one execute. We size non-cooperative kernels to represent
 approximatively the workload required by a system to maintain smooth
 screen animations.
 
-\paragraph{Experimental setup} \ADComment{Describe the data we are
-  gathering.}  We repetitively run a kernel with a controlled workload
-and detect from which workload size the screen animation starts to
-jitter. Given the kernel workload and its scheduling frequency, we
-deduce what is the workload and frequency needed by the system to
-maintain a smooth animation. We use this approach to measure required
-by the system to maintain smooth animations of three types:
-(\emph{light}) emphasis of desktop icons under the mouse pointer,
-(\emph{medium}) window dragging over the desktop, and (\emph{heavy})
-WebGL animations in a browser.
+\paragraph{Experimental setup} We repetitively launch a kernel with a
+controlled workload and detect from which workload size the screen
+animation starts to jitter. Given the kernel workload and its
+scheduling frequency, we can deduce what is the workload and frequency
+needed by the system to maintain a smooth animation. We use this
+approach to measure the system workloads needed to maintain smooth
+animations of three types: (\emph{light}) emphasis of desktop icons
+under the mouse pointer, (\emph{medium}) window dragging over the
+desktop, and (\emph{heavy}) WebGL animations in a browser.
 
 \begin{table}
 \small
@@ -1360,15 +1355,15 @@ light & 3 & 70\\
 medium & 3 & 40\\
 heavy & 10 & 40\\
 \end{tabular}
-\caption{Caracteristics of non-persitent workloads}
-\label{tab:nonpersistentworkload}
+\caption{Caracteristics of non-cooperative workloads}
+\label{tab:noncooperativeworkload}
 \end{table}
 
 \paragraph{Results}
-\mytab~\ref{tab:nonpersistentworkload} illustrates the caracteristics
+\mytab~\ref{tab:noncooperativeworkload} illustrates the caracteristics
 found for the three types of workloads. For the medium and heavy
 workloads, the 40ms period corresponds to an execution every $25^{th}$
-of seconds which coincide with the human persistence of vision. The
+of seconds, which coincides with the human persistence of vision. The
 3ms execution duration of both light and medium configurations may
 indicate a lower bound of GPU execution time for system workloads.
 
@@ -1449,23 +1444,23 @@ $^{\ast}$color ecology, $^{\dagger}$bc 1k\_128k, $^{\ddagger}$sssp usa\_ny, $^{\
 
 \paragraph{Experimental setup}
 Cooperative scheduling primitives entails an overhead even if no
-killing, forking or resizing ever happen. We measure this overhead via
-the execution time ratio between the original kernel and the
+killing, forking or resizing never happens. We measure this overhead
+via the execution time slowdown between the original kernel and the
 cooperative one, forcing the scheduler to never modify the number of
 active workgroups. Since the cooperative kernel contains the
-non-persistent task code anyway, its occupancy bound may be less than
-the original kernel; we make sure to use this occupancy bound as the
-number of workgroups for the original kernel in order to compare
+non-cooperative kernel code anyway, its occupancy bound may be less
+than the original kernel; we make sure to use this occupancy bound as
+the number of workgroups for the original kernel in order to compare
 relevant execution times. \HEComment{Do we need to mention the
   possible occupancy reduction as an overhead?}
 
 \paragraph{Results}
-\mytab~\ref{tab:overhead} lists overhead slowdown ratios, both
-geometric mean and maximum value. The overhead is below a 2 times
-slowdown even in the worst case. We consider these results as
-acceptable, given that our SVM-based scheduler performance is likely a
-far upper bound of what a scheduler implemented directly in the
-runtime could offer.
+\mytab~\ref{tab:overhead} lists both geometric mean and maximum value
+of measured slowdowns. The overhead is below a 2 times slowdown even
+in the worst case, and quite light in general. We consider these
+results as encouraging, given that our SVM-based scheduler performance
+is likely a far upper bound of what a scheduler implemented directly
+in the runtime could offer.
 
 \subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
@@ -1477,21 +1472,16 @@ durable / transient
 
 Cooperative scheduling enables to concurrently run non-persistent kernels alongside blocking ones. In terms of performance, we are interested to see whether the variations of workgroups for the blocking kernel.
 
-
-
 Its performance corresponds
 
 Performance of cooperative scheduling corresponds to execution time of cooperative kernels compared to the serial 
 
 Cooperative scheduling can improve performances 
 
-
 In order to simulate non-persistent workloads alongside kernels of
 blocking algorithms, we use a matrix multiplication kernel where
 matrix dimensions are tuned to trigger the relevant execution
 duration.
-
-
 
 we compare :
 
