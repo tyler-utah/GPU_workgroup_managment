@@ -747,21 +747,17 @@ the compute unit on which the workgroup was executing.
 
 \paragraph{Semantics for $\offerfork$}
 
-The $\offerfork$ primitive (also a workgroup-level function) allows the cooperative kernel to indicate
-to the scheduler that it could benefit from, and is prepared to
-handle, additional workgroups joining the computation.  Recall that
-the cooperative kernel was launched with a limit of $N$ workgroups,
-indicating the number of workgroups that would ideally execute the
-kernel.  However, the number of active workgroups, $M$, may be smaller
+Recall that
+a desired limit of $N$ workgroups was specified when the cooperative kernel was launched, but that the number of active workgroups, $M$, may be smaller
 than $N$, either because (due to competing workloads) the scheduler
 did not provide $N$ workgroups initially, or because the kernel has
-given up some number of workgroups via $\offerkill$ calls.  Through
-$\offerfork$, the kernel and scheduler can work together to allow new
+given up some workgroups via $\offerkill$ calls.  Through the
+$\offerfork$ primitive (also a workgroup-level function), the kernel and scheduler can collaborate to allow new
 workgroups to join the computation at an appropriate point and with
 appropriate state.
 
 Suppose a workgroup with id $m\leq M$ executes $\offerfork$.  Then the following occurs: an
-integer $k$ in the range $[0, N-M]$ is chosen by the scheduler;
+integer $k \in [0, N-M]$ is chosen by the scheduler;
 $k$ new workgroups are spawned with consecutive ids in the range $[M,
   M+k-1]$; the active workgroup count $M$ is atomically incremented by $k$.
 
@@ -770,26 +766,20 @@ immediately following the $\offerfork$ call.  The variables that
 describe the state of a thread are all uninitialised for the threads
 in the new workgroups; reading from these variables without first
 initialising them is an undefined behaviour.  There are two exceptions
-to this:
-
-\begin{itemize}
-
-\item because the parameters to a cooperative kernel are immutable,
-  the new threads have access to these parameters as part of their
-  local state and can safely read from them;
-
-\item for each variable $v$ annotated with $\transmit$, every new
-  thread's copy of $v$ is initialised to the value that thread 0 in
-  workgroup $m$ held for $v$ at the point of the $\offerfork$ call.
-
-\end{itemize}
-
-In effect, thread 0 of the forking workgroup transmits the relevant
+to this: (1) because the parameters to a cooperative kernel are
+immutable, the new threads have access to these parameters as part of
+their local state and can safely read from them; (2) for each variable
+$v$ annotated with $\transmit$, every new thread's copy of $v$ is
+initialised to the value that thread 0 in workgroup $m$ held for $v$
+at the point of the $\offerfork$ call.
+%
+In effect, thread 0 of the forking workgroup \emph{transmits} the relevant
 portion of its local state to the threads of the forked workgroups.
-We discuss in \mysec\ref{sec:semanticalternatives} the rationale for
-having all new threads obtain this local state portion from thread 0,
-as well as our reasons for selecting which variables to transmit via
-annotations rather than transmitting the entire thread state.
+
+%We discuss in \mysec\ref{sec:semanticalternatives} the rationale for
+%having all new threads obtain this local state portion from thread 0,
+%as well as our reasons for selecting which variables to transmit via
+%annotations rather than transmitting the entire thread state.
 
 Notice that $k=0$ is always a legitimate choice for the number of
 workgroups to be spawned by an $\offerfork$ call, and if the number of
