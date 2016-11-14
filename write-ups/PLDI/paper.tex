@@ -597,12 +597,10 @@ $\getglobalsize()$.  Each thread processes nodes with the following sequence of 
 \code{$\keyword{tid}$+$\keyword{stride}$*0},
 \code{$\keyword{tid}$+$\keyword{stride}$*1},
 \code{$\keyword{tid}$+$\keyword{stride}$*2}, etc., where $\keyword{tid}$ is a thread's global id.
-A thread processes a node via the $\keyword{process\_node}$
-function, which may (a) push nodes to process in the next frontier to
+A thread processes a node via $\keyword{process\_node}$, which may (a) push nodes to process in the next frontier to
 $\keyword{out\_nodes}$ and (b) use the current frontier, $\keyword{level}$, in
 the computation. After processing the frontier, the threads swap their
-local node array pointers (line~\ref{line:graph:swap}), i.e.\ the $\keyword{out\_nodes}$ of the current frontier becomes the $\keyword{in\_nodes}$ of the next
-frontier.
+node array pointers (line~\ref{line:graph:swap}).
 
 At this point, the GPU threads must wait for all other threads to
 finishing processing the frontier before they can continue. To achieve
@@ -615,10 +613,10 @@ threads can continue to the next frontier.
 
 The global barrier used in this application is not provided as a GPU
 primitive, though previous works have shown that such a global
-barrier can be implemented~\cite{XF10,DBLP:conf/oopsla/SorensenDBGR16}. \ADComment{Are there additional papers we should be citing on GPU barriers?  E.g., is the sense reversal idea part of XF or is that from another paper?}  These implementations use well
-defined atomic memory operations to ensure memory consistency, and
-employ spinning to ensure threads wait at the barrier until all
-threads have arrived.  This spinning behaviour requires fair
+barrier can be implemented~\cite{XF10,DBLP:conf/oopsla/SorensenDBGR16},
+based on CPU barrier designs~\cite[ch. 17]{HS08}.
+ These barriers employ spinning to ensure threads wait at the barrier until all
+threads have arrived, which requires fair
 scheduling between workgroups for the barrier to operate correctly.
 Again, fairness is not guaranteed by current GPU programming models.
 
@@ -627,10 +625,9 @@ reliably on current GPUs for kernels that are executed with no more
 workgroups than there are compute units; this is due to the fairness
 of the occupancy-bound execution model that current GPUs have been
 shown, experimentally, to provide.  But, as discussed in
-\mysec\ref{sec:intro}, this occupancy-bound model is not mandated by
-language standards or vendor implementations, and is unlikely to be
-guaranteed in the future.
-
+\mysec\ref{sec:intro}, this model is not endorsed
+language standards or vendor implementations, and is unlikely to be respected in the future.
+%
 In \mysec\ref{sec:programmingguidelines} we show how the work stealing
 and graph traversal examples of \myfigs\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
 updated to use our cooperative kernels programming model to resolve
