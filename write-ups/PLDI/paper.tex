@@ -363,13 +363,12 @@ properties:
 %, as can graphics shading routines written using APIs such as
 %OpenGL, Vulkan and DirectX.
 
-\item The model is backwards-compatible: if $\offerkill$ and
-  $\offerfork$ are ignored, a cooperative blocking kernel will behave
-  exactly as a regular blocking kernel does on current GPUs.
+\item The model is backwards-compatible: if $\offerkill$/$\offerfork$ are ignored, a cooperative kernel will behave
+  exactly as a regular kernel does on current GPUs.
 
-\item The model can be implemented on top of the occupancy-bound
-  execution model that current GPU platforms provide---we present a
-  proof-of-concept implementation on top of OpenCL 2.0 that requires
+\item Cooperative kernels can be implemented over the occupancy-bound
+  execution model that current GPUs provide---we present a
+  proof-of-concept implementation that requires
   no special-purpose hardware or driver support.
 
 \item Our experiments with a range of applications using three GPUs show that the model can enable efficient multi-tasking of cooperative and non-cooperative
@@ -377,27 +376,21 @@ properties:
 
 \end{enumerate}
 
-Placing the $\offerkill$ and $\offerfork$ primitives requires manual
-effort and care, but our experience porting a representative set of
+Placing the new primitives requires manual effort, but our experience porting a representative set of
 GPU-accelerated irregular algorithms to use cooperative kernels
-suggests that this is straightforward in practice.  We discuss this in
-detail in \mysec\ref{sec:portingalgorithms}.
+(\mysec\ref{sec:portingalgorithms}) suggests that this is straightforward in practice.
 
 In summary, our main contributions are:
 
 \begin{itemize}
 
-\item \emph{Cooperative kernels}, an extension to the GPU programming model to support the scheduling requirements of blocking algorithms (\mysec\ref{sec:cooperativekernels}). 
+\item \emph{Cooperative kernels}, an extended GPU programming model that support the scheduling requirements of blocking algorithms (\mysec\ref{sec:cooperativekernels}). 
 
 \item A proof-of-concept portable implementation of cooperative
-  kernels on top of the OpenCL 2.0 programming model
+  kernels on top OpenCL 2.0
   (\mysec\ref{sec:implementation}).
 
-\item An experience report of porting \NumAlgorithms{} irregular GPU
-  algorithms to use cooperative kernels, and experimental results
-  using three GPUs assessing the overhead associated with cooperative
-  kernels, and the responsiveness of the multi-tasking that the
-  approach enables (\mysec\ref{sec:experiments}).
+\item Experimental results assessing the overhead and responsiveness of the cooperative kernels approach over a set of irregular algorithms across three GPUs (\mysec\ref{sec:experiments}).
 
 \end{itemize}
 
@@ -406,12 +399,10 @@ two motivating examples of irregular algorithms (\mysec\ref{sec:background}).  A
 
 \section{Background and Motivating Examples}\label{sec:background}
 
-We provide background on the industry-standard OpenCL programming
-model on which we base cooperative kernels (\mysec\ref{sec:opencl}),
-and illustrate OpenCL using two irregular data-parallel algorithms---a
-work stealing queue and breadth-first graph search---that also
-pinpoint the problems associated with unfair scheduling of workgroups
-and motivate our cooperative threads approach (\mysec\ref{sec:openclexamples}).
+We outline the industry-standard OpenCL programming model on which we
+base cooperative kernels (\mysec\ref{sec:opencl}), and illustrate
+OpenCL and the scheduling requirements of irregular algorithms using two examples: a work stealing queue and frontier-based graph traversal
+(\mysec\ref{sec:openclexamples}).
 
 \subsection{OpenCL Background}\label{sec:opencl}
 
@@ -431,46 +422,38 @@ components.  A host application runs on the CPU and launches one or
 more \emph{kernels} that run on accelerator devices---GPUs in the
 context of this paper.  A kernel is written in OpenCL C, based on C99.
 All threads executing a kernel execute the same entry function with
-identical arguments, but a thread may invoke the $\getglobalid()$
-function to query its unique thread id in order to access different
-data or follow different control flow paths to other threads.
+identical arguments.  A thread can call $\getglobalid()$
+to obtain its unique id, to access distinct data or follow different control flow paths to other threads.
 
-The threads executing a kernel are hierarchically organised.  A kernel
-is executed by a number of \emph{workgroups}, and each workgroup
-consists of a fixed number of threads.  Builtin functions
+The threads executing a kernel are divided into a number of \emph{workgroups}, each consisting of a fixed number of threads.  Builtin functions
 $\getlocalid()$ and $\getgroupid()$ return a thread's local id within
-its workgroup and the id of the workgroup, respectively.\footnote{In general, an OpenCL kernel is organised as a multi-dimensional grid
-of multi-dimensional workgroups, and the above functions each take
-an integer dimension argument.  For simplicity, we consider only the
-one-dimensional case throughout the paper, which captures all the
+its workgroup and the id of the workgroup, respectively.\footnote{For simplicity we restrict attention to one-dimensional kernels, which captures all the
 GPU-accelerated irregular algorithms we are aware of, and use
 e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
 }  The number
 of threads per workgroup and the number of workgroups are obtained via
 $\getlocalsize()$ and $\getnumgroups()$.  A thread's local and global
 id are related via the equation $\getglobalid() = \getgroupid() \times
-\getlocalsize() + \getlocalid()$.  The total number of threads executing the kernel is given by $\getglobalsize()$, which is equal to $\getlocalsize()\times\getnumgroups()$.
+\getlocalsize() + \getlocalid()$.  The total number of threads executing the kernel is given by $\getglobalsize() = \getlocalsize()\times\getnumgroups()$.
 
-The execution of all threads in a workgroup can be synchronised via a
+Execution of the threads in a workgroup can be synchronised via a
 workgroup barrier, which also ensures memory consistency.  This
-barrier is a \emph{workgroup-level} function: it must be encountered
-uniformly by all or none of the threads of a workgroup, thus can only
+barrier is a \emph{workgroup-level} function: it can only
 appear in conditional code if all threads in a workgroup that reach
 the barrier agree on the guards of all enclosing conditional
-statements.  As discussed below, a \emph{global} barrier
-(synchronising all threads running a kernel) is \emph{not} provided as
+statements.  A \emph{global} barrier
+(synchronising all threads of a kernel) is \emph{not} provided as
 a primitive.
 
 \paragraph{Memory spaces and memory model}
 An OpenCL kernel has access to four memory spaces.  \emph{Shared virtual
 memory} (SVM) is accessible to all threads and the host application concurrently.  \emph{Global} memory is shared among all threads executing a
-kernel.  Each workgroup has its own portion of \emph{local} memory,
-which can be used for fast intra-workgroup communication.  Every thread has
+kernel.  Each workgroup has its own portion of \emph{local} memory for fast intra-workgroup communication.  Every thread has
 an allocation of very fast \emph{private} memory, where
 function-local variables are allocated.
 
-Communication between threads in the same workgroup can be achieved
-using the workgroup barrier construct described above.  Finer-grained
+Communication within a workgroup can be achieved
+using a workgroup barrier.  Finer-grained
 communication within a workgroup, as well as inter-workgroup
 communication and communication with the host while the kernel is
 running, is enabled by a set of atomic data types and operations.  In
@@ -481,12 +464,13 @@ operations on SVM.
 
 OpenCL specifically makes no guarantees about fair scheduling between
 workgroups executing the same kernel, stating~\cite[p.\ 31]{opencl2Spec}: \emph{``A
-  conforming implementation may choose to serialize the workgroups so
-  a correct algorithm cannot assume that workgroups will execute in
-  parallel.  There is no safe and portable way to synchronize across
+  conforming implementation may choose to serialize the workgroups 
+%so
+%  a correct algorithm cannot assume that workgroups will execute in
+%  parallel.  
+\dots There is no safe and portable way to synchronize across
   the independent execution of workgroups since once in the work-pool,
-  they can execute in any order.''}  \ADComment{Tyler: please provide CUDA reference with page} OpenCL is not alone in this
-regard: CUDA similarly provides no guarantees~\cite{...}.
+  they can execute in any order.''}  \ADComment{Tyler: please provide CUDA reference with page} CUDA similarly provides no guarantees~\cite{...}.
 
 HSA provides limited, one-way guarantees,
 stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
