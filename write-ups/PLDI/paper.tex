@@ -211,7 +211,7 @@ interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
 by the computation itself.  The last decade has seen growing interest in accelerating irregular
 data-parallel algorithms on GPUs, particularly algorithms that
-traverse and manipulate linked data structures~\cite{owens-persistent,TPO10,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/oopsla/SorensenDBGR16}.  \ADComment{Tyler, can you add relevant workstealing papers if not here already?}
+traverse and manipulate linked data structures~\cite{owens-persistent,TPO10,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10}.
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
@@ -532,39 +532,37 @@ kernel graph_app(global graph * g,
 
 \paragraph{Work stealing example}
 %
-The work stealing paradigm is useful when a computation can be split
-into multiple tasks that can be processed independently, but where the
-number of tasks is not known ahead of time because processing a given
-task may create an arbitrary number of new tasks. Work stealing
-enables dynamic balancing of tasks across several processing units,
-OpenCL workgroups in our case. Each workgroup has an associated task
-queue from which it obtains tasks to process, and to which it stores
-newly created tasks. When a workgroup's queue becomes empty, the
-workgroup---rather than terminating---tries to \emph{steal} a task
-from an other queue. Workgroups keep on processing tasks until all the
-work is done. Previous work addresses the feasibility and efficiency
-of work stealing on GPUs~ref\cite{dlb-web,TPO10}.
+Work stealing enables dynamic balancing of tasks across several
+processing units, and is useful when the number of tasks to be
+processed in parallel is dynamic, because processing
+one task may create an arbitrary number of new tasks.  In the context
+of GPUs, each workgroup has an associated queue from which it
+obtains tasks to process, and to which it stores newly created
+tasks. If a workgroup's queue is empty, the workgroup tries to \emph{steal} a task from an other
+queue. Workgroups keep on processing tasks until all the work is
+done. Previous work addresses the feasibility and efficiency of work
+stealing on GPUs~\cite{dlb-web,TPO10}.
 
 \myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
 kernel that uses a work stealing queue. All threads start their
 execution at the function marked with the $\mathsf{kernel}$ keyword
 (line~\ref{line:wksteal:kernelfunc}). They receive a pointer to the task
-queues, which reside in global memory, and which were initialized by the
-host program beforehand to contain the initial tasks. Each thread can
-identify the workgroup it belongs to via the function $\getgroupid()$
+queues, in global memory, initialized by the
+host to contain the initial tasks. Each thread identifies
+the workgroup it belongs to via the function $\getgroupid()$
 (line~\ref{line:wksteal:getgroupid}). Here the group id is stored into
 the variable $\mathsf{queue\_id}$ (which is, by default, in private
 memory) and used to access the relevant task queue. The
 $\mathsf{pop\_or\_steal}$ function (line~\ref{line:wksteal:poporsteal})
 is called by all threads of a workgroup.  Inside
 $\mathsf{pop\_or\_steal}$ only the thread with a local id equal to $0$,
-also called the \emph{master thread} of the workgroup, will try to pop a
+the \emph{master thread}, will try to pop a
 task from the workgroup's queue, or steal a task from a different
 queue. The master thread uses local memory inside
 $\mathsf{pop\_or\_steal}$ to ensure that the returned value is valid for
 all threads of its workgroup. If a task was obtained, then all threads
-of the workgroup participate in the processing of the task via the
-$\mathsf{process\_task}$ function (line~\ref{line:wksteal:processtask}).
+of the workgroup participate in the processing of the task via 
+$\mathsf{process\_task}$ (line~\ref{line:wksteal:processtask}).
 Processing this task may lead to the creation of further tasks, which
 the master thread will push to the workgroup's queue.
 
