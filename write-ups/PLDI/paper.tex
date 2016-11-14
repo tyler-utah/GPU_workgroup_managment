@@ -849,40 +849,51 @@ primitive operation that interacts directly with the scheduler.
 
 \subsection{Programming With Cooperative Kernels}\label{sec:programmingguidelines}
 
-Working with cooperative kernels requires some manual effort on the
-part of the programmer: they must place the $\transmit$ qualifier and
-use the new language primitives described in
-\mysec\ref{sec:semantics}, and account for slight changes in the OpenCL semantics induced by these new features.
-
 We discuss the main semantic change induced by our programming
 model---that the number of workgroups executing a kernel varies
-dynamically---and illustrate our programming model and the impact of
-this semantic change by adapting the work stealing and graph traversal
-algorithms of \mysec\ref{sec:openclexamples} to use cooperative
-kernels.
+dynamically---and illustrate the new language constructs and the
+impact of this semantic change by adapting the work stealing and graph
+traversal algorithms of \mysec\ref{sec:openclexamples} to use
+cooperative kernels.
 
 \paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
 the value returned by $\getnumgroups()$ is not fixed during the
-lifetime of a cooperative kernel: it may change due to workgroups executing
-$\offerkill$, $\offerfork$ and $\resizingglobalbarrier$.  Because $\getglobalsize()$, which retrieves the total number of threads executing the kernel, is
-a function of $\getnumgroups()$, the value it returns is also subject to change.
-The programmer
-must therefore write their cooperative kernel in a manner that is
-robust to changes in the values returned by these functions.  In our experience this either involves avoiding the use of $\getnumgroups()$ at all, or writing a kernel where the only opportunity for the number of groups to change comes from $\resizingglobalbarrier()$, in which case the number of active groups does offer some stability, as discussed below.
+lifetime of a cooperative kernel: it corresponds to the active group count $M$ and may change due to workgroups executing
+$\offerkill$, $\offerfork$ and $\resizingglobalbarrier$.  Being a function of $\getnumgroups()$, the value returned by $\getglobalsize()$
+is also subject to change.
+A cooperative kernel must therefore be written in a manner that is
+robust to changes in the values returned by these functions.
+
+In general, their volatility means that use of these functions should be avoided.
+However, the situation is more stable if a cooperative kernel does not directly
+issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
+only calls to $\resizingglobalbarrier$ can cause the number of active
+workgroups to change.  At any point
+during execution, the threads of a kernel are executing between some
+pair of resizing barrier calls, which we call a \emph{resizing barrier
+  interval} (here we consider the kernel entry and exit points
+conceptually to be special cases of resizing barriers).  The number of
+workgroups executing the kernel is thus constant within each resizing
+barrier interval, i.e.\ the result returned by repeated calls to
+$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
+%
+This guarantee can be exploited by algorithms that perform strided
+data processing, which we illustrate below using the graph traversal
+example.
+
 
 \paragraph{Adapting work stealing}
 
 \myfiglong\ref{fig:workstealing-cooperative} shows a cooperative
-version of the work stealing example of \myfig\ref{fig:workstealing} that we
-discussed in \mysec\ref{sec:openclexamples}.
-
+version of the work stealing example of \myfig\ref{fig:workstealing} from \mysec\ref{sec:openclexamples}.
+%
 In this example there is no state to transmit since a computation is
 entirely parameterised by a task, which is retrieved from a queue
 located in global memory. In the main loop, before trying to obtain a
 task, we make the workgroup offer itself to be forked or killed
-(lines~\ref{line:cwksteal:offerfork},\ref{line:cwksteal:offerkill}). Note
+(lines~\ref{line:cwksteal:offerfork}-\ref{line:cwksteal:offerkill}). Note
 that a workgroup may be killed even if its associated task queue is
-not empty, since remaining tasks could eventually be stolen by other
+not empty, since the remaining tasks will be stolen by other
 workgroups.  Care must be taken on computing queue identifiers: the
 original version in \myfig\ref{fig:workstealing} can rely on the fact
 that there are as many queues as workgroups, but here the number of
@@ -920,26 +931,9 @@ kernel work_stealing(global Task * queues,
   explicitely}\label{fig:workstealing-cooperative}
 \end{figure}
 
-\paragraph{Cooperative kernels that only use barriers}
-
-The situation is more stable if a cooperative kernel does not directly
-issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
-only calls to $\resizingglobalbarrier$ can cause the number of active
-workgroups to change.  At any point
-during execution, the threads of a kernel are executing between some
-pair of resizing barrier calls, which we call a \emph{resizing barrier
-  interval} (here we consider the kernel entry and exit points
-conceptually to be special cases of resizing barriers).  The number of
-workgroups executing the kernel is thus constant within each resizing
-barrier interval, i.e.\ the result returned by repeated calls to
-$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
-
-This guarantee can be exploited by algorithms that perform strided
-data processing.  We now illustrate this using the graph traversal motivating example.
-
 \paragraph{Adapting graph traversal} 
 \myfiglong\ref{fig:cgraphsearch} shows a cooperative version of the
-graph traversal kernel of \myfig\ref{fig:graphsearch}, introduced in
+graph traversal kernel of \myfig\ref{fig:graphsearch} from
 \mysec\ref{sec:openclexamples}.  On lines~\ref{line:cgraph:resizing1}
 and ~\ref{line:cgraph:resizing2}, we change the original global
 barriers into a resizing barriers. Several variables are marked to be
@@ -948,7 +942,7 @@ transmitted in the case of workgroups joining at the resizing barriers
 \ref{line:cgraph:transmit3}): $\keyword{level}$ must be restored so
 that new workgroups know which frontier they are processing;
 $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$ must be restored so
-that new workgroups know which of the node arrays are input and
+that new workgroups know which of the node arrays to use for input and
 output. Lastly, the static work distribution of the original kernel is
 no longer valid in a cooperative kernel. This is because the stride
 (which is based on $M$) may change after each resizing barrier
@@ -992,16 +986,18 @@ kernel graph_app(global graph *g,
 \caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing global barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
 \end{figure}
 
+\paragraph{Patterns for irregular algorithms}
 In \mysec\ref{sec:portingalgorithms} we describe the set of irregular GPU algorithms used
 in our experiments, which largely captures the irregular blocking
 algorithms that are available as open source GPU kernels.  These all
-employ either work stealing or operate on graph data structures.
+employ either work stealing or operate on graph data structures, and placing our new constructs follows a common, easy-to-follow pattern in each case.
+
 Like the simplified example of \myfig\ref{fig:workstealing-cooperative}, the work stealing algorithms have a transactional flavour
 and require little or no state to be carried between transactions.  Thus the point at which a workgroup is ready to process a new task is a natural point to place $\offerkill$ and $\offerfork$, and few or no $\transmit$ annotations are required.
-%
+
 The example of \myfig\ref{fig:cgraphsearch} is simpler than, but representative of,
 most level-by-level graph algorithms.  These algorithms tend to
-require more state to be annotated with $\transmit$, and in some cases
+require some state to be transmitted, and in some cases
 a global barrier is required in the midst of a transaction, in which
 case $\globalbarrier$, but not $\resizingglobalbarrier$, is suitable
 for achieving synchronization without disturbing the set of active
@@ -1010,12 +1006,10 @@ the graph algorithm, the next level could be processed by more or
 fewer workgroups, something which $\resizingglobalbarrier$
 facilitates.
 
-In summary, our experience so far indicates that cooperative kernels
-is a good fit for current irregular algorithms.  Of course this is, in
-part, because we designed the model with these algorithms in mind, but
-we argue that the fit is natural not just for the examples that we
-study, but more generally for at least these two patterns of irregular
-algorithm.
+Our practical experience suggests that cooperative kernels are a good
+fit for at least these two classes of irregular algorithms, which is
+of course partly because we were inspired by these algorithms in
+designing the model.
 
 
 \subsection{Non-Functional Requirements}\label{sec:nonfunctional}
@@ -1025,13 +1019,11 @@ behaviour that a developer of a cooperative kernel should be prepared
 for.
 %
 However, the aim of cooperative kernels is to find a balance that
-allows \emph{efficient execution} of long-running kernels
-(e.g.\ implementing irregular data-parallel algorithms), and
-\emph{responsive multi-tasking} so that the GPU can be shared between
-one or more cooperative kernels and a number of short, high-priority
-tasks with soft real-time constraints.
-
-To achieve this balance, both an implementation of the cooperative
+allows \emph{efficient} execution of algorithms that require fair scheduling, and
+\emph{responsive} multi-tasking, so that the GPU can be shared between
+cooperative kernels and other shorter tasks with soft real-time constraints.
+%
+To achieve this balance, an implementation of the cooperative
 kernels model, and the programmer of a cooperative kernel, must strive
 to meet the following non-functional requirements.
 
@@ -1039,19 +1031,18 @@ to meet the following non-functional requirements.
 
 The purpose of $\offerkill$ is to provide the scheduler with an
 opportunity to destroy a workgroup in order to schedule
-higher-priority tasks.  Because these higher-priority tasks, such as
-graphics rendering, may have soft real-time constraints, the scheduler
-relies on the cooperative kernel to execute $\offerkill$ sufficiently
-frequently that the scheduler can meet such real-time constraints.
-
-Using work stealing as an example: in the kernel of \myfig\ref{fig:workstealing-cooperative}, a
-workgroup offers itself to the scheduler after processing each task.
-If tasks turn out to be very short then it might turn out to be
-reasonable to invoke $\offerkill$ less frequently, after every $k$
-tasks for some appropriate $k$.  On the other hand, if individual
-tasks may be very time-consuming then it may be necessary to rewrite
-the algorithm so work on a larger number of shorter tasks, so as to
-achieve a higher rate of calls to $\offerfork$.
+higher-priority tasks.  The scheduler relies on the cooperative kernel
+to execute $\offerkill$ sufficiently frequently that soft real-time
+constraints of other workloads can be met.
+%
+Using our work stealing example: in
+\myfig\ref{fig:workstealing-cooperative} a workgroup offers itself to
+the scheduler after processing each task.  If tasks are sufficiently
+fast to process then the scheduler will have ample opportunities to
+de-schedule workgroups.  But if tasks can be very time-consuming to
+process then it might be necessary to rewrite the algorithm so that
+tasks are shorter and more numerous, to achieve a higher rate of calls
+to $\offerkill$.
 
 Getting this non-functional requirement right depends on the
 constraints of the tasks to be co-scheduled with a cooperative kernel,
@@ -1066,15 +1057,14 @@ practice in \mysec\ref{sec:responsiveness}.
 
 Recall that the cooperative kernel would ideally utilise the $N$
 workgroups requested upon kernel launch, in order to conduct its
-processing efficiently.  The scheduler should thus aim to provide with
-cooperative kernel with as many workgroups, up to this number, as
-other constraints allow.  As a result, the scheduler should generally
-accept an $\offerkill$ only if a compute unit is required for another
-task, and should respond positively to $\offerfork$ calls by
-scheduling new workgroups if compute units are available.  Our
+processing efficiently.  The scheduler should thus aim to provide the
+cooperative kernel $N$ workgroups if other constraints allow it,
+by accepting an $\offerkill$ only if a compute unit is required for another
+task, and responding positively to $\offerfork$ calls if compute units are available.  Our
 implementation of cooperative scheduling (\mysec\ref{sec:implementation}) is as
 generous as possible to the cooperative kernel in this regard.
 
+\ADComment{This could be shorter.}
 However, these are not hard-and-fast rules: a scheduler might employ
 heuristics based on historical workloads to avoid thrashing.  For
 example, if graphics calls are known to arrive at a certain rate then
