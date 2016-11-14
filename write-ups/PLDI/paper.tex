@@ -1421,18 +1421,18 @@ indicate a lower bound of GPU execution time for system workloads.
 \begin{table}
 \small
 \centering
-\begin{tabular}{ l c c c }
-Chip & HD520 & HD5500 & IRIS\\
+\begin{tabular}{ l l l l }
+Chip & HD520 & HD5500 & Iris\\
 \hline
-overall gm  & $1.20$ & $1.15$ & $1.08$ \\
+overall geo. mean  & $1.20$ & $1.15$ & $1.08$ \\
 overall max & $1.75^{\ast}$ & $1.45^{\dagger}$ & $1.37^{\ddagger}$ \\
 
 \hline
-barrier gm & $1.18$ & $1.16$ & $1.07$ \\
+barrier geo. mean & $1.18$ & $1.16$ & $1.07$ \\
 barrier max & $1.75^{\ast}$ & $1.45^{\dagger}$ & $1.37^{\ddagger}$ \\
 
 \hline
-wk.steal. gm & $1.42$ & $1.10$ & $1.12$ \\
+wk.steal. geo. mean & $1.42$ & $1.10$ & $1.12$ \\
 wk.steal. max & $1.42^{\diamond}$ & $1.18^{\diamond}$ & $1.23^{\diamond}$ \\
 
 \hline
@@ -1451,19 +1451,25 @@ $^{\ast}$color ecology, $^{\dagger}$bc 1k\_128k, $^{\ddagger}$sssp usa\_ny, $^{\
 
 \paragraph{Experimental setup}
 \ADComment{Describe the data we are gathering.}
-The introduction of cooperative scheduling primitives introduces an
-overhead even if no killing, forking or resizing ever happen. We
-measure this overhead by comparing execution times of the original
-kernel and the cooperative one, forcing the scheduler to never modify
-the number of active workgroups. Since the cooperative kernel contains
-the non-persistent task code anyway, its occupancy bound may be less
-than the original kernel; we make sure to use this occupancy bound as
-the number of workgroups for the original kernel in order to compare
-relevant execution times.
 
-\HEComment{Also include this occupancy reduction as an overhead?}
+Cooperative scheduling primitives entails an overhead even if no
+killing, forking or resizing ever happen. We measure this overhead via
+the execution time ratio between the original kernel and the
+cooperative one, forcing the scheduler to never modify the number of
+active workgroups. Since the cooperative kernel contains the
+non-persistent task code anyway, its occupancy bound may be less than
+the original kernel; we make sure to use this occupancy bound as the
+number of workgroups for the original kernel in order to compare
+relevant execution times. \HEComment{Do we need to mention the
+  possible occupancy reduction as an overhead?}
 
-\paragraph{Results}  \ADComment{Discuss the results.}
+\paragraph{Results} \ADComment{Discuss the results.}
+\mytab~\ref{tab:overhead} lists overhead slowdown ratios, both
+geometric mean and maximum value. The overhead is below a 2 times
+slowdown even in the worst case. We consider these results as
+acceptable, given that our SVM-based scheduler performance is likely a
+far upper bound of what a scheduler implemented directly in the
+runtime could offer.
 
 \subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
