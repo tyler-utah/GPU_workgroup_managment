@@ -1402,8 +1402,8 @@ $^{\ast}$color ecology, $^{\dagger}$bc 1k\_128k, $^{\ddagger}$sssp usa\_ny, $^{\
 
 \paragraph{Experimental setup}
 Cooperative scheduling primitives entails an overhead even if no
-killing, forking or resizing never happens. We measure this overhead
-via the execution time slowdown between the original kernel and the
+killing, forking or resizing happen. We measure this overhead via the
+execution time slowdown between the original kernel and the
 cooperative one, forcing the scheduler to never modify the number of
 active workgroups. Since the cooperative kernel contains the
 non-cooperative kernel code anyway, its occupancy bound may be less
@@ -1414,11 +1414,10 @@ relevant execution times. \HEComment{Do we need to mention the
 
 \paragraph{Results}
 \mytab~\ref{tab:overhead} lists both geometric mean and maximum value
-of measured slowdowns. The overhead is below a 2 times slowdown even
-in the worst case, and quite light in general. We consider these
-results as encouraging, given that our SVM-based scheduler performance
-is likely a far upper bound of what a scheduler implemented directly
-in the runtime could offer.
+of measured overheads. The slowdown is below 2 even in the worst case,
+and closer to 1 in general. We consider these results as encouraging,
+especially since our prototype performance is likely a far upper bound
+of what a scheduler implemented directly in the runtime could achieve.
 
 \subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
