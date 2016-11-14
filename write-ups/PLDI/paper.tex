@@ -792,8 +792,8 @@ Many irregular algorithms require synchronisation across workgroups.
 This can be achieved via a \emph{global barrier}, as illustrated in the graph traversal example of \mysec\ref{sec:openclexamples} and \myfig\ref{fig:graphsearch}.
 Because a global barrier requires fair scheduling of workgroups it cannot be safely implemented in OpenCL, CUDA or HSA, and thus is not provided as a primitive in any of these programming models.
 
-Because workgroups of a cooperative kernel are fairly scheduled, a
-global barrier primitive can be provided.  We specify two such primitives: $\globalbarrier$
+Workgroups of a \emph{cooperative} kernel \emph{are} fairly scheduled, so a
+global barrier primitive can be provided, and we specify two variants: $\globalbarrier$
 and $\resizingglobalbarrier$.
 
 Our $\globalbarrier$ primitive is a kernel-level function: if it
@@ -816,15 +816,13 @@ $\resizingglobalbarrier$ the programmer indicates that the cooperative
 kernel is prepared to proceed after the barrier with fewer workgroups,
 or with additional workgroups joining the computation.
 
-Semantically, when all threads have reached $\resizingglobalbarrier$,
-the number of active workgroups, $M$, is atomically set to a new value, $M'$ say, with $M' > 0$.
-If $M' = M$ then the active workgroups remain unchanged and proceed to
-execute after the barrier.  If $M' < M$, workgroups $[M', M-1]$ are
-killed.  If $M' > M$ then $M'-M$ new workgroups join the computation,
+When all threads have reached $\resizingglobalbarrier$,
+the number of active workgroups, $M$, is atomically set to a new value, $M'$ say, with $0 < M' \leq N$.
+If $M' = M$ then the active workgroups remain unchanged.  If $M' < M$, workgroups $[M', M-1]$ are
+killed.  If $M' > M$ then $M'-M$ new workgroups join the computation after the barrier,
 as if they were forked from workgroup 0.  In particular, the
 $\transmit$-annotated local state of thread 0 in workgroup 0 is
-transmitted to the threads of the new workgroups.  The change in
-number of active workgroups from $M$ to $M'$ is atomic.
+transmitted to the threads of the new workgroups.
 
 The semantics of $\resizingglobalbarrier$ can be modelled via the following sequence of calls:
 
@@ -840,11 +838,11 @@ The semantics of $\resizingglobalbarrier$ can be modelled via the following sequ
 
 The enclosing $\globalbarrier$ calls ensure that the change in number
 of active workgroups from $M$ to $M'$ occurs entirely within the
-resizing barrier, so that from a programmer's perspective, $M$ changes atomically.  The middle $\globalbarrier$ is required to ensure that forking occurs before killing, so that while the barrier may kill a workgroup with id $i$, it should not also fork a new workgroup with id $i$.  That is, workgroups $[0, \mathit{min}(M, M') - 1]$ should be left intact.
+resizing barrier, so that from a programmer's perspective, $M$ changes atomically.  The middle $\globalbarrier$ ensures that forking occurs before killing, so that while the barrier may kill a workgroup with id $i$, it should not also fork a new workgroup with id $i$.  That is, workgroups $[0, \textrm{min}(M, M') - 1]$ should be left intact.
 
 Because $\resizingglobalbarrier$ can be implemented in the above
-manner, we do not regard it conceptually as a primitive of the
-cooperative kernels programming model.  However, we discuss in
+manner, we do not regard it \emph{conceptually} as a primitive of our
+programming model.  However, we discuss in
 \mysec\ref{sec:resizingbarrier} how $\resizingglobalbarrier$ can be
 implemented significantly more efficiently if it is treated as a
 primitive operation that interacts directly with the scheduler.
