@@ -1072,6 +1072,8 @@ that are likely to arrive imminently.  With some additional language extensions,
 
 \subsection{Alternative Semantic Choices}\label{sec:semanticalternatives}
 
+\ADComment{Move this to the appendix.}
+
 \paragraph{Killing order}
 
 We opted for a semantics whereby only the active workgroup with the
@@ -1155,8 +1157,7 @@ example where our current semantics would not suffice.
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
 
 A goal of coopeative kernels is to allow traditional, non-blocking GPU
-tasks, such as graphics shaders (in programming models such as OpenGL,
-Vulkan and DirectX) and regular data-parallel computational kernels,
+tasks (e.g.\ graphics shaders in OpenGL, Vulkan and DirectX, and regular data-parallel computational kernels)
 to be co-scheduled with blocking irregular algorithms.  It is
 important to note that our new model has no effect on the manner in
 which these traditional GPU workloads are programmed.
@@ -1166,7 +1167,7 @@ ignored---$\offerkill$ and $\offerfork$ are treated as no-ops,
 $\transmit$ annotations are ignored, and $\globalbarrier$ and
 $\resizingglobalbarrier$ calls are redirected to an existing global
 barrier implementation (so that no resizing occurs in the latter
-case)---then cooperative kernel will behave just like its
+case)---then a cooperative kernel will behave just like its
 non-cooperative counterpart would behave.  As a result, a developer
 for whom today's occupancy-bound execution model suffices can upgrade
 their kernel to a cooperative form and retain backwards-compatibility
