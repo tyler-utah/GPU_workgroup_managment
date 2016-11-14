@@ -883,29 +883,23 @@ task, we make the workgroup offer itself to be forked or killed
 (lines~\ref{line:cwksteal:offerfork},\ref{line:cwksteal:offerkill}). Note
 that a workgroup may be killed even if its associated task queue is
 not empty, since remaining tasks could eventually be stolen by other
-workgroups.  Care must be taken on computing queue identifiers: the
-original version in \myfig\ref{fig:workstealing} can rely on the fact
-that there are as many queues as workgroups, but here the number of
-workgroups may change during execution. Therefore, the number of
-queues must now be explicitely given as an argument
-(line~\ref{line:cwksteal:argnbqueue}) and used as an upper bound of
-queue indexes when scanning queues in $\mathsf{more\_work}$
-(line~\ref{line:cwksteal:morework}) and $\mathsf{pop\_or\_steal}$
-(line~\ref{line:cwksteal:poporsteal}). Besides, computation of the
-workgroup's queue index (line~\ref{line:cwksteal:getgroupid}) must now
-be moved inside the main loop since a forked workgroup that starts to
-execute after $\offerfork$ must re-compute its group id.
+workgroups. Since $\offerfork$ may be the entry point of a workgroup,
+the queue id must now be computed after it. In particular, the queue
+id cannot be transmitted since we want a newly spawned workgroup to
+read its own queue and not the one of the forking workgroup.
+
+% The queue id cannot be transmitted since it corresponds to the
+% workgroup id.
 
 \begin{figure}
 
 \begin{lstlisting}
-kernel work_stealing(global Task * queues,
-(*@\label{line:cwksteal:argnbqueue}@*)                     const int nb_queues) {
-(*@\label{line:cwksteal:morework}@*)  while (more_work(queues, nb_queues)) {
+kernel work_stealing(global Task * queues) {
+(*@\label{line:cwksteal:morework}@*)  while (more_work(queues)) {
 (*@\label{line:cwksteal:offerfork}@*)    offer_fork();
 (*@\label{line:cwksteal:offerkill}@*)    offer_kill();
 (*@\label{line:cwksteal:getgroupid}@*)    int queue_id = get_group_id();
-(*@\label{line:cwksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id, nb_queues);
+(*@\label{line:cwksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id);
     if (t) {
       // task processing may create more work
 (*@\label{line:cwksteal:processtask}@*)      process_task(t, queues, queue_id);
