@@ -58,6 +58,8 @@
 
 \newcommand{\KC}{\mathit{KC}}
 
+\newcommand{\kernelmerge}{\textsc{KernelMerge}}
+
 \newcommand{\myfig}{Fig.~}
 \newcommand{\myfiglong}{Figure~}
 \newcommand{\myfigs}{Figs.~}
@@ -1026,19 +1028,10 @@ task, and responding positively to $\offerfork$ calls if compute units are avail
 implementation of cooperative scheduling (\mysec\ref{sec:implementation}) is as
 generous as possible to the cooperative kernel in this regard.
 
-\ADComment{This could be shorter.}
-However, these are not hard-and-fast rules: a scheduler might employ
-heuristics based on historical workloads to avoid thrashing.  For
-example, if graphics calls are known to arrive at a certain rate then
-the scheduler might decide that it is worth accepting an $\offerkill$
-from the cooperative kernel on the assumption that a graphics task
-will be requested momentarily.  Similarly, the scheduler might provide
-some, but not all, compute units to the cooperative kernel in response
-to an $\offerfork$ call if it has reason to believe that the remaining
-compute units are likely to be useful for other high priority tasks
-that are likely to arrive imminently.  With some additional language extensions, it would be possible for the cooperative kernel to hint to the scheduler if, for example, the kernel is at a point of computation where there is less work to do than usual, so that $\offerkill$ calls could be accepted in order to save energy.
-
-
+Note that the above guidelines are not hard-and-fast rules.  For
+example, a smart scheduler might respond selectively to $\offerkill$
+and $\offerfork$ calls by predicting future high-priority workloads
+based on past workloads.
 
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
@@ -1101,33 +1094,31 @@ $\transmit$-annotated variables.
 
 \paragraph{Simplifying assumptions}
 
-\ADComment{One cooperative, one non-cooperative.  Justification:
-  sufficient to evaluate the key use case of a long-running irregular
-  algorithm co-existing with a series of short-running tasks.
-  Simplifieid task of implementing prototype, which we do not want to
-  over-enginneer since it is only a mock-up.}
-
-\ADComment{Restrictions on kernel structure: variables at top of
-  kernel are implicitly $\transmit$-annotated, and $\offerkill$,
-  $\offerfork$ and $\resizingglobalbarrier$ calls must appear only in
-  kernel entry function.  Avoiding $\transmit$ allowed us to reuse the
-  clang OpenCL front-end, and restricitng starting points for fork to
-  be in main kernel allowed a ``goto''-based approach to redirecting
-  control flow; threading this through procedure calls would be
-  possible but laborious.  Restricting kill points enables kill to be
-  implemented as ``return''; exiting from a procedure call stack would
-  require stack unwinding support, akin to throwing an exception.
-  Again make point that all these issues are only relevant due to our
-  mock-up.}
+For ease of implementation, our current prototype supports
+multitasking a single cooperative kernel with a single non-cooperative
+kernel (though the non-cooperative kernel can be invoked many times).
+Rather than adding language support for $\transmit$ annotations, we
+assume that all variables declared at the root lexical scope of a
+cooperative kernel are $\transmit$-annotated; this allows our
+implementation to piggy-back on top of Clang (see below) without
+requiring front-end changes.  Finally, we require that $\offerkill$,
+$\offerfork$ and $\resizingglobalbarrier$ are called from the entry
+function of a cooperative kernel.  This allows us to use
+$\keyword{goto}$ to direct threads joining the cooperative kernel to
+the appropriate location, and $\keyword{return}$ to force threads to
+leave the computation.  These restrictions still allow us to
+experiment with interesting irregular algorithms (see
+\mysec\ref{sec:experiments}), and could all be removed with
+engineering effort, but this effort might not be well invested since a
+full implementation of coopeartive kernels would not use the
+megakernel approach we present here.
 
 \paragraph{Merging kernels}
 
-\ADComment{Explain kernel merge tool briefly.  Explain library
-  briefly.}
-
-\TSComment{we should mention that non-cooperative kernels must be
-written in a persistent thread style}
-
+We have built a tool, \kernelmerge{}, that takes a cooperative kernel
+and a non-cooperative kernel and merges them to produce a megakernel
+with an embedded GPU scheduler.  We implemented \kernelmerge{} using the Clang LibTooling framework,\footnote{\url{http://clang.llvm.org/docs/LibTooling.html}}
+leveraging recent Clang support for OpenCL 2.0~\cite{ClangOpenCL20}.
 
 \subsection{Scheduler design}\label{sec:resizingbarrier}
 
