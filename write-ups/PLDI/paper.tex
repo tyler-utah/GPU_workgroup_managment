@@ -1552,7 +1552,7 @@ attribute these to bugs in Intel's current drivers.
 % non-cooperative kernel takes all but one of the cooperative kernel
 % workgroups, we decided to ignore these results.
 
-\paragraph{Results}
+\paragraph{Responsiveness}
 
 \myfiglong\ref{fig:fine-grained-timing} reports, on three
 configurations, the gather and execution time of the non-cooperative
@@ -1602,6 +1602,21 @@ number of workgroups that needs to be collected.
 \caption{Blah}\label{fig:blah}
 \end{figure}
 
+
+\paragraph{Performance}
+\myfig~\ref{fig:} reports the overhead brought by the scheduling of
+non-cooperative kernels over the cooperative kernel execution time
+(geometric mean over all experiences), along with the period at which
+non-cooperative kernels can be scheduled. Non-cooperative kernels
+running on a single workgroup lead to almost no overhead, but the period
+is far too high to meet the needs of graphics workloads. As more
+workgroups are dedicated to non-cooperative kernels, they execute
+quickly enough to be scheduled at the expected period. Yet, as expected,
+this increase the execution time overhead of the cooperative
+kernel. Still, in average heavy workloads meet their period for an
+overhead less than 1.4, which we consider reasonable, while light and
+medium workloads meet their period with only a very light overhead on
+the cooperative kernel.
 
 \section{Related Work}\label{sec:relatedwork}
 
