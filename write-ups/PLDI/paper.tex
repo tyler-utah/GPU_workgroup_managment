@@ -1286,9 +1286,9 @@ We thus present experimental results for the Intel GPUs, whose characteristics a
 \begin{tabular}{ l l l l }
 Chip & HD520 & HD5500 & Iris\\
 \hline
-\# comp. units  & 24 & \ADComment{...} & \ADComment{...} \\
-Driver   & 20.19.15.4501 & \ADComment{...} & \ADComment{...} \\
-Host CPU & i3-6100U & \ADComment{...} & \ADComment{...} \\
+\# comp. units  & 24 & 24 & 47 \\
+Driver   & 20.19.15.4501 & \ADComment{...} & 20.19.15.4463 \\
+Host CPU & i3-6100U & \ADComment{...} & i3-5157U \\
 \end{tabular}
 \caption{The Intel GPU platforms used in our evaluation}
 \label{tab:chipstested}
@@ -1431,17 +1431,15 @@ driver.  We thus launch both the original and cooperative versions of
 a kernel with the reduced occupancy bound in order to meaningfully
 compare execution times.
 
-\ADComment{How many times did we run each benchmark?}
-
 \paragraph{Results}
 For each GPU, \mytab\ref{tab:overhead} shows the geometric mean and
-maximum slowdown across all applications and data sets.  For the
-maximum slowdowns, we indicate which application and data set was
-responsible.  The slowdown is below 2 even in the worst case, and
-closer to 1 on average. We consider these results as encouraging,
-especially since the performance of our prototype could clearly be
-improved upon if cooperative scheduling was implemented directly in
-the GPU driver.
+maximum slowdown across all applications and data sets, each benchmark
+begin run 10 times. For the maximum slowdowns, we indicate which
+application and data set was responsible.  The slowdown is below 2 even
+in the worst case, and closer to 1 on average. We consider these results
+as encouraging, especially since the performance of our prototype could
+clearly be improved upon if cooperative scheduling was implemented
+directly in the GPU driver.
 
 \ADComment{Can we remark a bit more on the outliers?}
 
