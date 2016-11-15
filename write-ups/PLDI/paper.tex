@@ -481,7 +481,7 @@ threads.
 \begin{lstlisting}
 (*@\label{line:wksteal:kernelfunc}@*)kernel work_stealing(global Task * queues) {
 (*@\label{line:wksteal:getgroupid}@*)  int queue_id = get_group_id();
-  while (more_work(queues)) {
+(*@\label{line:wksteal:mainloop}@*)  while (more_work(queues)) {
 (*@\label{line:wksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id);
     if (t) {
       // task processing may create more work
@@ -502,16 +502,12 @@ kernel graph_app(global graph * g,
   int level = 0;
   global nodes * in_nodes = n0;
   global nodes * out_nodes = n1;
-
   int tid = get_global_id();
   int stride = get_global_size();
-
 (*@\label{line:graph:iterate}@*)  while(in_nodes.size > 0) {
-
     for (int i = tid; i < nodes.size; i += stride) {
       process_node(g, in_nodes[i], out_nodes, level);
     }
-
 (*@\label{line:graph:swap}@*)    swap(&in_nodes, &out_nodes);
 (*@\label{line:graph:gb1}@*)    global_barrier();
 (*@\label{line:graph:reset}@*)    reset(out_nodes);
@@ -859,45 +855,40 @@ example.
 
 \paragraph{Adapting work stealing}
 
-\myfiglong\ref{fig:workstealing-cooperative} shows a cooperative
-version of the work stealing example of \myfig\ref{fig:workstealing} from \mysec\ref{sec:openclexamples}.
-%
 In this example there is no state to transmit since a computation is
 entirely parameterised by a task, which is retrieved from a queue
-located in global memory. In the main loop, before trying to obtain a
-task, we make the workgroup offer itself to be forked or killed
-(lines~\ref{line:cwksteal:offerfork}-\ref{line:cwksteal:offerkill}). Note
-that a workgroup may be killed even if its associated task queue is
-not empty, since remaining tasks will be stolen by other
-workgroups. Since $\offerfork$ may be the entry point of a workgroup,
-the queue id must now be computed after it (line~\ref{line:cwksteal:getgroupid}). In particular, the queue
-id cannot be transmitted since we want a newly spawned workgroup to
-read its own queue and not the one of the forking workgroup.
+located in global memory. With respect to \myfig~\ref{fig:workstealing},
+we add $\offerfork$ and $\offerkill$ calls at the start of the main loop
+(below line~\ref{line:wksteal:mainloop}) to let a workgroup offer itself
+to be killed or forked, respectively, before it processes a task.  Note
+that a workgroup may be killed even if its associated task queue is not
+empty, since remaining tasks will be stolen by other workgroups. In
+addition, since $\offerfork$ may be the entry point of a workgroup, the
+queue id must now be computed after it, so we move
+line~\ref{line:wksteal:getgroupid} to be placed just before
+line~\ref{line:wksteal:poporsteal}. In particular, the queue id cannot
+be transmitted since we want a newly spawned workgroup to read its own
+queue and not the one of the forking workgroup.
 
-% The queue id cannot be transmitted since it corresponds to the
-% workgroup id.
-
-\begin{figure}
-
-\begin{lstlisting}
-kernel work_stealing(global Task * queues) {
-(*@\label{line:cwksteal:morework}@*)  while (more_work(queues)) {
-(*@\label{line:cwksteal:offerfork}@*)    offer_fork();
-(*@\label{line:cwksteal:offerkill}@*)    offer_kill();
-(*@\label{line:cwksteal:getgroupid}@*)    int queue_id = get_group_id();
-(*@\label{line:cwksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id);
-    if (t) {
-      // task processing may create more work
-(*@\label{line:cwksteal:processtask}@*)      process_task(t, queues, queue_id);
-    }
-  }
-}
-\end{lstlisting}
-
-\caption{Cooperative version of the work stealing kernel of
-  \myfig~\ref{fig:workstealing}, using $\offerfork$ and
-  $\offerkill$}\label{fig:workstealing-cooperative}
-\end{figure}
+% \begin{figure}
+% \begin{lstlisting}
+% kernel work_stealing(global Task * queues) {
+% (*@\label{line:cwksteal:morework}@*)  while (more_work(queues)) {
+% (*@\label{line:cwksteal:offerfork}@*)    offer_fork();
+% (*@\label{line:cwksteal:offerkill}@*)    offer_kill();
+% (*@\label{line:cwksteal:getgroupid}@*)    int queue_id = get_group_id();
+% (*@\label{line:cwksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id);
+%     if (t) {
+%       // task processing may create more work
+% (*@\label{line:cwksteal:processtask}@*)      process_task(t, queues, queue_id);
+%     }
+%   }
+% }
+% \end{lstlisting}
+% \caption{Cooperative version of the work stealing kernel of
+%   \myfig~\ref{fig:workstealing}, using $\offerfork$ and
+%   $\offerkill$}\label{fig:workstealing-cooperative}
+% \end{figure}
 
 \paragraph{Adapting graph traversal} 
 \myfiglong\ref{fig:cgraphsearch} shows a cooperative version of the
@@ -929,20 +920,15 @@ and in particular can be safely used inside the $\keyword{for}$ loop.
 \begin{lstlisting}
 kernel graph_app(global graph *g, 
                  global nodes *n0, global nodes *n1) {
-
 (*@\label{line:cgraph:transmit1}@*)  transmit int level = 0;
 (*@\label{line:cgraph:transmit2}@*)  transmit global nodes *in_nodes = n0;
 (*@\label{line:cgraph:transmit3}@*)  transmit global nodes *out_nodes = n1;
-
   while(in_nodes.size > 0) {
-
 (*@\label{line:cgraph:rechunking1}@*)    int tid = get_global_id();
 (*@\label{line:cgraph:rechunking2}@*)    int stride = get_global_size();
-
     for (int i = tid; i < nodes.size; i += stride) {
       process_node(g, in_nodes[i], out_nodes, level);
     }
-
     swap(&in_nodes, &out_nodes);
 (*@\label{line:cgraph:resizing1}@*)    resizing_global_barrier();
     reset(out_nodes);
