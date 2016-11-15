@@ -1577,7 +1577,7 @@ workgroups.
 The middle and right graphs show results for graph algorithms on the
 other two GPUs.  \ADComment{Added this; is it right?}  These
 algorithms use barriers, and we experimented with the regular and
-query barrier implementations described in \mysec\ref{ }.  The
+query barrier implementations described in \mysec\ref{sec:resizingbarrier}.  The
 results shown are for executions that use the more efficient query barrier, except that we also show the gather time associated with the regular barrier for comparison.  The graphs show a similar trend to the left-most graph: as the number of non-cooperative workgroups grows, the
 execution time decreases and the gather time increases.\footnote{The right
 figure has only 3 points per line: recall that for bfs there are no runs
@@ -2110,14 +2110,14 @@ In \mysec\ref{sec:responsiveness} we showed a selection of graphs to illustrate 
 experimental results related to performance and responsiveness.  Here
 we present the full set of graphs.
 
-\subsection{Responsiveness graphs}
+\subsection{Responsiveness graphs}\label{appendix:extraresponsiveness}
 
 We present the full set of graphs exemplified by the examples in
 \myfig\ref{fig:fine-grained-timing}; for completeness we reproduce those graphs here too.
 
 \ADComment{Tyler: show all the graphs, perhaps grouped by GPU.}
 
-\subsection{Performance graphs}
+\subsection{Performance graphs}\label{appendix:extraperformance}
 
 \myfiglong\ref{fig:performance} presents data on the performance impact and period associated with multitasking cooperative and non-cooperative workloads, for the Iris GPU.
 
