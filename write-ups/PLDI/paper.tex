@@ -412,15 +412,15 @@ All threads executing a kernel execute the same entry function with
 identical arguments.  A thread can call $\getglobalid()$
 to obtain its unique id, to access distinct data or follow different control flow paths to other threads.
 
-The threads executing a kernel are divided into a number of \emph{workgroups}, each consisting of a fixed number of threads.  Builtin functions
-$\getlocalid()$ and $\getgroupid()$ return a thread's local id within
-its workgroup and the id of the workgroup, respectively.\footnote{For simplicity we assume 1D kernels, which captures all the
-irregular algorithms we know of, using
-e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
+The threads of a kernel are divided into \emph{workgroups}, each consisting of a fixed number of threads.  Functions
+$\getlocalid$ and $\getgroupid$ return a thread's local id within
+its workgroup and the id of the workgroup.\footnote{For simplicity we assume 1D kernels, which captures all the
+irregular algorithms we know of, and write
+e.g.\ $\getglobalid()$ for $\getglobalid(0)$.
 }  The number
-of threads per workgroup and the number of workgroups are obtained via
-$\getlocalsize()$ and $\getnumgroups()$.  A thread's local and global
-id are related via the equation $\getglobalid() = \getgroupid() \times
+of threads per workgroup and number of workgroups are obtained via
+$\getlocalsize$ and $\getnumgroups$.  A thread's local and global
+id are related by $\getglobalid() = \getgroupid() \times
 \getlocalsize() + \getlocalid()$.  The total number of threads executing the kernel is given by $\getglobalsize() = \getlocalsize()\times\getnumgroups()$.
 
 Execution of the threads in a workgroup can be synchronised via a
@@ -433,11 +433,11 @@ statements.  A \emph{global} barrier
 a primitive.
 
 \paragraph{Memory spaces and memory model}
-An OpenCL kernel has access to four memory spaces.  \emph{Shared virtual
+A kernel has access to four memory spaces.  \emph{Shared virtual
 memory} (SVM) is accessible to all threads and the host application concurrently.  \emph{Global} memory is shared among all threads executing a
-kernel.  Each workgroup has its own portion of \emph{local} memory for fast intra-workgroup communication.  Every thread has
-an allocation of very fast \emph{private} memory, where
-function-local variables are allocated.
+kernel.  Each workgroup has a portion of \emph{local} memory for fast intra-workgroup communication.  Every thread has
+a portion of very fast \emph{private} memory for 
+function-local variables.
 
 Communication within a workgroup can be achieved
 using a workgroup barrier.  Finer-grained
