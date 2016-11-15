@@ -1176,27 +1176,79 @@ extensions.
 
 \section{Prototype Implementation}\label{sec:implementation}
 
-\HEComment{I consider that the reason why we need SVM fine grain and
-  atomics is discussed in the implementation section}
+We envisage cooperative kernels being implemented as part of the
+runtime for a GPU implementation of OpenCL, requiring changes to the
+device driver allowing it to intercept our new primitives and schedule
+and deschedule workgroups accordingly.
 
-\ADComment{Explain carefully that doing this properly would require
-  driver support, etc., and then explain what we've actually done.}
+To experiment with our ideas on current GPUs, we have instead
+developed a prototype implementation that mocks up the required
+runtime support via a \emph{megakernel}, and exploits the
+occupancy-bound execution model that these GPUs provide.  To be clear:
+an aim of cooperative kernels is to avoid depending on the
+occupancy-bound model; our protoytpe exploits this model simply to
+allow us to experiment with current GPUs whose proprietary drivers we
+cannot change.
 
-\ADComment{Give details of how host and device interact.}
+\subsection{The megakernel approach}
+
+The mock-up works as follows.  Instead of multitasking multiple
+separate kernels, we merge a set of kernels into a megakernel---a
+single, monolithic kernel---and encode the scheduling logic inside
+this megakernel.  The megakernel is launched with as many workgroups
+as can run concurrently according to the occupancy-bound.  One
+workgroup takes the role of scheduler, and the remaining workgroups
+act as a pool of workers.  A worker repeatedly queries the scheduler
+to be assigned a task.  A task corresponds to executing a cooperative
+or non-cooperative kernel.  In the case where a task corresponds to a
+non-cooperative kernel, the workgroup executes the kernel function
+uninterrupted and awaits further work.  In the case of a cooperative
+kernel, the workgroup either starts from the kernel entry point,
+corresponding to the workgroup being an \emph{initial} workgroup of
+the kernel, or immediately jumps to a designated point within the
+cooperative kernel, corresponding to the workgroup being forked by an
+already executing workgroup.  In the latter case, the new workgroup
+also receives a struct containing the values of all relevant
+$\transmit$-annotated variables.
+
+\paragraph{Simplifying assumptions}
+
+\ADComment{One cooperative, one non-cooperative.  Justification: sufficient to evaluate the key use case of a long-running irregular algorithm co-existing with a series of short-running tasks.  Simplifieid task of implementing prototype, which we do not want to over-enginneer since it is only a mock-up.}
+
+\ADComment{Restrictions on kernel structure: variables at top of kernel are implicitly $\transmit$-annotated, and $\offerkill$, $\offerfork$ and $\resizingglobalbarrier$ calls must appear only in kernel entry function.  Avoiding $\transmit$ allowed us to reuse the clang OpenCL front-end, and restricitng starting points for fork to be in main kernel allowed a ``goto''-based approach to redirecting control flow; threading this through procedure calls would be possible but laborious.  Restricting kill points enables kill to be implemented as ``return''; exiting from a procedure call stack would require stack unwinding support, akin to throwing an exception.  Again make point that all these issues are only relevant due to our mock-up.}
+
+\paragraph{Merging kernels}
 
 \ADComment{Explain kernel merge tool briefly.  Explain library briefly.}
 
+
+\subsection{Scheduler design}\label{sec:resizingbarrier}
+
+
 \ADComment{Give most attention to interesting performance and safety issues, e.g.\ reverse ticket lock, efficient barrier, the query functions...}
+
+\ADComment{The host and device components of the scheduler, the use of
+  SVM, and the host API for scheduling both sorts of kernel.}
+
+\HEComment{I consider that the reason why we need SVM fine grain and
+  atomics is discussed in the implementation section}
+
+\ADComment{Give details of how host and device interact.}
 
 \ADComment{Host-device interaction through SVM.  Make clear that this is probably the most aggressive use of OpenCL 2.0 ever.}
 
-\subsection{An Efficient Resizing Barrier}\label{sec:resizingbarrier}
+
+\paragraph{An efficient resizing barrier}
 
 \ADComment{Optimised barrier implementation.}
+
 
 \subsection{Vendor Implementation Defects}
 
 \ADComment{Briefly rant about our pain.  Compiler hang, compiler crashes, deadlocks, defunct processes.  Caution: don't make it sound so terrible that you can't trust our results.  Gently acknowledge that our implementation may be imperfect.}
+
+
+
 
 
 \section{Applications and Experiments}\label{sec:experiments}
@@ -1536,6 +1588,8 @@ kernels, which run in an unmodified manner, and careful placement of
 our new language primitives that exploit the structure of a
 cooperative kernel may enable more efficient multitasking than
 kernel-oblivious preemption.
+
+\ADComment{Rewrite:} There is scope for combining the approaches by using cooperative scheduling...
 
 \paragraph{Optimizing GPU scheduling}
 %
