@@ -1043,23 +1043,20 @@ extensions.
 
 \section{Prototype Implementation}\label{sec:implementation}
 
-\ADComment{We have to explain in this seciton how we get fairness.}
+Our vision is that support for cooperative kernels will be integrated
+in the runtimes of future GPU implementations of OpenCL and related
+programming models, with driver and compiler support for our new
+primitives.  To experiment with our ideas on current GPUs, we have
+developed a prototype that mocks up the required runtime support via a
+\emph{megakernel}, and exploits the occupancy-bound execution model
+that these GPUs provide to ensure fair scheduling between workgroups.
+We emphasise that an aim of cooperative kernels is to \emph{avoid}
+depending on the occupancy-bound model.  Our protoytpe exploits this
+model simply to allow us to experiment with current GPUs whose
+proprietary drivers we cannot change.  We describe the megakernel approach (\mysec\ref{sec:megakernel})
+and detail various aspects of the scheduler component of our implementation (\mysec\ref{sec:schedulerimpl}).
 
-We envisage cooperative kernels being implemented as part of the
-runtime for a GPU implementation of OpenCL, requiring changes to the
-device driver allowing it to intercept our new primitives and schedule
-and deschedule workgroups accordingly.
-
-To experiment with our ideas on current GPUs, we have instead
-developed a prototype implementation that mocks up the required
-runtime support via a \emph{megakernel}, and exploits the
-occupancy-bound execution model that these GPUs provide.  To be clear:
-an aim of cooperative kernels is to avoid depending on the
-occupancy-bound model; our protoytpe exploits this model simply to
-allow us to experiment with current GPUs whose proprietary drivers we
-cannot change.
-
-\subsection{The megakernel approach}
+\subsection{The megakernel approach}\label{sec:megakernel}
 
 The mock-up works as follows.  Instead of multitasking multiple
 separate kernels, we merge a set of kernels into a megakernel---a
@@ -1108,7 +1105,7 @@ and a non-cooperative kernel and merges them to produce a megakernel
 with an embedded GPU scheduler.  We implemented \kernelmerge{} using the Clang LibTooling framework,\footnote{\url{http://clang.llvm.org/docs/LibTooling.html}}
 leveraging recent Clang support for OpenCL 2.0~\cite{ClangOpenCL20}.
 
-\subsection{Scheduler design}\label{sec:resizingbarrier}
+\subsection{Scheduler design}\label{sec:resizingbarrier}\label{sec:schedulerimpl}
 
 To enable multitasking through cooperative kernels, the runtime (in
 our case, the mega-kernel), must (a) track the state of all
