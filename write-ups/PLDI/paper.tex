@@ -613,27 +613,21 @@ the scheduling issue.
 
 \section{Cooperative Kernels}\label{sec:cooperativekernels}
 
-We describe our cooperative kernels programming model as an extension
+We present our cooperative kernels programming model as an extension
 to OpenCL.  However, the cooperative kernels concept is more general,
 and could be applied to extend other GPU programming models, such as
-CUDA and HSA.
-
-We describe the semantics of cooperative kernels
-(\mysec\ref{sec:semantics}) and summarise the important
-differences between programming with regular vs.\ cooperative kernels
-by showing how the motivating examples of \mysec\ref{sec:openclexamples} can be adapted to use cooperative kernels
-(\mysec\ref{sec:programmingguidelines}).
-We then focus on the non-functional
-properties that a developer of a cooperative kernel, and the
-implementer of a scheduler for cooperative kernels, should strive for
-(\mysec\ref{sec:nonfunctional}).  The semantics of cooperative
-kernels has been guided by the practical applications we have studied
-(described in \mysec\ref{sec:portingalgorithms}), and we discuss several cases where we
-might have taken different and also reasonable semantic decisions (\mysec\ref{sec:semanticalternatives}).
-We conclude the section by discussing the backwards-compatible nature
-of cooperative kernels with respect to blocking algorithms designed to
-run on current GPU platforms
+CUDA and HSA.  We describe the semantics of the model
+(\mysec\ref{sec:semantics}), use our motivating examples to discuss
+programmability (\mysec\ref{sec:programmingguidelines}), outline
+important nonfunctional properties that the model requires to work
+successfully (\mysec\ref{sec:nonfunctional}) and explain that the
+model is backwards-compatible
 (\mysec\ref{sec:backwardscompatibility}).
+%
+In Appendices~\ref{appendix:semantics} and~\ref{appendix:semanticalternatives} (supplementary material)
+we present a formal semantics for cooperative kernels atop an abstract GPU programming model,
+and discuss several cases where we
+might have taken different and also reasonable semantic decisions.
 
 \subsection{Semantics of Cooperative Kernels}\label{sec:semantics}
 
@@ -1042,88 +1036,6 @@ to an $\offerfork$ call if it has reason to believe that the remaining
 compute units are likely to be useful for other high priority tasks
 that are likely to arrive imminently.  With some additional language extensions, it would be possible for the cooperative kernel to hint to the scheduler if, for example, the kernel is at a point of computation where there is less work to do than usual, so that $\offerkill$ calls could be accepted in order to save energy.
 
-
-\subsection{Alternative Semantic Choices}\label{sec:semanticalternatives}
-
-\ADComment{Move this to the appendix.}
-
-\paragraph{Killing order}
-
-We opted for a semantics whereby only the active workgroup with the
-highest id can be killed.  This has an appealing property: it means
-that the ids of active workgroups are contiguous, which is important
-for processing of contiguous data.  The cooperative graph traversal
-algorithm of \myfig\ref{fig:cgraphsearch} illustrates this: the algorithm is prepared
-for $\getglobalsize()$ to change after each resizing barrier call, but
-depends on the fact that $\getglobalid()$ returns a contiguous range
-of thread ids.
-
-A disadvantage of this decision is that it may provide sub-optimal
-responsiveness from the point of view of the scheduler.  Suppose the
-scheduler requires an additional compute unit, but the active thread
-with the larget id is processing some computationally intensive work
-and will take a while to reach $\offerkill$.  Our semantics means that
-the scheuduler cannot take advantage of the fact that another active
-workgroup may invoke $\offerkill$ sooner.
-
-Cooperative kernels that do not require contiguous thread ids might me
-more suited to a semantics in which workgroups can be killed in any
-order, but where workgroup ids (and thus thread global ids) are not
-guaranteed to be contiguous.
-
-\paragraph{Keeping one workgroup alive}
-
-Our semantics dictate that the workgroup with id 0 will not be killed
-if it invokes $\offerkill$.  This avoids the possibility of the
-cooperative kernel terminating early due to the programmer
-inadvertantly allowing all workgroups to be killed, and the decision
-to keep workgroup 0 alive fits well with our choice to kill workgroups
-in descending order of id.
-
-However, there might be a use case for a cooperative kernel reaching a
-point where it would be acceptable for the kernel to exit, although
-desirable for some remaining computation to be performed if competing
-workloads allow it.  In this case, a semantics where all workgroups can be killed via $\offerkill$ would be appropriate, and the programmer would need to guard each $\offerkill$ with an id check in cases where killing all workgroups would be unacceptable.  For example:
-%
-\lstset{basicstyle=\tt,numbers=none}
-\begin{lstlisting}
-  if($\getgroupid{0}$ != 0) $\offerkill$();
-\end{lstlisting}
-\lstset{basicstyle=\scriptsize\tt,numbers=left}
-%
-would ensure that at least workgroup 0 is kept alive.
-
-\paragraph{Transmission of partial state from a single thread}
-
-Recall from the semantics of $\offerfork$ that newly forked workgroups
-inherit the variable valuation associated with thread 0 of the forking
-workgroup, but only for $\transmit$-annotated variables.  Alternative
-choices here would be to have forked workgroups inherit values for
-\emph{all} variables from the forking workgroup, and to have thread
-$i$ in the forking workgroup provide the valuation for thread $i$ in
-each spawned workgroup, rather than having thread 0 transmit the
-valuation to all new threads.
-
-We opted for transmitting only selected varibles based on the
-observation that many of a thread's private variables are dead at the
-point of issuing $\offerfork$ or $\resizingglobalbarrier$, thus it
-would be wasteful to transmit them.  A live variable analysis could
-instead be employed to over-approximate the variables that might be
-accessed by newly arriving workgroups, so that these are automatically
-transmitted.
-
-In all cases, we found that a variable that needed to be transmitted
-had the property of being uniform across the workgroup.  That is,
-despite each thread having its own copy of the variable, each thread
-is in agreement on the variable's value.  As an example, the
-$\keyword{level}$, $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$
-variables used in \myfig\ref{fig:cgraphsearch} are all stored in thread-private
-memory, but all threads in a workgroup agree on the values of these
-variables at each $\resizingglobalbarrier$ call.  As a result,
-transmitting the thread 0's valuation of the annotated variables is
-equivalent to (and more efficient than) transmitting values on a
-thread-by-thread basis.  We have not yet encountered a real-world
-example where our current semantics would not suffice.
 
 
 
@@ -2017,6 +1929,95 @@ variables), and the rest of the local state.
  \ADComment{Local memory is not
   explicitly modeled but can be captured inside shared state.}
 \ADComment{Semantics for intra-workgroup barriers are ignored.}
+
+
+
+\section{Alternative Semantic Choices}\label{appendix:semanticalternatives}
+
+The semantics of cooperative kernels has been guided by the practical
+applications we have studied (described in
+\mysec\ref{sec:portingalgorithms}).  We now discuss several cases
+where we might have taken different and also reasonable semantic
+decisions.
+
+\paragraph{Killing order}
+
+We opted for a semantics whereby only the active workgroup with the
+highest id can be killed.  This has an appealing property: it means
+that the ids of active workgroups are contiguous, which is important
+for processing of contiguous data.  The cooperative graph traversal
+algorithm of \myfig\ref{fig:cgraphsearch} illustrates this: the
+algorithm is prepared for $\getglobalsize()$ to change after each
+resizing barrier call, but depends on the fact that $\getglobalid()$
+returns a contiguous range of thread ids.
+
+A disadvantage of this decision is that it may provide sub-optimal
+responsiveness from the point of view of the scheduler.  Suppose the
+scheduler requires an additional compute unit, but the active thread
+with the larget id is processing some computationally intensive work
+and will take a while to reach $\offerkill$.  Our semantics means that
+the scheuduler cannot take advantage of the fact that another active
+workgroup may invoke $\offerkill$ sooner.
+
+Cooperative kernels that do not require contiguous thread ids might me
+more suited to a semantics in which workgroups can be killed in any
+order, but where workgroup ids (and thus thread global ids) are not
+guaranteed to be contiguous.
+
+\paragraph{Keeping one workgroup alive}
+
+Our semantics dictate that the workgroup with id 0 will not be killed
+if it invokes $\offerkill$.  This avoids the possibility of the
+cooperative kernel terminating early due to the programmer
+inadvertantly allowing all workgroups to be killed, and the decision
+to keep workgroup 0 alive fits well with our choice to kill workgroups
+in descending order of id.
+
+However, there might be a use case for a cooperative kernel reaching a
+point where it would be acceptable for the kernel to exit, although
+desirable for some remaining computation to be performed if competing
+workloads allow it.  In this case, a semantics where all workgroups can be killed via $\offerkill$ would be appropriate, and the programmer would need to guard each $\offerkill$ with an id check in cases where killing all workgroups would be unacceptable.  For example:
+%
+\lstset{basicstyle=\tt,numbers=none}
+\begin{lstlisting}
+  if($\getgroupid{0}$ != 0) $\offerkill$();
+\end{lstlisting}
+\lstset{basicstyle=\scriptsize\tt,numbers=left}
+%
+would ensure that at least workgroup 0 is kept alive.
+
+\paragraph{Transmission of partial state from a single thread}
+
+Recall from the semantics of $\offerfork$ that newly forked workgroups
+inherit the variable valuation associated with thread 0 of the forking
+workgroup, but only for $\transmit$-annotated variables.  Alternative
+choices here would be to have forked workgroups inherit values for
+\emph{all} variables from the forking workgroup, and to have thread
+$i$ in the forking workgroup provide the valuation for thread $i$ in
+each spawned workgroup, rather than having thread 0 transmit the
+valuation to all new threads.
+
+We opted for transmitting only selected varibles based on the
+observation that many of a thread's private variables are dead at the
+point of issuing $\offerfork$ or $\resizingglobalbarrier$, thus it
+would be wasteful to transmit them.  A live variable analysis could
+instead be employed to over-approximate the variables that might be
+accessed by newly arriving workgroups, so that these are automatically
+transmitted.
+
+In all cases, we found that a variable that needed to be transmitted
+had the property of being uniform across the workgroup.  That is,
+despite each thread having its own copy of the variable, each thread
+is in agreement on the variable's value.  As an example, the
+$\keyword{level}$, $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$
+variables used in \myfig\ref{fig:cgraphsearch} are all stored in thread-private
+memory, but all threads in a workgroup agree on the values of these
+variables at each $\resizingglobalbarrier$ call.  As a result,
+transmitting the thread 0's valuation of the annotated variables is
+equivalent to (and more efficient than) transmitting values on a
+thread-by-thread basis.  We have not yet encountered a real-world
+example where our current semantics would not suffice.
+
 
 
 \end{document}
