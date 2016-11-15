@@ -1311,7 +1311,7 @@ light & 3 & 70\\
 medium & 3 & 40\\
 heavy & 10 & 40\\
 \end{tabular}
-\caption{Caracteristics of non-cooperative workloads}
+\caption{Caracteristics of non-cooperative kernels workload}
 \label{tab:noncooperativeworkload}
 \end{table}
 
@@ -1421,17 +1421,14 @@ of what a scheduler implemented directly in the runtime could achieve.
 
 \ADComment{Preamble}
 
-voc: blocking and non-blocking ?
 
-durable / transient
+Cooperative scheduling enables to concurrently run non-persistent
+kernels alongside blocking ones. In terms of performance, we are
+interested to see whether the variations of workgroups for the blocking
+kernel.
 
-Cooperative scheduling enables to concurrently run non-persistent kernels alongside blocking ones. In terms of performance, we are interested to see whether the variations of workgroups for the blocking kernel.
-
-Its performance corresponds
-
-Performance of cooperative scheduling corresponds to execution time of cooperative kernels compared to the serial 
-
-Cooperative scheduling can improve performances 
+Performance of cooperative scheduling corresponds to execution time of
+cooperative kernels compared to the serial
 
 In order to simulate non-persistent workloads alongside kernels of
 blocking algorithms, we use a matrix multiplication kernel where
@@ -1449,7 +1446,6 @@ time to execute both in cooperation
 also, response time for non-persistent
 
 use matmult to represent system workload, ref to previous section
-
 
 \paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
 
