@@ -1213,19 +1213,135 @@ $\transmit$-annotated variables.
 
 \paragraph{Simplifying assumptions}
 
-\ADComment{One cooperative, one non-cooperative.  Justification: sufficient to evaluate the key use case of a long-running irregular algorithm co-existing with a series of short-running tasks.  Simplifieid task of implementing prototype, which we do not want to over-enginneer since it is only a mock-up.}
+\ADComment{One cooperative, one non-cooperative.  Justification:
+  sufficient to evaluate the key use case of a long-running irregular
+  algorithm co-existing with a series of short-running tasks.
+  Simplifieid task of implementing prototype, which we do not want to
+  over-enginneer since it is only a mock-up.}
 
-\ADComment{Restrictions on kernel structure: variables at top of kernel are implicitly $\transmit$-annotated, and $\offerkill$, $\offerfork$ and $\resizingglobalbarrier$ calls must appear only in kernel entry function.  Avoiding $\transmit$ allowed us to reuse the clang OpenCL front-end, and restricitng starting points for fork to be in main kernel allowed a ``goto''-based approach to redirecting control flow; threading this through procedure calls would be possible but laborious.  Restricting kill points enables kill to be implemented as ``return''; exiting from a procedure call stack would require stack unwinding support, akin to throwing an exception.  Again make point that all these issues are only relevant due to our mock-up.}
+\ADComment{Restrictions on kernel structure: variables at top of
+  kernel are implicitly $\transmit$-annotated, and $\offerkill$,
+  $\offerfork$ and $\resizingglobalbarrier$ calls must appear only in
+  kernel entry function.  Avoiding $\transmit$ allowed us to reuse the
+  clang OpenCL front-end, and restricitng starting points for fork to
+  be in main kernel allowed a ``goto''-based approach to redirecting
+  control flow; threading this through procedure calls would be
+  possible but laborious.  Restricting kill points enables kill to be
+  implemented as ``return''; exiting from a procedure call stack would
+  require stack unwinding support, akin to throwing an exception.
+  Again make point that all these issues are only relevant due to our
+  mock-up.}
 
 \paragraph{Merging kernels}
 
-\ADComment{Explain kernel merge tool briefly.  Explain library briefly.}
+\ADComment{Explain kernel merge tool briefly.  Explain library
+  briefly.}
+
+\TSComment{we should mention that non-cooperative kernels must be
+written in a persistent thread style}
 
 
 \subsection{Scheduler design}\label{sec:resizingbarrier}
 
+To enable multitasking through cooperative kernels, the runtime (in
+our case, the mega-kernel), must (a) track the state of all
+workgroups, i.e.\ if a workgroup is waiting or computing a kernel (b)
+maintain consistent context states for each kernel, i.e.\ the number
+of active workgroups computing a cooperative kernel and (c) provide a
+safe way for these states to be modified (according to the semantics
+of $\offerfork$ and $\offerkill$. We discuss how that is achieved
+here.
 
-\ADComment{Give most attention to interesting performance and safety issues, e.g.\ reverse ticket lock, efficient barrier, the query functions...}
+\paragraph{Kernel context}
+
+When a workgroup executes a kernel (cooperative or otherwise), it must
+be able to query a consistent context to obtain a workgroup id value
+(starting from zero up to the number of executing workgroups) and the
+number of workgroups executing the kernel. In single kernel execution,
+the OpenCL primitives {\tt get\_num\_groups()} and {\tt
+  get\_group\_id()} provide this functionality natively. For multiple
+kernel execution, we must emulate these primitives, per kernel,
+explicitly through \emph{kernel contexts}. This structure contains:
+(a) the number of active groups, (b) the total number of groups asked
+for, and (c) a mapping from the native workgroup id to a new workgroup
+id valid for a particular kernel. Our framework requires the native
+kernel context (to obtain a global base workgroup id) as well as an
+additional distinct kernel context for each kernel running
+concurrently. \TSComment{a driver implementation would likely generate
+these on the fly}.
+
+\paragraph{Scheduler context}
+
+In order to dynamically manage workgroups executing cooperative
+kernels, our framework must (a) track the state of each workgroup and
+(b) provide a channel of communication from the scheduler to
+workgroups executing $\offerfork$ and $\offerkill$. To achieve this,
+we use a \emph{Scheduler context} structure which contains a mapping
+from primitive workgroup ids to their state i.e.\ waiting or computing
+a kernel as well as an integer value describing the number of
+workgroups in each state. The scheduler can then send cooperative
+kernels a \emph{resource message}, indicating if workgroups executing
+the cooperative kernel need to (a) exit at $\offerkill$ or (b)
+transmit their state to forking workgroups at $\offerfork$. Thus, the
+scheduler context needs a communication channel for each cooperative
+kernel. In our case, the communication channel is implemented using
+global atomic variables and OpenCL atomic operations to ensure
+consistency.
+
+\paragraph{Launching kernels}
+
+As in native OpenCL, the host maintains the ability to launch kernels.
+In our framework, the host has the additional ability to request that
+a kernel be cooperative \emph{and} to specify the amount of
+\emph{resource} each kernel requires. In our implementation, the only
+resource we have explicit control over is the number of concurrently
+executing workgroups; implementations closer to metal might also
+consider local memory and registers as resource.
+
+To launch a kernel, the host sends a data packet to the GPU, which
+consists of: a kernel to execute, the inputs to the kernel, the amount
+of resource to use for the kernel (which includes the number of
+workgroups to execute the kernel), and a flag indicating if the kernel
+is cooperative. In our implementation, this communication channel
+between host and device is achieved through fine-grained SVM atomics.
+The kernel specified must be one of the kernels merged inside the
+mega-kernel. If there are large constant inputs to the kernel, these
+can be copied before mega-kernel launch to decrease the amount of SVM
+traffic.
+
+The GPU scheduler then receives the data packet from the host
+describing a kernel $K$ to be executed and now must make decisions
+about how to schedule the $K$. Consider the case where $K$ requires
+$W$ workgroups. The scheduler can query the scheduler context and if
+there is at least $W$ available workgroups, then $K$ can be scheduled
+immediately. If there are not enough available workgroups (say there
+are $W_a$ workgroups available), but a cooperative kernel $K_c$ is
+executing. The scheduler can signal $K_c$ through $K_c$'s
+communication channel in the scheduler context communication
+requesting that $K_c$ provide $W - W_a$ workgroups (via $\offerkill$)
+as soon as possible. The scheduler then waits until $W$ workgroups
+become available. 
+
+When $W$ workgroups become available, the scheduler initialises a
+kernel context $KC$ for $K$, setting the number of active workgroups
+to $W$ and mapping available workgroups (located in the scheduler
+context) to their new $KC$ workgroup ids. The scheduler then sends $W$
+workgroups from the available workgroups to execute kernel $K$ with
+kernel context $KC$.
+
+\paragraph{$\offerkill$ implementation}
+
+
+
+
+
+
+
+
+
+\ADComment{Give most attention to interesting performance and safety
+  issues, e.g.\ reverse ticket lock, efficient barrier, the query
+  functions...}
 
 \ADComment{The host and device components of the scheduler, the use of
   SVM, and the host API for scheduling both sorts of kernel.}
