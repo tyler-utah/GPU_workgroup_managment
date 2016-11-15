@@ -1160,19 +1160,27 @@ When a workgroup $w$ of $K_c$ subsequently executes $\offerfork$, thread 0 of $w
 
 \paragraph{Accounting for concurrency}
 
-Concurrent calls to $\offerfork$ must be protected by a mutex
-to avoid racing on the
-available workgroups. The same conflict over available workgroups can
-occur at a new kernel launch between the scheduler and a workgroup
-calling $\offerfork$.
+Concurrent calls to $\offerfork$ must be protected by a mutex to avoid
+racing on the available workgroups. The same conflict over available
+workgroups can occur at a new kernel launch between the scheduler and
+a workgroup calling $\offerfork$. Thus, these activities are protected
+by a mutex, called the \emph{assignment mutex} provided in the scheduler
+context.
 
-The scheduler context provides an \emph{assignment mutes} to protect concurrent calls to
-$\offerfork$ and $\offerkill$.  On calling $\offerkill$, a workgroup is only permitted to exit if the scheduler workgroup currently holds the assignment mutex; that is, the scheduler is trying to obtain work
-groups to send to a task.  Conversely, on calling $\offerfork$ a workgroup can only spawn new workgroups if the scheduler workgroup does not hold the assignment mutex.  Thus the assignment mutex, only ever acquired by the scheduling workgroup, \emph{indirectly} provides mutual exclusion between a pairs of workgroups executing $\offerkill$ and $\offerfork$ concurrently. \ADComment{Please check previous -- I think I've got the coolness!}
+The assignment mutex additionally protects concurrent calls to
+$\offerfork$ and $\offerkill$.  On calling $\offerkill$, a workgroup
+is only permitted to exit if the scheduler workgroup currently holds
+the assignment mutex; that is, the scheduler is trying to obtain work
+groups to send to a task.  Conversely, on calling $\offerfork$ a
+workgroup can only spawn new workgroups if the scheduler workgroup
+does not hold the assignment mutex.  Thus the assignment mutex, only
+ever acquired by the scheduling workgroup, \emph{indirectly} provides
+mutual exclusion between a pairs of workgroups executing $\offerkill$
+and $\offerfork$ concurrently.
 
 Concurrent calls to $\offerkill$ are acceptable because only the
 workgroup with the highest id may exit, automatically ensuring mutual
-exclusion for exit-related modifications.
+exclusion for exit-related state changes.
 
 \paragraph{An efficient resizing barrier}
 
@@ -1180,8 +1188,7 @@ In \mysec\ref{sec:semantics}, we defined the semantics of a resizing barrier in 
 of a series of calls to $\globalbarrier$, $\offerfork$ and $\offerkill$.
  It is possible, however to implement the resizing with
 only one call to a global barrier with $\offerfork$ and $\offerkill$
-baked into the implementation. \TSComment{note here that these
-  implementations require no cfork or ckill outside of the barrier} \ADComment{Ignore until camera-ready?}
+baked into the implementation. 
 
 We consider barriers that use the master/slave model
 (e.g.\ \cite{XF10}): one workgroup (the master) collects signals
@@ -1189,8 +1196,7 @@ from the other workgroups (the slaves) indicating that they have
 arrived at the barrier and are waiting for a reply indicating that
 they may leave the barrier. Once the master has recieved a signal from
 all the slaves, it replies with a signal saying that the slaves may
-leave. \TSComment{Need to discuss new active workgroup number that
-is stable across iterations} \ADComment{Again, ignore until camera-ready?}
+leave. 
 
 A first-attempt at incorporating $\offerfork$ and $\offerkill$ into
 such a barrier is straight forward. Upon entering the barrier, the
@@ -1607,6 +1613,12 @@ setup, do we need to say it here ?}
 \includegraphics[width=.7\columnwidth]{hd5500_bfs_rmat22.pdf}
 \caption{Example gather time and non-cooperative timing results}\label{fig:fine-grained-timing}
 \end{figure*}
+
+\begin{figure}
+\includegraphics[width=\columnwidth]{heavy.pdf} 
+\caption{Blah}\label{fig:blah}
+\end{figure}
+
 
 \section{Related Work}\label{sec:relatedwork}
 
