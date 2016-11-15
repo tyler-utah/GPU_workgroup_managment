@@ -933,21 +933,19 @@ In \mysec\ref{sec:portingalgorithms} we describe the set of irregular GPU algori
 in our experiments, which largely captures the irregular blocking
 algorithms that are available as open source GPU kernels.  These all
 employ either work stealing or operate on graph data structures, and placing our new constructs follows a common, easy-to-follow pattern in each case.
-
-Like the simplified example of \myfig\ref{fig:workstealing-cooperative}, the work stealing algorithms have a transactional flavour
-and require little or no state to be carried between transactions.  Thus the point at which a workgroup is ready to process a new task is a natural point to place $\offerkill$ and $\offerfork$, and few or no $\transmit$ annotations are required.
-
-The example of \myfig\ref{fig:cgraphsearch} is simpler than, but representative of,
+%
+The work stealing algorithms have a transactional flavour
+and require little or no state to be carried between transactions.  The point at which a workgroup is ready to process a new task is a natural place for $\offerkill$ and $\offerfork$, and few or no $\transmit$ annotations are required.
+%
+\myfiglong\ref{fig:cgraphsearch} is simpler than, but representative of,
 most level-by-level graph algorithms.
 It is typically the case that on completing a level of
 the graph algorithm, the next level could be processed by more or
-fewer workgroups, something which $\resizingglobalbarrier$
-facilitates.  As in \myfig\ref{fig:cgraphsearch}, some level-specific state must be transmitted to new workgroups.
+fewer workgroups, which $\resizingglobalbarrier$
+facilitates.  Some level-specific state must be transmitted to new workgroups.
 
-Our practical experience suggests that cooperative kernels are a good
-fit for at least these two classes of irregular algorithms, which is
-of course partly because we were inspired by these algorithms in
-designing the model.
+Our experience is that cooperative kernels are a good
+fit for at least these two classes of irregular algorithms, in part because they inspired the model.
 
 
 \subsection{Non-Functional Requirements}\label{sec:nonfunctional}
@@ -965,7 +963,7 @@ To achieve this balance, an implementation of the cooperative
 kernels model, and the programmer of a cooperative kernel, must strive
 to meet the following non-functional requirements.
 
-\paragraph{Sufficient $\offerkill$ calls}
+%\paragraph{Sufficient $\offerkill$ calls}
 
 The purpose of $\offerkill$ is to provide the scheduler with an
 opportunity to destroy a workgroup in order to schedule
@@ -973,56 +971,46 @@ higher-priority tasks.  The scheduler relies on the cooperative kernel
 to execute $\offerkill$ sufficiently frequently that soft real-time
 constraints of other workloads can be met.
 %
-Using our work stealing example: in
-\myfig\ref{fig:workstealing-cooperative} a workgroup offers itself to
+Using our work stealing example: a workgroup offers itself to
 the scheduler after processing each task.  If tasks are sufficiently
 fast to process then the scheduler will have ample opportunities to
 de-schedule workgroups.  But if tasks can be very time-consuming to
 process then it might be necessary to rewrite the algorithm so that
 tasks are shorter and more numerous, to achieve a higher rate of calls
 to $\offerkill$.
-
-Getting this non-functional requirement right depends on the
-constraints of the tasks to be co-scheduled with a cooperative kernel,
-on properties of the cooperative kernel itself, and on the efficiency
-of the GPU that is used for execution.  In \mysec\ref{sec:sizingnoncoop} we conduct
+%
+Getting this non-functional requirement right is GPU- and application-dependent.
+In \mysec\ref{sec:sizingnoncoop} we conduct
 experiments to understand the response rate that would be required to
-co-schedule graphics rendering with a cooperative kernel in order to
-achieve a smooth frame rate, and we evaluate responsiveness in
-practice in \mysec\ref{sec:responsiveness}.
+co-schedule graphics rendering with a cooperative kernel, maintaining a smooth frame rate.
 
-\paragraph{Sufficient workgroups for the cooperative kernel}
+%\paragraph{Sufficient workgroups for the cooperative kernel}
 
-Recall that the cooperative kernel would ideally utilise the $N$
-workgroups requested upon kernel launch, in order to conduct its
-processing efficiently.  The scheduler should thus aim to provide the
-cooperative kernel $N$ workgroups if other constraints allow it,
+Recall that, on launch, the cooperative kernel requests $N$ workgroups.
+The scheduler should thus aim to provide $N$ workgroups if other constraints allow it,
 by accepting an $\offerkill$ only if a compute unit is required for another
 task, and responding positively to $\offerfork$ calls if compute units are available.  Our
-implementation of cooperative scheduling (\mysec\ref{sec:implementation}) is as
+implementation (\mysec\ref{sec:implementation}) is as
 generous as possible to the cooperative kernel in this regard.
 
-Note that the above guidelines are not hard-and-fast rules.  For
-example, a smart scheduler might respond selectively to $\offerkill$
+These guidelines are not hard-and-fast rules, and e.g.\ a smart scheduler might respond selectively to $\offerkill$
 and $\offerfork$ calls by predicting future high-priority workloads
 based on past workloads.
 
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
 
-A goal of coopeative kernels is to allow traditional, non-blocking GPU
-tasks (e.g.\ graphics shaders in OpenGL, Vulkan and DirectX, and regular data-parallel computational kernels)
-to be co-scheduled with blocking irregular algorithms.  It is
-important to note that our new model has no effect on the manner in
-which these traditional GPU workloads are programmed.
-
+Our new model has no effect on the manner in which traditional GPU
+workloads are programmed, such as graphics shaders in OpenGL, Vulkan
+and DirectX, and regular data-parallel computational kernels.
+%
 Furthermore, if our cooperative language extensions are
 ignored---$\offerkill$ and $\offerfork$ are treated as no-ops,
 $\transmit$ annotations are ignored, and $\globalbarrier$ and
 $\resizingglobalbarrier$ calls are redirected to an existing global
 barrier implementation (so that no resizing occurs in the latter
 case)---then a cooperative kernel will behave just like its
-non-cooperative counterpart would behave.  As a result, a developer
+non-cooperative counterpart would behave.  A developer
 for whom today's occupancy-bound execution model suffices can upgrade
 their kernel to a cooperative form and retain backwards-compatibility
 with today's GPU platforms by pre-processing away our language
