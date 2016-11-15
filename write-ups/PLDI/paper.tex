@@ -1056,26 +1056,23 @@ model simply to allow us to experiment with current GPUs whose
 proprietary drivers we cannot change.  We describe the megakernel approach (\mysec\ref{sec:megakernel})
 and detail various aspects of the scheduler component of our implementation (\mysec\ref{sec:schedulerimpl}).
 
-\subsection{The megakernel approach}\label{sec:megakernel}
+\subsection{The megakernel mock up}\label{sec:megakernel}
 
-The mock-up works as follows.  Instead of multitasking multiple
-separate kernels, we merge a set of kernels into a megakernel---a
-single, monolithic kernel---and encode the scheduling logic inside
-this megakernel.  The megakernel is launched with as many workgroups
-as can run concurrently according to the occupancy-bound.  One
-workgroup takes the role of scheduler, and the remaining workgroups
-act as a pool of workers.  A worker repeatedly queries the scheduler
-to be assigned a task.  A task corresponds to executing a cooperative
-or non-cooperative kernel.  In the case where a task corresponds to a
-non-cooperative kernel, the workgroup executes the kernel function
-uninterrupted and awaits further work.  In the case of a cooperative
-kernel, the workgroup either starts from the kernel entry point,
-corresponding to the workgroup being an \emph{initial} workgroup of
-the kernel, or immediately jumps to a designated point within the
-cooperative kernel, corresponding to the workgroup being forked by an
-already executing workgroup.  In the latter case, the new workgroup
-also receives a struct containing the values of all relevant
-$\transmit$-annotated variables.
+Instead of multitasking multiple separate kernels, we merge a set of
+kernels into a megakernel---a single, monolithic kernel.  The
+megakernel is launched with as many workgroups as can be occupant
+concurrently.  One workgroup takes the role of scheduler, and the
+scheduling logic is embedded as part of the megakernel.  The remaining
+workgroups act as a pool of workers.  A worker repeatedly queries the
+scheduler to be assigned a task.  A task corresponds to executing a
+cooperative or non-cooperative kernel.  In the non-cooperative case,
+the workgroup executes the relevant kernel function uninterrupted,
+then awaits further work.  In the cooperative case, the workgroup
+either starts from the kernel entry point or immediately jumps to a
+designated point within the kernel, depending on whether the workgroup
+is an initial workgroup of the kernel, or a forked workgroup.  In the
+latter case, the new workgroup also receives a struct containing the
+values of all relevant $\transmit$-annotated variables.
 
 \paragraph{Simplifying assumptions}
 
@@ -1089,14 +1086,13 @@ implementation to piggy-back on top of Clang (see below) without
 requiring front-end changes.  Finally, we require that $\offerkill$,
 $\offerfork$ and $\resizingglobalbarrier$ are called from the entry
 function of a cooperative kernel.  This allows us to use
-$\keyword{goto}$ to direct threads joining the cooperative kernel to
-the appropriate location, and $\keyword{return}$ to force threads to
-leave the computation.  These restrictions still allow us to
-experiment with interesting irregular algorithms (see
-\mysec\ref{sec:experiments}), and could all be removed with
-engineering effort, but this effort might not be well invested since a
-full implementation of coopeartive kernels would not use the
-megakernel approach we present here.
+$\keyword{goto}$ and $\keyword{return}$ to direct threads into and out
+of the kernel.  With these restrictions we can experiment
+with interesting irregular algorithms (see
+\mysec\ref{sec:experiments}).  A non-mock implementation of
+coopeartive kernels would not use the megakernel approach, so we do not deem
+the engineering effort associated with lifting these restrictions to
+be worthwhile.
 
 \paragraph{Merging kernels}
 
@@ -1108,45 +1104,44 @@ leveraging recent Clang support for OpenCL 2.0~\cite{ClangOpenCL20}.
 \subsection{Scheduler design}\label{sec:resizingbarrier}\label{sec:schedulerimpl}
 
 To enable multitasking through cooperative kernels, the runtime (in
-our case, the mega-kernel), must (a) track the state of all
-workgroups, i.e.\ if a workgroup is waiting or computing a kernel, (b)
-maintain consistent context states for each kernel, e.g.\ the number
-of active workgroups computing a cooperative kernel, and (c) provide a
-safe way for these states to be modified in response to $\offerfork$ and $\offerkill$. We now discuss these issues in more detail.
+our case, the mega-kernel) must track the state of all
+workgroups, i.e.\ whether a workgroup is waiting or computing a kernel,
+maintain consistent context states for each kernel, e.g.\ tracking the number
+of active workgroups, and provide a
+safe way for these states to be modified in response to $\offerfork$/$\offerkill$. We discuss these issues,
+and describe the implementation of an efficient resizing barrier.
 
-\paragraph{Kernel context}
+We describe how the scheduler would handle arbitrary
+combinations of kernels, though as noted above our current
+implementation is restricted to the case of two kernels.
+
+\paragraph{Kernel and scheduler contexts}
 
 When a workgroup executes a kernel (cooperative or otherwise), it must
 be able to query a consistent context to obtain a workgroup id value
 and the
-number of workgroups executing the kernel. In single kernel execution,
-the OpenCL primitives $\getnumgroups()$ and $\getgroupid()$ provide this functionality natively. For multiple
-kernel execution, we emulate these primitives via a per kernel \emph{context}, containing, for a given kernel: the number of active groups $M$, the total number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
-id valid for the kernel.  In the case of a non-cooperative kernel, $M$ is undefined because the notion of active workgroups is not relevant.
-
-\paragraph{Scheduler context}
+number of workgroups executing the kernel. For multi-kernel
+kernel execution, we emulate the $\getnumgroups$ and $\getgroupid$ 
+primitives via a per kernel \emph{context}.  For a given kernel this records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the total number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
+id valid for the kernel.
 
 To dynamically manage workgroups executing cooperative
 kernels, our framework must track the state of each workgroup and
-provide a channel of communication from the scheduler to
+provide a channel of communication from the scheduler workgroup to
 workgroups executing $\offerfork$ and $\offerkill$. To achieve this,
-we use a \emph{scheduler context} structure, mapping a primitive workgroup id the workgroup's status, which is either \emph{available}, or the id of the kernel that the workgroup is currently executing.  The scheduler can then send cooperative
-kernels a \emph{resource message}, commanding workgroups executing
-the kernel to exit at $\offerkill$, or 
+we use a \emph{scheduler context} structure, mapping a primitive workgroup id the workgroup's status, which is either \emph{available} or the id of the kernel that the workgroup is currently executing.  The scheduler can then send cooperative
+kernels a \emph{resource message}, commanding workgroups to exit at $\offerkill$, or 
 spawn additional workgroups at $\offerfork$. Thus, the
 scheduler context needs a communication channel for each cooperative
-kernel. In our case, the communication channel is implemented using
-global atomic variables.
+kernel. We implement the communication channels using atomic variables in global memory.
 
-\paragraph{Launching kernels}
+\paragraph{Launching kernels and managing workgroups}
 
 To launch a kernel, the host sends a data packet to the GPU
-consists of: a kernel to execute, the inputs to the kernel, the
+consisting of: a kernel to execute, the inputs to the kernel, the
 number of workgroups that should execute the kernel, and a flag indicating whether the kernel
-is cooperative. In our implementation, this communication channel
-between host and device is achieved through fine-grained SVM atomics.
+is cooperative. In our implementation, this host-device communication channel is built using fine-grained SVM atomics.
 
-\paragraph{Dynamically managing workgroups}
 On receiving a data packet from the host
 describing a kernel launch $K$, the GPU scheduler must make decisions
 about how to schedule $K$. Suppose $K$ requests
