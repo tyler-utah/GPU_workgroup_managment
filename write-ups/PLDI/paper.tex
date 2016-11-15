@@ -1631,22 +1631,44 @@ directly in the GPU driver.
 
 \subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
-\ADComment{Preamble}
+Cooperative scheduling enables to run a non-cooperative kernel alongside
+a cooperative one, we focus here on the performance impact of this
+multitasking and on the scheduling responsiveness. The performance is
+measured with respect to the performance of each kernel run in
+sequence. Responsiveness, i.e., how fast can a non-cooperative kernel
+can be scheduled, depends not only on the scheduler implementation, but
+also on how often the cooperative kernel offer workgroups to be killed.
 
-\HEComment{Below, just random notes so far}
+% In order to simulate non-persistent workloads alongside kernels of
+% blocking algorithms, we use a matrix multiplication kernel where
+% matrix dimensions are tuned to trigger the relevant execution
+% duration.
 
-Cooperative scheduling enables to concurrently run non-persistent
-kernels alongside blocking ones. In terms of performance, we are
-interested to see whether the variations of workgroups for the blocking
-kernel.
+\paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
 
-Performance of cooperative scheduling corresponds to execution time of
-cooperative kernels compared to the serial
+For a given cooperative kernel and its data set, we make it run while
+regularly asking to schedule a non-cooperative kernel that simulates
+graphics rendering, according to the classes listed in
+\mytab~\ref{tab:noncooperativeworkload}. In practice, we use a matrix
+multiplication kernel as the non-cooperative workload, with matrix
+dimensions tailored for each GPU to reach the appropriate execution
+duration when this non-cooperative kernel have access to all available
+workgroups. Besides, we have different run where the non-cooperative
+kernel is scheduled with different number of workgroups: either 1, a
+quarter, a half or all but one workgroups among the ones available for
+the cooperative kernel. Moreover, in graph algorithms we try both the
+regular and the query barrier.
 
-In order to simulate non-persistent workloads alongside kernels of
-blocking algorithms, we use a matrix multiplication kernel where
-matrix dimensions are tuned to trigger the relevant execution
-duration.
+Our experiments span 13 pairs of cooperative kernels and data sets, 3
+classes for the non-cooperative kernel, 4 quantities of workgroups
+claimed for the non-cooperative kernel and 2 variations of resizing
+barriers for graph algorithms, leading to 288 configurations.
+
+A run is characterized by the cooperative kernel, its data set, the
+non-cooperative kernel, its size, the number of workgroups we ask for
+the non-cooperative kernel. This forms a configuration.
+
+For each GPU, we first 
 
 we compare :
 
@@ -1660,9 +1682,31 @@ also, response time for non-persistent
 
 use matmult to represent system workload, ref to previous section
 
-\paragraph{Experimental setup}  \ADComment{Describe the data we are gathering.}
+run cooperative kernels and fire non-cooperative kernels regularly,
+asking for different number of workgroups
+
+explain gather time, execution time. related to responsiveness and
+performance
+
+explain query barrier, or mention the results with / without query
+barriers.
+
+recall 10 runs for each configurations. How many configurations ?
+
+Mention that some configuration failed.
+
+We check correctness (completion) of both kernels. Some errors
+sometimes.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
+explain horizontal lines 
+
+missing results for all but one in bfs rmat22 since errors
+
+also, high gather time corresponds to applications and data sets where
+resize/kill is triggered less often.
+
+Each configuration was run 10 times on each GPU.
 
 \begin{figure*}
 \includegraphics[width=.7\columnwidth]{iris_octree_NA.pdf} 
