@@ -1750,10 +1750,12 @@ workgroups that should execute the cooperative kernel, a \emph{kernel
 (\sigma, (w_0, \dots, w_{M-1}, \underbrace{\bot, \dots,
 \bot}_{N-M}))\]
 %
-where: $\sigma$ represents the shared state of the kernel; $M
-\leq N$ is the number of \emph{active} workgroups; $w_i$ is the
-workgroup state for active workgroup $i$ ($0 \leq i < M$); and $N-M$
-occurrences of $\bot$ indicate \emph{absent} workgroups.  Let $\sharedstates$ denote the set of all possible shared states.
+where: $\sigma$ represents the shared state of the kernel; $M \leq N$
+is the number of \emph{active} workgroups; $w_i$ is the workgroup
+state for active workgroup $i$ ($0 \leq i < M$); and $N-M$ occurrences
+of $\bot$ indicate \emph{absent} workgroups.  Let $\sharedstates$
+denote the set of all possible shared states.  We regard
+workgroup-local storage as being part of the shared state of a kernel.
 
 \paragraph{Thread-level transitions}
 
@@ -1857,11 +1859,11 @@ k \in [0, N - M]
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \globalbarrier();\myss)
 \\
 \forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \myss)
-\\
+\\\\
 \kappa \in \sync((\sigma , (w_{0}', \dots, w_{M-1}', \bot, \dots, \bot))
 }
 {
-(\sigma, (w_{0}, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow \kappa)
+(\sigma, (w_{0}, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow \kappa
 }
 (\textsc{Barrier})
 \]
@@ -1897,7 +1899,8 @@ states.
 Rule $\textsc{Thread-Step}$ defines the semantics for thread making a
 single execution step, delegating to the abstract $\rightarrow_{\tau}$
 relation to determine how the thread's local state and the shared
-state component change.
+state component change.  For simplicity, this rule ignores the
+semantics of intra-workgroup barriers, which are not our focus here.
 
 Rule $\textsc{Kill-No-Op}$ reflects the fact that when a workgroup
 reaches $\offerkill$, this can always be treated as a no-op.  Whether
@@ -1946,15 +1949,16 @@ memory component of a thread state to be split into two: the part of
 the local state to be transmitted (modelling $\transmit$-annotated
 variables), and the rest of the local state.
 
-\ADComment{TODO: $\textsc{Barrier}$}
+The $\textsc{Barrier}$ rule requires that \emph{every} thread
+executing the kernel reaches $\globalbarrier()$ an identical following
+statement.  This reflects that fact that $\globalbarrier()$ is a
+kernel-level function.  Each thread then skips over the
+$\globalbarrier()$ call, and the $\sync$ function is applied to yield
+a set of kernel states that can arise due to memory synchronization
+taking place.  An arbitary member of this set is selected as the next
+kernel state.
 
-\ADComment{TODO: $\textsc{Resizing-Barrier}$}
-
-
- \ADComment{Local memory is not
-  explicitly modeled but can be captured inside shared state.}
-\ADComment{Semantics for intra-workgroup barriers are ignored.}
-
+Despite its apparent complexity, the $\textsc{Resizing-Barrier}$ rule simply implements the rewriting of $\resizingglobalbarrier$ in terms of $\globalbarrier$, $\offerkill$ and $\offerfork$ discussed in \mysec\ref{ }.
 
 
 \section{Alternative Semantic Choices}\label{appendix:semanticalternatives}
