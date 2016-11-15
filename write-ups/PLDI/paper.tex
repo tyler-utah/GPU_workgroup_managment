@@ -176,6 +176,7 @@
 
 \maketitle
 
+\vspace{-3mm}
 \begin{abstract}
 There is growing interest in accelerating irregular data-parallel
 algorithms on GPUs.  These algorithms are typically \emph{blocking},
@@ -228,6 +229,7 @@ another workgroup to spin-wait forever for the mutex to be
 released.  Similarly, an unfair scheduler can cause a workgroup to spin-wait
 indefinitely at a global barrier so that other workgroups do not reach the barrier.
 
+\vspace{-1mm}
 \paragraph{A degree of fairness: occupancy-bound execution}
 GPU schedulers are \emph{not} fair. The current GPU
 programming models---OpenCL~\cite{opencl2Spec}, CUDA~\cite{cuda-75}  and
@@ -259,6 +261,7 @@ no more workgroups than there are available compute
 units~\cite{owens-persistent}. This works because \emph{today}'s GPUs seem to provide the
 occupancy-bound execution model.
 
+\vspace{-1mm}
 \paragraph{Resistance to guaranteeing occupancy-bound execution}
 
 Despite its practical prevalence, none of the current GPU programming
@@ -297,6 +300,7 @@ retain the essence of the simple occupancy-bound model, supporting preemption
 only in key special cases.
 
 
+\vspace{-1mm}
 \paragraph{Our proposal: cooperative kernels}
 %
 To summarise: blocking algorithms
@@ -374,20 +378,9 @@ GPU-accelerated irregular algorithms to use cooperative kernels
 (\mysec\ref{sec:portingalgorithms}) suggests that this is straightforward in practice.
 
 In summary, our main contributions are:
-
-\vspace{-1mm}
-\begin{itemize}
-
-\item \emph{Cooperative kernels}, an extended GPU programming model that support the scheduling requirements of blocking algorithms (\mysec\ref{sec:cooperativekernels}). 
-
-\item A proof-of-concept portable implementation of cooperative
+\emph{cooperative kernels}, an extended GPU programming model that supports the scheduling requirements of blocking algorithms (\mysec\ref{sec:cooperativekernels}); a \emph{proof-of-concept implementation} of cooperative
   kernels on top OpenCL 2.0
-  (\mysec\ref{sec:implementation}).
-
-\item Experimental results assessing the overhead and responsiveness of the cooperative kernels approach over a set of irregular algorithms across three GPUs (\mysec\ref{sec:experiments}).
-
-\end{itemize}
-\vspace{-1mm}
+  (\mysec\ref{sec:implementation}); \emph{experimental results} assessing the overhead and responsiveness of the cooperative kernels approach over a set of irregular algorithms across three GPUs (\mysec\ref{sec:experiments}).
 
 We begin by providing background on OpenCL via two motivating examples (\mysec\ref{sec:background}).  At the end we discuss related work (\mysec\ref{sec:relatedwork}) and avenues for future work (\mysec\ref{sec:conclusion}).
 
@@ -1185,50 +1178,50 @@ of a series of calls to $\globalbarrier$, $\offerfork$ and $\offerkill$.
  It is possible, however to implement the resizing with
 only one call to a global barrier with $\offerfork$ and $\offerkill$
 baked into the implementation. \TSComment{note here that these
-  implementations require no cfork or ckill outside of the barrier}
+  implementations require no cfork or ckill outside of the barrier} \ADComment{Ignore until camera-ready?}
 
-We consider barriers which have the master/slave model
-(e.g.\ \cite{XF10}). That is, one workgroup (the master) collects signals
+We consider barriers that use the master/slave model
+(e.g.\ \cite{XF10}): one workgroup (the master) collects signals
 from the other workgroups (the slaves) indicating that they have
 arrived at the barrier and are waiting for a reply indicating that
 they may leave the barrier. Once the master has recieved a signal from
 all the slaves, it replies with a signal saying that the slaves may
 leave. \TSComment{Need to discuss new active workgroup number that
-is stable across iterations}
+is stable across iterations} \ADComment{Again, ignore until camera-ready?}
 
 A first-attempt at incorporating $\offerfork$ and $\offerkill$ into
 such a barrier is straight forward. Upon entering the barrier, the
 slaves first execute $\offerkill$, possibly exiting. The master then
 waits for $M$ slaves (the number of active workgroups), which may
-decrease, (based on the $\offerkill$ instructions executed by the
-slaves), but will not increase. Once the master observes $M$ slaves
-have arrived, it knows all other workgroups are in the kernel are
-spinning, waiting to be released. The master executes $\offerfork$,
-where there is a conditional for the potentially newly spawned threads
-to join the other slaves waiting to be released. Finally, the master
+decrease due to $\offerkill$ calls by the
+slaves, but will not increase. Once the master observes that $M$ slaves
+have arrived, it knows that all other workgroups are spinning, waiting to be released. The master executes $\offerfork$,
+and the statement immediately following this $\offerfork$ is a conditional that forces newly spawned workgroups to join the
+slaves in waiting to be released. Finally, the master
 releases all the slaves: the original slaves and the new slaves that
 joined at $\offerfork$.
 
-While this barrier implementation works, it has its flaws. Workgroups
-only execute $\offerkill$ once per global barrier call. Depending on
+This barrier implementation is suboptimal becuase workgroups only
+execute $\offerkill$ once per global barrier call and, depending on
 the order in which workgroups arrive at the barrier, it is possible
-that only one workgroup is killed per barrier call which could lead to
-a high time for the scheduler to gather the sufficient amount of
-workgroups to execute another kernel concurrently.
+that only one workgroup is killed per barrier call.  This may not
+allow the scheduler to gather workgroups required to execute another
+task in a timely fashion.
 
-We observe if we provide an additional scheduler functionality for a
-workgroup executing a cooperative kernel, we can greatly reduce the
-gather time. We call the new function {\tt query()}. The semantics
-simply return the number of workgroups that the scheduler requires to
-kill from the cooperative kernel. A new barrier can now be implented
-as follows: (1) Master waits for all slaves; (2) Master forks and sets
-new workgroups as slaves. (3) Master calls {\tt query()} and gets
-value $W$; (4) master releases slaves and broadcasts the value from
-{\tt query} to slaves. (5) Workgroups with id greater than $M-W$ spin
-on $\offerkill$, as they know from {\tt query()} that the scheduler
-needs them to exit. We show in \mysec\ref{sec:responsiveness} that the barrier using
+We can greatly reduce the gather time by providing a new $\keyword{query}()$
+function for a workgroup executing a cooperative kernel, which returns the number of workgroups that the scheduler needs to obtained
+from the cooperative kernel.  
+%
+The programmer cannot call $\keyword{query}$ directly;
+it is only invoked from within the resizing barrier implementation.
+%
+A resizing barrier can now be implemented
+as follows: (1) the master waits for all slaves to arrive; (2) the master calls $\offerfork$ and
+commands the new workgroups to be slaves; (3) the master calls $\keyword{query}$, obtaining a value $W$;
+(4) the master releases the slaves, broadcasting the value $W$ to them; (5) workgroups with ids larger than $M-W$ spin, calling 
+$\offerkill$ repeatedly until the scheduler claims them---we know from $\keyword{query}$ that the scheduler will eventually do so.
+We show in \mysec\ref{sec:responsiveness} that the barrier using
 query greatly reduces the gather time in practice.
-
 
 
 \section{Applications and Experiments}\label{sec:experiments}
@@ -1686,29 +1679,25 @@ This is in contrast to our cooperative kernels, which specifically aim to suppor
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
 
-We have proposed \emph{cooperative kernels}, a small set of extensions
-to the GPUP programming model that allow long-running, blocking
-kernels to be fairly scheduled and to share GPU resources with other
-workloads via multitasking.  Our prototype implementation uses a
-megakernel to mock up the environment in which a cooperative kernel
-would run if native support for our programming model was provided.
-Our experimental results over three Intel GPUs show that the
-programming model is a good fit for the needs of current irregular
-algorithms that operate on graphs and use work stealing.  The
+We have proposed \emph{cooperative kernels}, a small set of GPU
+programming extensions that allow long-running, blocking kernels to be
+fairly scheduled and to share GPU resources with other workloads.
+Experimental results using our megakernel-based prototype over three
+Intel GPUs shows that the model is a good fit for the needs of current
+GPU-accelerated irregular algorithms.  The
 performance that could be gained through a native implementation with
 dedicated driver support would be even better.
 
-There are three main avenues for future work at present: seeking out
-additional classes of irregular algorithms that would benefit from GPU
-acceleration using cooperartive kernels, investigating providing
-native driver support for cooperative kernels in an open source
-graphics driver, and integrating cooperative kernels into the back-end
-of a compiler that generates irregular OpenCL from a higher-level DSL,
-e.g.\ an OpenCL version of a recent compiler for graph algorithms that
-targets CUDA~\cite{DBLP:conf/oopsla/PaiP16}.  Longer-term, as more
-vendors adopt the advanced features of OpenCL that our approach
-requires, we will be in a position to assess the programming model
-across a wider range of devices.
+There are three main avenues for future work at present: seeking
+additional classes of irregular algorithms to which the model might
+(be extended to) apply (to), investigating native driver support for
+cooperative kernels via open source graphics drivers, and integrating
+cooperative kernels into template- and compiler-based programming
+models for graph algorithms on
+GPUs~\cite{SreesCompetition,DBLP:conf/oopsla/PaiP16}.  As more vendors
+adopt the advanced features of OpenCL that our approach requires, we
+will be in a position to assess the programming model across a wider
+range of devices.
 
 \clearpage
 
