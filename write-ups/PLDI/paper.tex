@@ -1321,8 +1321,6 @@ Host CPU & i3-6100U & i7-5600U & i3-5157U \\
 
 \subsection{Sizing Non-Cooperative Kernels}\label{sec:sizingnoncoop}
 
-\ADComment{Refer back to nonfunctional requirements section, \mysec\ref{sec:nonfunctional}.}
-
 Enabling rendering of smooth graphics in parallel with execution of irregular algorithms is an important use case for our approach.  Because our prototype implementation is based on a mega-kernel that takes over the entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this use case directly.
 
 As a proxy for genuine graphics rendering, we devised the following
@@ -1488,8 +1486,6 @@ these results as encouraging, especially since the performance of our
 prototype could clearly be improved upon if cooperative scheduling was
 implemented directly in the GPU driver.
 
-\ADComment{Can we remark a bit more on the outliers?}
-
 \subsection{Multitasking via Cooperative Scheduling}\label{sec:responsiveness}
 
 We now assess the responsiveness of multitasking between a long-running cooperative kernel and a series of
@@ -1600,10 +1596,10 @@ number of workgroups that needs to be collected.
 \end{figure}
 
 
-\paragraph{Performance} \ADComment{I don't think it's clear how overhead is computed; we need to make it clear that it is a slow-down.  Let's discuss.}
+\paragraph{Performance} 
 \myfiglong\ref{fig:performance} reports, for the Iris GPU, the overhead brought by the scheduling of
-non-cooperative kernels over the cooperative kernel execution time (geometric mean over all applications and inputs), along with the period (aritmetic mean over all applications
-and inputs) at which non-cooperative kernels can be scheduled.
+non-cooperative kernels over the cooperative kernel execution time.  This is the slowdown associated with running the cooperative kernel in the presence of multitasking, vs.\ running the cooperative kenrel in isolation (geometric mean over all applications and inputs).  We also show the period at which non-cooperative kernels can be scheduled (aritmetic mean over all applications
+and inputs).
 The results for the other GPUs are similar and are graphed in Appendix~\ref{appendix:extraperformance} (supplementary material).
  We show
 results for the three workloads listed in
@@ -1627,13 +1623,13 @@ averages \~10\% over its goal period (mean of 44 ms). If asking for all-but-one,
 Yet, as expected, allocating more non-cooperative workgroups increases
 the execution time overhead of the cooperative kernel.
 
-Still the heavy
+Still, the heavy
 workloads meet their period (by allocating all-but-one workgroup for
 non-cooperative kernels), incurring a slow down of less than 1.4$\times$ on average. Light
 and medium workloads meet their period with only a negligable overhead
 of the cooperative kernel (less than a 1.03$\times$ slowdown on average).
 
-Overall we are encouraged by our experimental findings, which provide a lower bound on potential performance of our coperative kernels model: implementing the model natively, with device-specific runtime support, could only improve performance and responsiveness compared with that of our megakernel-based prototype.
+Overall we are very encouraged by these experimental findings, especially since they provide a lower bound on potential performance of our coperative kernels model. Implementing the model natively, with device-specific runtime support, could only improve performance and responsiveness compared with that of our megakernel-based prototype.
 
 \section{Related Work}\label{sec:relatedwork}
 
