@@ -1491,6 +1491,93 @@ use matmult to represent system workload, ref to previous section
 
 \section{Related Work}\label{sec:relatedwork}
 
+\paragraph{Irregular algorithms and persistent kernels}
+
+There has been a lot of work on accelerating blocking irregular
+algorithms using GPUs~\cite{...}, and on the \emph{persistent threads}
+programming style for long-running kernels~\cite{...}.  These
+approaches rely on the occupancy-bound execution model, and aim to
+take ownership of the GPU by scheduling as many workgroups as the GPU
+has compute units, relying on fair scheduling between these
+workgroups.  This means the GPU is unavailable for other tasks, and
+the method is not future-proof because (as discussed throughout the
+paper) the occupancy-bound execution model is not guaranteed by GPU
+programming models and is unlikely to be guaranteed in practice by
+future GPU platforms.
+
+As we have demonstrated for a representative set of irregular
+algorithms, our cooperative kernels model allows blocking algorithms
+to be upgraded to run under a fair scheduler in a manner that, with
+appropriate care, facilitates responsive multi-tasking.
+
+\paragraph{Preemptive multitasking on GPUs}
+
+Hardware support for preemptive multitasking for \nvidia GPUs has been
+proposed, enabling full preemption as well as \emph{SM-draining},
+whereby workgroups occupying a symmetric multiprocessor (SM; a compute
+unit using our terminology) are drained until the SM becomes free for
+other tasks.  A follow-up work adds the notion of SM \emph{flushing},
+whereby a workgroup running on an SM can be cancelled and re-scheduled
+from scratch if the workgroup has not yet committed any visible
+side-effects to shared memory.  Both approaches have been evaluated
+using simulators, over sets of regular GPU kernels.
+
+The advantages of these approaches are that they do not require manual
+programmer effort, and the capability to fully preempt a workgroup
+guards against a rogue long-running kernel making the GPU unavailable
+for other tasks.  The drawbacks are that (a) because preemption is
+enabled by default, \emph{every} kernel takes a potential performance
+hit, and (b) the SM draining optimisation does not help in the case of
+blocking algorithms (not considered in these works), since a blocked
+workgroup cannot be drained.
+
+Our solution does not impose a performance penalty on non-cooperative
+kernels, which run in an unmodified manner, and careful placement of
+our new language primitives that exploit the structure of a
+cooperative kernel may enable more efficient multi-tasking than
+kernel-oblivious preemption.
+
+\paragraph{GPU multitasking}
+%
+\cite{DBLP:journals/tog/SteinbergerKBKDS14} \ADComment{Shows how to
+  keep a GPU busy by flooding it with work.  Would absolutely not
+  stand up to preemption.}
+
+\cite{DBLP:conf/usenix/KatoLRI11} \ADComment{Idea seems to be to
+  accept that GPUs do not offer epreemption, but find a reasonable way
+  to schedule tasks to maximise responsiveness or throughput.}
+
+\paragraph{Preemption support for GPUs}
+%
+\cite{DBLP:conf/asplos/ParkPM15} \ADComment{Investigates how one might
+  implement preemption, i.e.\ shows that it can be achieved.
+  Simulator only preemption.  Not sure whether their approach would
+  give fair scheduling.}
+%
+Proposals to implement preemption, but these require hardware support and may be overkill.  Advantage: fully automatic; disadvantage: doesn't capture domain knowledge.
+%
+\ADComment{Kepler preemption support?  Mention in related work?}
+
+\ADComment{Sreepathi mentioned the NCCL framework.}
+
+
+Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
+
+\cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
+  SMs, not to workgroups, so that tasks that would benefit from being
+  processed by the same SM can be scheduled to the same SM.  Has
+  little to do with preemption, but more to do with irregular
+  computation.}
+
+\cite{DBLP:conf/isca/TanasicGCRNV14} \ADComment{I have not read, but
+  it's about enabling preemptive multiprogramming, so we should read
+  it carefully.}
+
+\cite{DBLP:conf/ppopp/Muyan-OzcelikO16} \ADComment{I have not read; we
+  should understand this one carefully.}
+
+\paragraph{Cooperative multitasking}
+
 \HEComment{cooperative multitasking: OS: RISC OS, IBM CICS, Windows
   before 95, old MacOS, maybe Oberon? TRON?. In GPU context: some
   paper mention ``cooperative'' multitasking but they simply refer to
@@ -1541,59 +1628,6 @@ where the long-running application is never totally stopped.
 % smaller independent kernels, and fires them at regular intervals to
 % let the system be responsive.
 
-\paragraph{Irregular algorithms and persistent kernels}
-%
-There has been a lot of work on accelerating blocking irregular
-algorithms using GPUs~\cite{...}, and on the \emph{persistent threads}
-programming style for long-running kernels.  These approaches rely on
-the occupancy-bound execution model, and aim to take ownership of the
-GPU by scheduling as many workgroups as the GPU has compute units,
-relying on fair scheduling between these workgroups.  These approaches
-render the GPU unavailable for other tasks, and are not future-proof
-because (as discussed throughout the paper) the occupancy-bound
-execution model is not guaranteed by GPU programming models and is
-unlikely to be guaranteed in practice by future GPU platforms.
-%
-\ADComment{Now say that we could update these approaches to use cooperation.}
-
-\paragraph{GPU multitasking}
-%
-\cite{DBLP:journals/tog/SteinbergerKBKDS14} \ADComment{Shows how to
-  keep a GPU busy by flooding it with work.  Would absolutely not
-  stand up to preemption.}
-
-\cite{DBLP:conf/usenix/KatoLRI11} \ADComment{Idea seems to be to
-  accept that GPUs do not offer epreemption, but find a reasonable way
-  to schedule tasks to maximise responsiveness or throughput.}
-
-\paragraph{Preemption support for GPUs}
-%
-\cite{DBLP:conf/asplos/ParkPM15} \ADComment{Investigates how one might
-  implement preemption, i.e.\ shows that it can be achieved.
-  Simulator only preemption.  Not sure whether their approach would
-  give fair scheduling.}
-%
-Proposals to implement preemption, but these require hardware support and may be overkill.  Advantage: fully automatic; disadvantage: doesn't capture domain knowledge.
-%
-\ADComment{Kepler preemption support?  Mention in related work?}
-
-\ADComment{Sreepathi mentioned the NCCL framework.}
-
-
-Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
-
-\cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
-  SMs, not to workgroups, so that tasks that would benefit from being
-  processed by the same SM can be scheduled to the same SM.  Has
-  little to do with preemption, but more to do with irregular
-  computation.}
-
-\cite{DBLP:conf/isca/TanasicGCRNV14} \ADComment{I have not read, but
-  it's about enabling preemptive multiprogramming, so we should read
-  it carefully.}
-
-\cite{DBLP:conf/ppopp/Muyan-OzcelikO16} \ADComment{I have not read; we
-  should understand this one carefully.}
 
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
