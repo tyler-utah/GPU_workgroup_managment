@@ -207,7 +207,7 @@ Many
 interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
 by the computation itself.  There is growing interest in accelerating such algorithms on GPUs, particularly algorithms that
-traverse and manipulate linked data structures~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10,BNP12,Pannotia}.
+traverse and manipulate linked data structures~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
@@ -528,7 +528,7 @@ of GPUs, each workgroup has an associated queue from which it
 obtains tasks to process, and to which it stores newly created
 tasks. If a workgroup's queue is empty, the workgroup tries to \emph{steal} a task from an other
 queue. Previous work addresses the feasibility and efficiency of work
-stealing on GPUs~\cite{dlb-web,TPO10}.
+stealing on GPUs~\cite{DBLP:conf/egh/CedermanT08,TPO10}.
 
 \myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
 kernel that uses a work stealing queue. Each thread receives a pointer to the task
@@ -1593,7 +1593,7 @@ Each configuration was run 10 times on each GPU.
 
 There has been a lot of work on accelerating blocking irregular
 algorithms using GPUs, and on the \emph{persistent threads}
-programming style for long-running kernels~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10,BNP12,Pannotia}.  These
+programming style for long-running kernels~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.  These
 approaches rely on the occupancy-bound execution model, and aim to
 take ownership of the GPU by scheduling as many workgroups as the occupancy bound allows, relying on fair scheduling between these
 workgroups.  This means the GPU is unavailable for other tasks, and
@@ -1694,11 +1694,29 @@ This is in contrast to our notion of cooperative kernels, which is designed spec
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
 
-\ADComment{Do citation tidy-up.}
+We have proposed \emph{cooperative kernels}, a small set of extensions
+to the GPUP programming model that allow long-running, blocking
+kernels to be fairly scheduled and to share GPU resources with other
+workloads via multitasking.  Our prototype implementation uses a
+megakernel to mock up the environment in which a cooperative kernel
+would run if native support for our programming model was provided.
+Our experimental results over three Intel GPUs show that the
+programming model is a good fit for the needs of current irregular
+algorithms that operate on graphs and use work stealing.  The
+performance that could be gained through a native implementation with
+dedicated driver support would be even better.
 
-\ADComment{Next-generation GPUs and drivers for evaluation,
-  implementation in a real driver, migration of work between multiple
-  GPUs.}
+There are three main avenues for future work at present: seeking out
+additional classes of irregular algorithms that would benefit from GPU
+acceleration using cooperartive kernels, investigating providing
+native driver support for cooperative kernels in an open source
+graphics driver, and integrating cooperative kernels into the back-end
+of a compiler that generates irregular OpenCL from a higher-level DSL,
+e.g.\ an OpenCL version of a recent compiler for graph algorithms that
+targets CUDA~\cite{DBLP:conf/oopsla/PaiP16}.  Longer-term, as more
+vendors adopt the advanced features of OpenCL that our approach
+requires, we will be in a position to assess the programming model
+across a wider range of devices.
 
 \clearpage
 
