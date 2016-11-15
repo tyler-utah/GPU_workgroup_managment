@@ -56,6 +56,8 @@
 %\newcommand{\COULDCUT}[1]{\textcolor{blue}{#1}}
 \newcommand{\TSComment}[1]{\textcolor{purple}{TS: #1}}
 
+\newcommand{\KC}{\mathit{KC}}
+
 \newcommand{\myfig}{Fig.~}
 \newcommand{\myfiglong}{Figure~}
 \newcommand{\myfigs}{Figs.~}
@@ -1131,104 +1133,63 @@ written in a persistent thread style}
 
 To enable multitasking through cooperative kernels, the runtime (in
 our case, the mega-kernel), must (a) track the state of all
-workgroups, i.e.\ if a workgroup is waiting or computing a kernel (b)
-maintain consistent context states for each kernel, i.e.\ the number
-of active workgroups computing a cooperative kernel and (c) provide a
-safe way for these states to be modified (according to the semantics
-of $\offerfork$ and $\offerkill$. We discuss how that is achieved
-here.
+workgroups, i.e.\ if a workgroup is waiting or computing a kernel, (b)
+maintain consistent context states for each kernel, e.g.\ the number
+of active workgroups computing a cooperative kernel, and (c) provide a
+safe way for these states to be modified in response to $\offerfork$ and $\offerkill$. We now discuss these issues in more detail.
 
 \paragraph{Kernel context}
 
 When a workgroup executes a kernel (cooperative or otherwise), it must
 be able to query a consistent context to obtain a workgroup id value
-(starting from zero up to the number of executing workgroups) and the
+and the
 number of workgroups executing the kernel. In single kernel execution,
-the OpenCL primitives {\tt get\_num\_groups()} and {\tt
-  get\_group\_id()} provide this functionality natively. For multiple
-kernel execution, we must emulate these primitives, per kernel,
-explicitly through \emph{kernel contexts}. This structure contains:
-(a) the number of active groups, (b) the total number of groups asked
-for, and (c) a mapping from the native workgroup id to a new workgroup
-id valid for a particular kernel. Our framework requires the native
-kernel context (to obtain a global base workgroup id) as well as an
-additional distinct kernel context for each kernel running
-concurrently. \TSComment{a driver implementation would likely generate
-these on the fly}.
+the OpenCL primitives $\getnumgroups()$ and $\getgroupid()$ provide this functionality natively. For multiple
+kernel execution, we emulate these primitives via a per kernel \emph{context}, containing, for a given kernel: the number of active groups $M$, the total number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
+id valid for the kernel.  In the case of a non-cooperative kernel, $M$ is undefined because the notion of active workgroups is not relevant.
 
 \paragraph{Scheduler context}
 
-In order to dynamically manage workgroups executing cooperative
-kernels, our framework must (a) track the state of each workgroup and
-(b) provide a channel of communication from the scheduler to
+To dynamically manage workgroups executing cooperative
+kernels, our framework must track the state of each workgroup and
+provide a channel of communication from the scheduler to
 workgroups executing $\offerfork$ and $\offerkill$. To achieve this,
-we use a \emph{Scheduler context} structure which contains a mapping
-from primitive workgroup ids to their state i.e.\ waiting or computing
-a kernel as well as an integer value describing the number of
-workgroups in each state. The scheduler can then send cooperative
-kernels a \emph{resource message}, indicating if workgroups executing
-the cooperative kernel need to (a) exit at $\offerkill$ or (b)
-transmit their state to forking workgroups at $\offerfork$. Thus, the
+we use a \emph{scheduler context} structure, mapping a primitive workgroup id the workgroup's status, which is either \emph{available}, or the id of the kernel that the workgroup is currently executing.  The scheduler can then send cooperative
+kernels a \emph{resource message}, commanding workgroups executing
+the kernel to exit at $\offerkill$, or 
+spawn additional workgroups at $\offerfork$. Thus, the
 scheduler context needs a communication channel for each cooperative
 kernel. In our case, the communication channel is implemented using
-global atomic variables and OpenCL atomic operations to ensure
-consistency.
+global atomic variables.
 
 \paragraph{Launching kernels}
 
-As in native OpenCL, the host maintains the ability to launch kernels.
-In our framework, the host has the additional ability to request that
-a kernel be cooperative \emph{and} to specify the amount of
-\emph{resource} each kernel requires. In our implementation, the only
-resource we have explicit control over is the number of concurrently
-executing workgroups; implementations closer to metal might also
-consider local memory and registers as resource.
-
-To launch a kernel, the host sends a data packet to the GPU, which
-consists of: a kernel to execute, the inputs to the kernel, the amount
-of resource to use for the kernel (which includes the number of
-workgroups to execute the kernel), and a flag indicating if the kernel
+To launch a kernel, the host sends a data packet to the GPU
+consists of: a kernel to execute, the inputs to the kernel, the
+number of workgroups that should execute the kernel, and a flag indicating whether the kernel
 is cooperative. In our implementation, this communication channel
 between host and device is achieved through fine-grained SVM atomics.
-The kernel specified must be one of the kernels merged inside the
-mega-kernel. If there are large constant inputs to the kernel, these
-can be copied before mega-kernel launch to decrease the amount of SVM
-traffic.
 
 \paragraph{Dynamically managing workgroups}
-
-The GPU scheduler then receives the data packet from the host
-describing a kernel $K$ to be executed and now must make decisions
-about how to schedule the $K$. Consider the case where $K$ requires
-$W$ workgroups. The scheduler can query the scheduler context and if
-there is at least $W$ available workgroups, then $K$ can be scheduled
-immediately. If there are not enough available workgroups (say there
-are $W_a$ workgroups available), but a cooperative kernel $K_c$ is
-executing. The scheduler can signal $K_c$ through $K_c$'s
-communication channel in the scheduler context communication
-requesting that $K_c$ provide $W - W_a$ workgroups (via $\offerkill$)
-as soon as possible. The scheduler then waits until $W$ workgroups
-become available.
-
-When $W$ workgroups become available, the scheduler initialises a
-kernel context $KC$ for $K$, setting the number of active workgroups
-to $W$ and mapping available workgroups (located in the scheduler
-context) to their new $KC$ workgroup ids. The scheduler then sends $W$
+On receiving a data packet from the host
+describing a kernel launch $K$, the GPU scheduler must make decisions
+about how to schedule $K$. Suppose $K$ requests
+$N$ workgroups. The scheduler queries the scheduler context.  If
+there are at least $N$ available workgroups, $K$ can be scheduled
+immediately. Suppose instead that there are only $N_a < N$ available workgroups, but a cooperative kernel $K_c$ is
+executing. The scheduler can use $K_c$'s channel in the scheduler context to command $K_c$ to provide $N - N_a$ workgroups via $\offerkill$.
+Once $N$ workgroups are available, the scheduler initialises a
+kernel context $\KC$ for $K$, setting the number of active workgroups
+to $N$ and mapping available workgroups (located in the scheduler
+context) to their new $\KC$ workgroup ids. The scheduler then sends $N$
 workgroups from the available workgroups to execute kernel $K$ with
-kernel context $KC$.
+kernel context $\KC$.  Note that if the new kernel $K$ is itself a cooperative kernel, the scheduler could decide to provide $K$ with fewer than $N$ active workgroups initially.
 
-In the case where a cooperative kernel $K_c$ is executing and there
-are $W$ avaiable workgroups, the scheduler may decide to give $K_c$
-$W_k <= W$ additional workgroups via an $\offerfork$ command issued by
-$K_c$. To do this, scheduler signals $K_c$ through the $K_c$'s
-scheduler context communication channel to indicate the number of
-workgroups that are allowed to join at the next $\offerfork$ command.
-Then, when a workgroup $w$ of $K_c$ executes $\offerfork$, $w$
-observes $W_k$, and takes $W_k$ workgroups from the pool of available
-workgroups, provides them with transmit variables, target, and updated
-kernel context.
-\TSComment{this is sloppy}
-
+If a cooperative kernel $K_c$ is executing with fewer workgroups than it initially requested, the scheduler may decide to give $K_c$
+additional workgroups if $K_c$ calls $\offerfork()$. To do this, the scheduler asynchronously signals $K_c$ through $K_c$'s
+channel to indicate the number of
+workgroups that should join at the next $\offerfork$ command.
+When a workgroup $w$ of $K_c$ subsequently executes $\offerfork$, thread 0 of $w$ updates the kernel and scheduler contexts so that the given number of new workgroups are directed to the program point after the $\offerfork$ call.  This involves selecting workgroups whose status is \emph{available}, as well as copying the values of $\transmit$-annotated variables to the new workgroups.
 
 \paragraph{Efficient implementation}
 
