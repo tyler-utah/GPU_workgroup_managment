@@ -1595,24 +1595,35 @@ attribute these to bugs in Intel's current drivers.
 
 \paragraph{Results}
 
-\myfiglong\ref{fig:fine-grained-timing} reports the measure for three
-configurations and represents the gather and execution time of the
-non-cooperative kernel w.r.t. the quantity of workgroups allocated to
-it. Times are in milliseconds, and a logarithmic scale is used since
-gather times tend to be much smaller than execution times. The
-horizontal grey lines indicates the desired rate for non-cooperative
-kernels.
+\myfiglong\ref{fig:fine-grained-timing} reports, on three
+configurations, the gather and execution time of the non-cooperative
+kernel w.r.t. the quantity of workgroups allocated to it. A logarithmic
+scale is used for time since gather times tend to be much smaller than
+execution times. The horizontal grey lines indicates the desired rate
+for non-cooperative kernels.
 
-Responsiveness of the cooperative scheduling is measured by the gather
-time. In all examples, we observe that the gather time grows as we ask
-for more workgroups for the non-cooperative kernel: this is expected,
-since the scheduler must wait for more workgroups to call $\offerkill$
-or to reach a resizing barrier. Still, notice that the query barrier
-leads to better and stable gather times for graph applications, since it
-can collect all needed workgroups at the first time they pass through
-the barrier. Gather time also application-dependent since it is related
-to how often the cooperative kernel workgroups hit $\offerkill$ or
-$\resizingglobalbarrier$.
+Let's focus on the left figure which illustrates a work stealing
+example: when the non-cooperative kernel is given only one workgroup, it
+execution is so long that it cannot permit to terminate on time for a
+screen refresh. The gather time is very good though, since the scheduler
+only needs to collect one workgroup. As more workgroups are allocated to
+the non-cooperative kernel, it can benefits from more computational
+resources and thus lower its execution time: here the non-cooperative
+kernel becomes fast enough with a quarter (resp. half) of available
+workgroups for light (resp. heavy) graphics workload. Inversely, the
+gather time augments since the scheduler must collect more and more
+workgroups from the cooperative kernel.
+
+On the middle and right figures, which depict graph algorithms, we find
+again the same trend: as the number of workgroups allocated to the
+non-cooperative task grows, the non-cooperative kernel execution time
+lowers and the gather time raises. When the regular resizing barrier is
+used, gather time can become quite long and exceed the execution time.
+However, the scheduling responsiveness can benefits from the query
+barrier: when this barrier is used, the gather time becomes almost
+stable w.r.t. the number of workgroups that needs to be collected, since
+the scheduler collects all needed workgroups as soon as they hit a
+resizing barrier.
 
 \HEComment{missing results for all but one in bfs, discussed in expe
 setup, do we need to say it here ?}
@@ -1623,14 +1634,6 @@ setup, do we need to say it here ?}
 \includegraphics[width=.7\columnwidth]{hd5500_bfs_rmat22.pdf}
 \caption{Example gather time and non-cooperative timing results}\label{fig:fine-grained-timing}
 \end{figure*}
-
-\HEComment{Figure gather time: replace ``O'' by ``M'' , ie max nb of active workgroups}
-
-\HEComment{Figure gather time: add ``ms'' to time coordinate}
-
-\HEComment{Figure gather time: lower legend in hd5500 bfs figure}
-
-\HEComment{Figure gather time: use consistent line styles for work stealing (ie, same style for ``heavy'' across all figures)}
 
 \section{Related Work}\label{sec:relatedwork}
 
