@@ -1640,8 +1640,8 @@ their computations by comparing their result with expected results. We
 had to ignore some configurations where the non-cooperative kernel asks
 for all but one workgroups (namely bc, bfs and l-sssp on all chips, and
 color on Iris), and the game application on HD520, since they lead to
-system issues like GPU deadlock or blue screens---which we think are
-manifestations of driver bugs.
+system issues like GPU deadlock or blue screens---which we tend to think
+are manifestations of driver bugs.
 
 % Whenever a cooperative or non-cooperative kernel terminates, we verify
 % that it has really performed its computation by comparing its results
@@ -1655,14 +1655,30 @@ manifestations of driver bugs.
 % workgroups, we decided to ignore these results.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
-explain horizontal lines 
 
-missing results for all but one in bfs rmat22 since errors
 
-also, high gather time corresponds to applications and data sets where
-resize/kill is triggered less often.
 
-Each configuration was run 10 times on each GPU.
+\myfig~\ref{fig:fine-grained-timing} reports the measure for three
+configurations and represents the gather and execution time of the
+non-cooperative kernel w.r.t. the quantity of workgroups allocated to
+it. Times are in milliseconds, and a logarithmic scale is used since
+gather times tend to be much smaller than execution times. The
+horizontal grey lines indicates the desired rate for non-cooperative
+kernels.
+
+Responsiveness of the cooperative scheduling is measured by the gather
+time. In all examples, we observe that the gather time grows as we ask
+for more workgroups for the non-cooperative kernel: this is expected,
+since the scheduler must wait for more workgroups to call $\offerkill$
+or to reach a resizing barrier. Still, notice that the query barrier
+leads to better and stable gather times for graph applications, since it
+can collect all needed workgroups at the first time they pass through
+the barrier. Gather time also application-dependent since it is related
+to how often the cooperative kernel workgroups hit $\offerkill$ or
+$\resizingglobalbarrier$.
+
+\HEComment{missing results for all but one in bfs, discussed in expe
+setup, do we need to say it here ?}
 
 \begin{figure*}
 \includegraphics[width=.7\columnwidth]{iris_octree_NA.pdf} 
@@ -1671,6 +1687,13 @@ Each configuration was run 10 times on each GPU.
 \caption{Example gather time and non-cooperative timing results}\label{fig:fine-grained-timing}
 \end{figure*}
 
+\HEComment{Figure gather time: replace ``O'' by ``M'' , ie max nb of active workgroups}
+
+\HEComment{Figure gather time: add ``ms'' to time coordinate}
+
+\HEComment{Figure gather time: lower legend in hd5500 bfs figure}
+
+\HEComment{Figure gather time: use consistent line styles for work stealing (ie, same style for ``heavy'' across all figures)}
 
 \section{Related Work}\label{sec:relatedwork}
 
