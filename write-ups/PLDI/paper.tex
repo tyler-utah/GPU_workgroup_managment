@@ -1205,7 +1205,7 @@ extensions.
 \small
 \centering
 \begin{tabular}{ l c c c }
-app & resizing barriers & ckill - cfork & transmit vars\\
+App. & resizing barriers & kill - fork & transmit vars\\
 \hline
 \rowcolor{Gray1}
 color & 2 / 2 & 0 - 0 & 4\\
@@ -1230,22 +1230,36 @@ game & 0 / 0 & 1 - 1 & 0\\
 \label{tab:applications}
 \end{table}
 
-\ADComment{Describe the algorithms that we ported.}
+\HEComment{Add citations for pannotia, lonestar, workstealing}
 
-\HEComment{This is more or less already done in section
-\ref{sec:programmingguidelines} , maybe no need to rewrite here?}
+\mytablong~\ref{tab:applications} gives an overview of the 8 irregular
+algorithms that we ported to cooperative kernels. Among them, 6 are
+graph algorithms, based on Pannotia and Lonestar GPU application suite,
+using global barriers; we indicate how many barriers become resizing
+ones out of the total number of barriers, and how many variables need to
+be transmitted. In all cases all barriers were converted, except for bc
+which contains barriers deeper in the call stack, a case not supported
+by our prototype. Still, these barriers could in principle also be
+converted.  The remaining 2 algorithms are workstealing applications:
+each required the addition of $\offerfork$ and $\offerkill$ at the start
+of the main loop, and no variables needed to be transmitted. For all
+these examples the porting to cooperative kernels was pretty
+straightforward and did not require to bend the original algorithm.
+
+\ADComment{Describe the algorithms that we ported.}
 
 \ADComment{Give stats on how many variables had to be marked with
   $\transmit$ (i.e., occurred in the restoration context), how many
   barriers we changed to resizing, how many offer kill and offer fork
-  calls we included.}  \TSComment{check out
-  Table~\ref{tab:applications}. The barrier column shows how many of
-  the original barriers were ported to resizing barriers. In all cases
-  except bc we converted all of them. The only reason why bc is
-  different is because barriers occur deeper in the call stack and our
-  prototype cannot handle that. The algorithm itself is compatable
-  (i.e. changing these barriers is as easy as any other, there is
-  nothing special about them.)}
+  calls we included.}
+
+  \TSComment{check out Table~\ref{tab:applications}. The barrier column
+  shows how many of the original barriers were ported to resizing
+  barriers. In all cases except bc we converted all of them. The only
+  reason why bc is different is because barriers occur deeper in the
+  call stack and our prototype cannot handle that. The algorithm itself
+  is compatable (i.e. changing these barriers is as easy as any other,
+  there is nothing special about them.)}
 
 \ADComment{Make sure we address the point that placing the primitives was pretty easy.}
 
