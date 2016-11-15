@@ -1699,10 +1699,10 @@ Hardware support for preemptive multitasking for \nvidia GPUs has been
 proposed, enabling full preemption as well as \emph{SM-draining},
 whereby workgroups occupying a symmetric multiprocessor (SM; a compute
 unit using our terminology) are drained until the SM becomes free for
-other tasks.  A follow-up work adds the notion of SM \emph{flushing},
+other tasks~\cite{DBLP:conf/isca/TanasicGCRNV14}.  A follow-up work adds the notion of SM \emph{flushing},
 whereby a workgroup running on an SM can be cancelled and re-scheduled
 from scratch if the workgroup has not yet committed any visible
-side-effects to shared memory.  Both approaches have been evaluated
+side-effects to shared memory~\cite{DBLP:conf/asplos/ParkPM15}.  Both approaches have been evaluated
 using simulators, over sets of regular GPU kernels.  State-of-the-art \nvidia GPUs targeting data centers (where multi-tasking is essential) do support
 preemption, though it is not clear whether they guarantee fair scheduling~\cite{PascalWhitepaper}.
 
@@ -1757,26 +1757,6 @@ limitations of current GPU programming models, and in particular the
 problem that workgroups are not fairly scheduled.  Hence this feature
 does not offer a solution to the problem of deploying blocking
 algorithms on GPUs in a safe manner that we tackle with this work.
-
-
-\cite{TPO10}
-
-
-
-Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
-
-\cite{} \ADComment{Basic idea: map tasks to
-  SMs, not to workgroups, so that tasks that would benefit from being
-  processed by the same SM can be scheduled to the same SM.  Has
-  little to do with preemption, but more to do with irregular
-  computation.}
-
-\cite{DBLP:conf/isca/TanasicGCRNV14} \ADComment{I have not read, but
-  it's about enabling preemptive multiprogramming, so we should read
-  it carefully.}
-
-\cite{DBLP:conf/ppopp/Muyan-OzcelikO16} \ADComment{I have not read; we
-  should understand this one carefully.}
 
 \paragraph{Cooperative multitasking}
 
