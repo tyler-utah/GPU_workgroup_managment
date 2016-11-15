@@ -1138,11 +1138,11 @@ kernel. We implement the communication channels using atomic variables in global
 \paragraph{Launching kernels and managing workgroups}
 
 To launch a kernel, the host sends a data packet to the GPU
-consisting of: a kernel to execute, the inputs to the kernel, the
+scheduler consisting of: a kernel to execute, the inputs to the kernel, the
 number of workgroups that should execute the kernel, and a flag indicating whether the kernel
 is cooperative. In our implementation, this host-device communication channel is built using fine-grained SVM atomics.
 
-On receiving a data packet from the host
+On receiving a data packet
 describing a kernel launch $K$, the GPU scheduler must make decisions
 about how to schedule $K$. Suppose $K$ requests
 $N$ workgroups. The scheduler queries the scheduler context.  If
@@ -1154,44 +1154,29 @@ kernel context $\KC$ for $K$, setting the number of active workgroups
 to $N$ and mapping available workgroups (located in the scheduler
 context) to their new $\KC$ workgroup ids. The scheduler then sends $N$
 workgroups from the available workgroups to execute kernel $K$ with
-kernel context $\KC$.  Note that if the new kernel $K$ is itself a cooperative kernel, the scheduler could decide to provide $K$ with fewer than $N$ active workgroups initially.
+kernel context $\KC$.  (Note that if the new kernel $K$ is itself a cooperative kernel, the scheduler would be free to provide $K$ with fewer than $N$ active workgroups initially.)
 
-If a cooperative kernel $K_c$ is executing with fewer workgroups than it initially requested, the scheduler may decide to give $K_c$
-additional workgroups if $K_c$ calls $\offerfork()$. To do this, the scheduler asynchronously signals $K_c$ through $K_c$'s
+If a cooperative kernel $K_c$ is executing with fewer workgroups than it initially requested, the scheduler may decide make extra workgroups available
+to $K_c$, to be obtained next time $K_c$ calls $\offerfork$.  To do this, the scheduler asynchronously signals $K_c$ through $K_c$'s
 channel to indicate the number of
 workgroups that should join at the next $\offerfork$ command.
 When a workgroup $w$ of $K_c$ subsequently executes $\offerfork$, thread 0 of $w$ updates the kernel and scheduler contexts so that the given number of new workgroups are directed to the program point after the $\offerfork$ call.  This involves selecting workgroups whose status is \emph{available}, as well as copying the values of $\transmit$-annotated variables to the new workgroups.
 
-\paragraph{Safe implementation}
+\paragraph{Accounting for concurrency}
 
 Concurrent calls to $\offerfork$ must be protected by a mutex
 to avoid racing on the
 available workgroups. The same conflict over available workgroups can
 occur at a new kernel launch between the scheduler and a workgroup
-calling $\offerfork()$.
+calling $\offerfork$.
 
-The scheduler context provides an \emph{assignment mutes} to protecting concurrent calls to
-$\offerfork$ and $\offerkill$.  On calling $\offerkill$, a workgroup is only permitted to exit if the scheduler currently holds the assignment mutex; that is, the scheduler is trying to obtain work
-groups to send to a task.  Conversely, on calling $\offerfork$ a workgroup can only spawn new workgroups if the assignment mutex is not held by the scheduler.
+The scheduler context provides an \emph{assignment mutes} to protect concurrent calls to
+$\offerfork$ and $\offerkill$.  On calling $\offerkill$, a workgroup is only permitted to exit if the scheduler workgroup currently holds the assignment mutex; that is, the scheduler is trying to obtain work
+groups to send to a task.  Conversely, on calling $\offerfork$ a workgroup can only spawn new workgroups if the scheduler workgroup does not hold the assignment mutex.  Thus the assignment mutex, only ever acquired by the scheduling workgroup, \emph{indirectly} provides mutual exclusion between a pairs of workgroups executing $\offerkill$ and $\offerfork$ concurrently. \ADComment{Please check previous -- I think I've got the coolness!}
 
-Concurrent calls to $\offerkill$ are acceptable because only the workgroup with the highest id may exit, automatically ensuring mutual exclusion for exit-related modifications.
-
-\paragraph{Example}
-
-\ADComment{Give most attention to interesting performance and safety
-  issues, e.g.\ reverse ticket lock, efficient barrier, the query
-  functions...}
-
-\ADComment{The host and device components of the scheduler, the use of
-  SVM, and the host API for scheduling both sorts of kernel.}
-
-\HEComment{I consider that the reason why we need SVM fine grain and
-  atomics is discussed in the implementation section}
-
-\ADComment{Give details of how host and device interact.}
-
-\ADComment{Host-device interaction through SVM.  Make clear that this is probably the most aggressive use of OpenCL 2.0 ever.}
-
+Concurrent calls to $\offerkill$ are acceptable because only the
+workgroup with the highest id may exit, automatically ensuring mutual
+exclusion for exit-related modifications.
 
 \paragraph{An efficient resizing barrier}
 
