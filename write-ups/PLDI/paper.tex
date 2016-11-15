@@ -988,15 +988,11 @@ Like the simplified example of \myfig\ref{fig:workstealing-cooperative}, the wor
 and require little or no state to be carried between transactions.  Thus the point at which a workgroup is ready to process a new task is a natural point to place $\offerkill$ and $\offerfork$, and few or no $\transmit$ annotations are required.
 
 The example of \myfig\ref{fig:cgraphsearch} is simpler than, but representative of,
-most level-by-level graph algorithms.  These algorithms tend to
-require some state to be transmitted, and in some cases
-a global barrier is required in the midst of a transaction, in which
-case $\globalbarrier$, but not $\resizingglobalbarrier$, is suitable
-for achieving synchronization without disturbing the set of active
-workgroups.  But often it is the case that on completing a level of
+most level-by-level graph algorithms.
+It is typically the case that on completing a level of
 the graph algorithm, the next level could be processed by more or
 fewer workgroups, something which $\resizingglobalbarrier$
-facilitates.
+facilitates.  As in \myfig\ref{fig:cgraphsearch}, some level-specific state must be transmitted to new workgroups.
 
 Our practical experience suggests that cooperative kernels are a good
 fit for at least these two classes of irregular algorithms, which is
@@ -1260,7 +1256,7 @@ We discuss our experience porting irregular algorithms to cooperative kernels (\
 \begin{table}
 \small
 \centering
-\begin{tabular}{ l c c c c c c}
+\begin{tabular}{ l r r r r r r}
 App. & resizing barr. & kill & fork & transmit & LoC & data sets\\
 \hline
 \rowcolor{Gray1}
@@ -1286,10 +1282,6 @@ game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 \label{tab:applications}
 \end{table}
 
-\ADComment{I thought we had some examples where we actually wanted a non-resizing barrier; we say this earlier in the paper so we need to smooth.}
-
-\ADComment{Missing: a discussion of what we did not port.}
-
 \mytablong\ref{tab:applications} gives an overview of the 8 irregular
 algorithms that we ported to cooperative kernels. Among them, 6 are
 graph algorithms, based on Pannotia~\cite{...} and Lonestar~\cite{...}
@@ -1307,21 +1299,33 @@ kernels was similarly straightforward to the porting illustrated in
 not require reshaping of the original algorithm. Most graph come with 2
 different data sets, leading to 13 application/data set pairs in total.
 
+From the Lonestar suite we omit two applications that use global barriers:
+dmr has been shown to be unstable across GPU vendors~\cite{DBLP:conf/iwocl/SorensenD16}, and mst is trivially short-running so that it is not
+interesting for our multitasking approach.
+%
+These exceptions aside, we have handled all the available OpenCL
+implemenatinos of irregular algorithms that we are aware of, plus two
+easy-to-adapt CUDA algorithms (the workstealing examples).
+
+
+
 \subsection{The GPUs we Tested}\label{sec:gpus}
 
-Our prototype implementation (\mysec\ref{sec:implementation}) requires two optional features of OpenCL
-2.0: SVM fine-grained buffers and SVM atomics. This rules out evaluation on \nvidia and ARM Mali GPUs at present, since
-these vendors do not yet support OpenCL $2.0$, equivalent functionality is not provided by \nvidia's CUDA. Intel drivers meet our
-requirements on Windows, but not on Linux (we confirmed this by trying the
-upstream driver that requires a patched Linux kernel). AMD support SVM
-atomics only their Kaveri family of chips and only on Linux, requiring
-to compile the latest driver.
+Our prototype implementation (\mysec\ref{sec:implementation}) requires
+two optional features of OpenCL 2.0: SVM fine-grained buffers and SVM
+atomics. This rules out evaluation on \nvidia and ARM Mali GPUs at
+present, since these vendors do not yet support OpenCL $2.0$,
+equivalent functionality is not provided by \nvidia's CUDA. Intel
+drivers meet our requirements on Windows, but not on Linux (we
+confirmed this by trying the upstream driver that requires a patched
+Linux kernel). AMD support SVM atomics only their Kaveri family of
+chips and only on Linux, requiring to compile the latest driver.
 
-\ADComment{Check:} Among the GPUs available to us, four met our
+Among the GPUs available to us, four met our
 requirements: Intel HD 520, HD 5500 and Iris 6100, and AMD Radeon R7.
 However, AMD's Linux drivers for OpenCL suffer from a known defect
 whereby long-running kernels lead to defunct processes that the OS
-cannot kill.  We observed this on our AMD platform with the latest
+cannot kill.\footnote{See \url{http://developer.amd.com/download/AMD_APP_SDK_Release_Notes_Developer.pdf}}  We observed this on our AMD platform with the latest
 driver, and simultaneously obtained alarming results on this platform
 when using SVM atomics: modifying a kernel to include a simple
 host/device handshake through SVM slowed down kernel execution by an
@@ -1356,38 +1360,58 @@ As a proxy for genuine graphics rendering, we devised the following
 procedure to determine non-cooperative OpenCL workloads that simulate
 the computational intensity of various graphics rendering workloads.
 %
-\ADComment{I think this is good but could be clearer and it would be helpful to discuss.}
-We repetitively launch a kernel with a
-controlled workload and detect from which workload size the screen
-animation starts to jitter. \ADComment{Be clear that this is manual.} Given the kernel workload and its
-scheduling frequency, we can deduce what is the workload and frequency
-needed by the system to maintain a smooth animation. We use this
-approach to measure the system workloads needed to maintain smooth
-animations of three types: (\emph{light}) emphasis of desktop icons
-under the mouse pointer, (\emph{medium}) window dragging over the
-desktop, and (\emph{heavy}) WebGL animations in a browser.
+We designed a synthetic kernel that occupies all workgrouops of a
+given GPU for a parameterised length of time $t$.  We wrote a host
+program to repeatedly launch this kernel in an infinite loop.  We then
+searched for a maximum value for the parameter $t$ that allowed the
+synthetic kernel to execute without having an observable impact on
+graphics rendering, where ``observable'' was decided manually by one
+of the paper authors.  Having found the appropriate value for $t$, we
+ran the host application for $X$ seconds, measuring the time $Y < X$
+dedicated to GPU execution during this period, as well as the number
+of kernel launches $n$ that were issued.  We used $X \geq 10$ in all
+experiments.  The values $(X-Y)/n$ and $X/n$ estimate the average time
+spent using the GPU to render the display between kernel calls and the
+rate at which the OS requires the GPU for display rendering,
+respectively.
+
+We used this approach to measure the GPU availability required for
+three types of rendering: \emph{light}, whereby desktop icons are
+smoothly emphasised under the mouse pointer; \emph{medium}, whereby
+window dragging over the desktop is smoothly animated; and
+\emph{heavy}, which requires smooth animation of a WebGL shader in a
+browser.  For \emph{heavy} we used the Paper
+Planes\footnote{\url{https://www.chromeexperiments.com/experiment/paper-planes}}
+and Kaleidoscope\footnote{\url{http://colordodge.com/Kaleidoscope/}}
+shaders running in a recent version of Firefox.
 
 \begin{table}
 \small
 \centering
 \begin{tabular}{ l r r }
-Workload & Duration (ms) & Period (ms)\\
+Workload & Duration (ms) & Rate (ms)\\
 \hline
 light & 3 & 70\\
 medium & 3 & 40\\
 heavy & 10 & 40\\
 \end{tabular}
-\caption{\ADComment{Clearer caption?} Characteristics of non-cooperative kernels workload}
+\caption{Computed estimates of the GPU requirements for three different classes of graphics rendering}
 \label{tab:noncooperativeworkload}
 \end{table}
 
-\paragraph{Results}
-\mytab~\ref{tab:noncooperativeworkload} illustrates the caracteristics
-found for the three types of workloads. For the medium and heavy
-workloads, the 40ms period corresponds to an execution every $25^{th}$
-of seconds, which coincides with the human persistence of vision. The
-3ms execution duration of both light and medium configurations may
-indicate a lower bound of GPU execution time for system workloads.
+\mytablong\ref{tab:noncooperativeworkload} illustrates the data
+computed for the three types of workloads across our GPUs.  The
+\emph{Duration} and \emph{Rate} columns report values corresponding to
+$(X-Y)/n$ and $X/n$ in the above discussion, respectively.  For the
+medium and heavy workloads, the 40ms rate corresponds to graphics
+rendering occuring 25 times per second, which coincides with the human
+persistence of vision. The 3ms execution duration of both light and
+medium configurations indicates that, as expected, GPU computation is
+cheaper for basic display rendering compared with rendering that uses
+complex shaders.
+
+We use these results to guide our evaluation of the responsiveness of
+cooperative scheduling in \mysec\ref{sec:responsiveness}.
 
 \subsection{The Overhead of Moving to Cooperative Kernels}\label{sec:overhead}
 
@@ -1485,8 +1509,7 @@ compare execution times.
 
 \paragraph{Results}
 For each GPU, \mytab\ref{tab:overhead} shows the geometric mean and
-maximum slowdown across all applications and data sets, each benchmark
-begin run 10 times. For the maximum slowdowns, we indicate which
+maximum slowdown across all applications and data sets, with averages and maxima computed over 10 runs per benchmark. For the maximum slowdowns, we indicate which
 application and data set was responsible.  The slowdown is below 2 even
 in the worst case, and closer to 1 on average. We consider these results
 as encouraging, especially since the performance of our prototype could
