@@ -177,24 +177,22 @@ There is growing interest in accelerating irregular data-parallel
 algorithms on GPUs.  These algorithms are typically \emph{blocking},
 so require fair scheduling.  But GPU programming models (e.g.\ OpenCL)
 do not mandate fair scheduling, and GPU schedulers are inherently
-unfair in practice.  This issue is currently circumvented by
-exploiting scheduling quirks particular to today's GPUs in a manner
-that does not allow the GPU to be shared with other workloads (such as
-graphics rendering tasks).  We propose \emph{cooperative kernels}, an
-extension to the traditional GPU programming model geared towards
-writing blocking algorithms.  Workgroups of a cooperative kernel are
-fairly scheduled, supporting blocking algorithms, and co-scheduling of
-other tasks is supported via a small set of language extensions that
-create a contract between the programmer and the scheduler.  We
-describe the semantics of the cooperative kernels programming model
-and discuss our portable prototype implementation.  We evaluate the
-technique by porting a set of irregular work stealing and graph
-algorithms to our programming model and assessing the performance and
-responsiveness of the approach across several GPUs.  Because our
-implementation exploits no vendor-specific hardware, driver or
-compiler support, our encouraging experimental results provide a
-lower-bound on the efficiency with which cooperative kernels can be
-implemented in practice.
+unfair in practice.  Current approaches avoid this issue by exploiting
+scheduling quirks particular to today's GPUs in a manner that does not
+allow the GPU to be shared with other workloads (such as graphics
+rendering tasks).  We propose \emph{cooperative kernels}, an extension
+to the traditional GPU programming model geared towards writing
+blocking algorithms.  Workgroups of a cooperative kernel \emph{are}
+fairly scheduled, and multitasking is supported via a small set of
+language extensions that the kernel and scheduler use to cooperate.
+We describe the semantics of the cooperative kernels programming model
+and our prototype implementation.  We evaluate the approach by porting
+a set of irregular work stealing and graph algorithms to our
+programming model and examining their performance under multitasking
+across three GPUs.  Our implementation exploits no
+vendor-specific hardware, driver or compiler support, so our encouraging
+results provide a lower-bound on the efficiency with
+which cooperative kernels can be implemented in practice.
 
 \end{abstract}
     
@@ -208,9 +206,8 @@ implemented in practice.
 Many
 interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
-by the computation itself.  The last decade has seen growing interest in accelerating irregular
-data-parallel algorithms on GPUs, particularly algorithms that
-traverse and manipulate linked data structures~\cite{owens-persistent,TPO10,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10}.
+by the computation itself.  There is growing interest in accelerating such algorithms on GPUs, particularly algorithms that
+traverse and manipulate linked data structures~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10,BNP12,Pannotia}.
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
@@ -220,7 +217,7 @@ to maintain a queue, which is typically protected by a mutex to enable
 stealing by other workgroups.
 
 To operate correctly, a blocking concurrent algorithm requires
-\emph{fair} scheduling, which in the context of GPUs means fair scheduling of workgroups.  Without fairness, a
+\emph{fair} scheduling of workgroups.  Without fairness, a
 workgroup may fail to make progress, leading to starvation.  For
 example, if one workgroup holds a mutex, an unfair scheduler may cause
 another workgroup to spin-wait forever for the mutex to be
@@ -228,25 +225,22 @@ released.  Similarly, an unfair scheduler can cause a workgroup to spin-wait
 indefinitely at a global barrier so that other workgroups do not reach the barrier.
 
 \paragraph{A degree of fairness: occupancy-bound execution}
-GPU schedulers are \emph{not} fair. the current GPU
-programming models---OpenCL~\cite{opencl2Spec}, \ADComment{Tyler, please add best CUDA since I've asked you to add it below in any case} CUDA~\cite{...}  and
+GPU schedulers are \emph{not} fair. The current GPU
+programming models---OpenCL~\cite{opencl2Spec}, CUDA~\cite{cuda-75}  and
 HSA~\cite{HSAprogramming11}---specify almost no guarantees regarding scheduling of
 workgroups, and current GPUs do not
 provide fair scheduling in practice.  Roughly speaking, each workgroup
 executing a GPU kernel is mapped to a hardware \emph{compute
-  unit}.\footnote{In practice the situation can be more complex: if a
-  kernel is sufficiently simple and if workgroups are small enough,
-  multiple workgroups may be mapped to a single compute unit.  We assume, for the purpose of the current discussion, that the kernel is sufficiently complex that this does not happen.}
+  unit}.\footnote{In practice, depending on the kernel, multiple workgroups might map to the same compute unit; we ignore this in our current discussion.}
 %
 The simplest way for a GPU driver to handle 
 the case where more workgroups are launched than there are compute
 units is via an \emph{occupancy-bound}
-execution model~\cite{DBLP:conf/oopsla/SorensenDBGR16}. \ADComment{Tyler, please add best cite for OB model; I guess our OOPSLA paper introduced the term, but we should cite that + Owens?}  With this model, once a workgroup has commenced execution on a
+execution model~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16}.  With this model, once a workgroup has commenced execution on a
 compute unit (it has become \emph{occupant}), the workgroup has
-exclusive access to the compute unit until it has finished execution,
-after which a subsequent workgroup can be bound to the compute unit.
+exclusive access to the compute unit until it has finished execution.
 Experiments suggest that the occupancy-bound execution model is widely
-implemented by today's GPU devices and drivers~\cite{DBLP:conf/oopsla/SorensenDBGR16}. \ADComment{For the previous cite, should we cite other papers as well as ours?}  It is
+implemented by today's GPU devices and drivers~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/oopsla/PaiP16,BNP12}.   It is
 evidently a simple model for device vendors to implement efficiently.
 
 The occupancy-bound execution model does not guarantee fair scheduling
@@ -255,11 +249,10 @@ not-yet-occupant workgroup will not be scheduled until some occupant
 workgroup completes execution.  Yet the execution model \emph{does}
 provide fair scheduling between \emph{occupant} workgroups, which are
 bound to separate compute units that operate in parallel.  Current GPU
-implementations of irregular data parallel algorithms assume the
+implementations of blocking algorithms assume the
 occupancy-bound execution model, which they exploit by launching 
 no more workgroups than there are available compute
-units~\cite{...}. \ADComment{Tyler, please pick best cite for previous
-  claim.} This works because \emph{today}'s GPUs seem to provide the
+units~\cite{owens-persistent}. This works because \emph{today}'s GPUs seem to provide the
 occupancy-bound execution model.
 
 \paragraph{Resistance to guaranteeing occupancy-bound execution}
@@ -271,17 +264,15 @@ clear reasons why this model is undesirable.
 %GPU vendors and end users.
 First, the execution model does not enable
 multitasking, because a workgroup effectively \emph{owns} a compute
-unit until the workgroup has completed execution.  If a long-running
-kernel occupies all compute units, the GPU cannot be used for other
-tasks, such as graphics rendering, in the meantime.
+unit until the workgroup has completed execution.  The GPU cannot be used meanwhile for other
+tasks, such as graphics rendering.
 %Precisely because
 %of this problem, operating systems employ a GPU \emph{watchdog} to
 %heuristically detect and kill long-running computations on the GPU
 %being used for display rendering~\cite{DBLP:conf/iwocl/SorensenD16}.
 Second, \emph{energy throttling} is
-an important concern for battery-powered devices, such as smartphones
-and tablets~\cite{DBLP:journals/comsur/Vallina-RodriguezC13}.  In the future, it will be desirable for a mobile GPU driver to be able to
-power down one or more compute units if the battery level is low or if
+an important concern for battery-powered devices~\cite{DBLP:journals/comsur/Vallina-RodriguezC13}.  In the future, it will be desirable for a mobile GPU driver to be able to
+power down some compute units if the battery level is low or if
 the user puts the device into a low power state.  Implementing energy
 throttling would require being able to suspend the execution of a
 workgroup, power down the compute unit to which the workgroup was
@@ -292,37 +283,35 @@ Our assessment, informed by discussions with a number of industrial
 practitioners who have been involved in the OpenCL and/or HSA
 standardisation efforts
 (including~\cite{PersonalCommunicationRichards,PersonalCommunicationHowes}
-and various engineers from GPU vendors), is that (1) GPU vendors will
+and various engineers from GPU vendors), is that (1) for the above reasons, GPU vendors will
 not commit to the occupancy-bound execution model that they currently
-implement, due to the need for multitasking and energy throttling,
+implement,
 yet (2) GPU vendors will not guarantee fair scheduling, due to the
 runtime overhead associated with supporting full preemption of
-workgroups~\cite{ISCAPAPERSreeMentioned}.  Vendors instead wish to
-retain the essence of the occupancy-bound model, which is
-simple to implement efficiently, supporting preemption
+workgroups.  Vendors instead wish to
+retain the essence of the simple occupancy-bound model, supporting preemption
 only in key special cases.
 
 
 \paragraph{Our proposal: cooperative kernels}
 %
-To summarise: blocking algorithms, such as most irregular algorithms,
-demand a degree of fair scheduling of workgroups, but for good reasons
-GPU vendors will not commit to the guarantees of even the
+To summarise: blocking algorithms
+demand fair scheduling of workgroups, but for good reasons
+GPU vendors will not commit even to the guarantees of the
 occupancy-bound execution model.
 
 We propose \emph{cooperative kernels}, an extension to the GPU
-programming model that aims to resolve this impasse.  A GPU kernel
-that requires workgroups to be fairly scheduled is identified as a
-\emph{cooperative} kernel, and is written using two additional
+programming model that aims to resolve this impasse.  A kernel
+that requires fair scheduling is identified as \emph{cooperative}, and written using two additional
 language primitives, $\offerkill$ and $\offerfork$, placed by the programmer.
 
 At a point where the cooperative kernel could proceed with fewer
 workgroups, a workgroup can execute $\offerkill$, offering to
 sacrifice itself to the scheduler.  This indicates that the workgroup
-would ideally continue with its execution but that, if required, the
-scheduler may destroy the workgroup for good: the cooperative kernel
-is prepared to deal with either scenario.
-
+would ideally continue executing, but that if required the
+scheduler may destroy the workgroup for good.  The cooperative kernel
+must be prepared to deal with either scenario.
+%
 At a point where the cooperative kernel could benefit from having
 additional workgroups join the computation, a workgroup can execute
 $\offerfork$.  This indicates that the cooperative
@@ -350,6 +339,7 @@ additional workgroups when possible.
 The cooperative kernels programming model has several appealing
 properties:
 
+\vspace{-1mm}
 \begin{enumerate}
 
 \item By providing fair scheduling between workgroups, cooperative
@@ -366,14 +356,14 @@ properties:
   exactly as a regular kernel does on current GPUs.
 
 \item Cooperative kernels can be implemented over the occupancy-bound
-  execution model that current GPUs provide---we present a
-  proof-of-concept implementation that requires
-  no special-purpose hardware or driver support.
+  execution model that current GPUs provide: our proof-of-concept implementation requires
+  no additional hardware or driver support.  Thus the model should be eay for vendors to implement directly.
 
 \item Our experiments with a range of applications using three GPUs show that the model can enable efficient multitasking of cooperative and non-cooperative
   tasks.
 
 \end{enumerate}
+\vspace{-1mm}
 
 Placing the new primitives requires manual effort, but our experience porting a representative set of
 GPU-accelerated irregular algorithms to use cooperative kernels
@@ -381,6 +371,7 @@ GPU-accelerated irregular algorithms to use cooperative kernels
 
 In summary, our main contributions are:
 
+\vspace{-1mm}
 \begin{itemize}
 
 \item \emph{Cooperative kernels}, an extended GPU programming model that support the scheduling requirements of blocking algorithms (\mysec\ref{sec:cooperativekernels}). 
@@ -392,9 +383,9 @@ In summary, our main contributions are:
 \item Experimental results assessing the overhead and responsiveness of the cooperative kernels approach over a set of irregular algorithms across three GPUs (\mysec\ref{sec:experiments}).
 
 \end{itemize}
+\vspace{-1mm}
 
-We begin by providing an overview of the OpenCL programming model and
-two motivating examples of irregular algorithms (\mysec\ref{sec:background}).  At the end of the paper we discuss related work (\mysec\ref{sec:relatedwork}) and avenues for future work (\mysec\ref{sec:conclusion}).
+We begin by providing background on OpenCL via two motivating examples (\mysec\ref{sec:background}).  At the end we discuss related work (\mysec\ref{sec:relatedwork}) and avenues for future work (\mysec\ref{sec:conclusion}).
 
 \section{Background and Motivating Examples}\label{sec:background}
 
@@ -426,8 +417,8 @@ to obtain its unique id, to access distinct data or follow different control flo
 
 The threads executing a kernel are divided into a number of \emph{workgroups}, each consisting of a fixed number of threads.  Builtin functions
 $\getlocalid()$ and $\getgroupid()$ return a thread's local id within
-its workgroup and the id of the workgroup, respectively.\footnote{For simplicity we restrict attention to one-dimensional kernels, which captures all the
-GPU-accelerated irregular algorithms we are aware of, and use
+its workgroup and the id of the workgroup, respectively.\footnote{For simplicity we assume 1D kernels, which captures all the
+irregular algorithms we know of, using
 e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
 }  The number
 of threads per workgroup and the number of workgroups are obtained via
@@ -469,13 +460,12 @@ workgroups executing the same kernel, stating~\cite[p.\ 31]{opencl2Spec}: \emph{
 %  parallel.  
 \dots There is no safe and portable way to synchronize across
   the independent execution of workgroups since once in the work-pool,
-  they can execute in any order.''}  \ADComment{Tyler: please provide CUDA reference with page} CUDA similarly provides no guarantees~\cite{...}.
-
+  they can execute in any order.''}  CUDA similarly provides no guarantees~\cite{cuda-75}.
+%
 HSA provides limited, one-way guarantees,
 stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
   for values written by work-group B without deadlock provided ... A
-  comes after B in work-group flattened ID order}. However, this
-one-way communication is not sufficient to support blocking algorithms that use
+  comes after B in work-group flattened ID order}. This is not sufficient to support blocking algorithms that use
 mutexes and inter-workgroup barriers, both of which require \emph{symmetric} communication between
 threads.
 
@@ -532,26 +522,20 @@ kernel graph_app(global graph * g,
 \paragraph{Work stealing example}
 %
 Work stealing enables dynamic balancing of tasks across several
-processing units, and is useful when the number of tasks to be
-processed in parallel is dynamic, because processing
-one task may create an arbitrary number of new tasks.  In the context
+processing units. It is useful when the number of tasks to be
+processed is dynamic, due to one task creating an arbitrary number of new tasks.  In the context
 of GPUs, each workgroup has an associated queue from which it
 obtains tasks to process, and to which it stores newly created
 tasks. If a workgroup's queue is empty, the workgroup tries to \emph{steal} a task from an other
-queue. Workgroups keep on processing tasks until all the work is
-done. Previous work addresses the feasibility and efficiency of work
+queue. Previous work addresses the feasibility and efficiency of work
 stealing on GPUs~\cite{dlb-web,TPO10}.
 
 \myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
-kernel that uses a work stealing queue. All threads start their
-execution at the function marked with the $\mathsf{kernel}$ keyword
-(line~\ref{line:wksteal:kernelfunc}). They receive a pointer to the task
+kernel that uses a work stealing queue. Each thread receives a pointer to the task
 queues, in global memory, initialized by the
 host to contain the initial tasks. Each thread identifies
-the workgroup it belongs to via the function $\getgroupid()$
-(line~\ref{line:wksteal:getgroupid}). Here the group id is stored into
-the variable $\mathsf{queue\_id}$ (which is, by default, in private
-memory) and used to access the relevant task queue. The
+the workgroup it belongs to via $\getgroupid()$
+(line~\ref{line:wksteal:getgroupid}), which is used as a queue id and used to access the relevant task queue. The
 $\mathsf{pop\_or\_steal}$ function (line~\ref{line:wksteal:poporsteal})
 is called by all threads of a workgroup.  Inside
 $\mathsf{pop\_or\_steal}$ only the thread with a local id equal to $0$,
@@ -560,31 +544,27 @@ task from the workgroup's queue, or steal a task from a different
 queue. The master thread uses local memory inside
 $\mathsf{pop\_or\_steal}$ to ensure that the returned value is valid for
 all threads of its workgroup. If a task was obtained, then all threads
-of the workgroup participate in the processing of the task via 
-$\mathsf{process\_task}$ (line~\ref{line:wksteal:processtask}).
-Processing this task may lead to the creation of further tasks, which
+of the workgroup participate in the processing of the task (line~\ref{line:wksteal:processtask}).
+This may lead to the creation of further tasks, which
 the master thread will push to the workgroup's queue.
 
 Although not depicted here, concurrent accesses to queues inside
 $\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
 mutex per queue, implemented using atomic compare and swap operations
-on global memory.  As a result, the kernel presents two opportunities
+on global memory.  The kernel presents two opportunities
 for spin-waiting: spinning to obtain a mutex, and spinning in the main
-kernel loop to obtain a task to process.  The algorithm thus depends
-on a fair scheduler, which, as discussed in \mysec\ref{sec:intro}, is
-not guaranteed by current GPU programming models.
+kernel loop to obtain a task.  The algorithm thus depends
+on a fair scheduler, which is not guaranteed by current GPU programming models.
 
 \paragraph{Graph traversal example} \myfiglong\ref{fig:graphsearch} shows the
 skeleton of a frontier-based graph traversal algorithm; such algorithms have
-been shown to be execute efficiently on GPUs~\cite{...}. \ADComment{Tyler, can you please work out which of the graph algorithm papers is the right one to cite here?}
+been shown to be execute efficiently on GPUs~\cite{BNP12,DBLP:conf/oopsla/PaiP16}. 
 The kernel is
 given three arguments in global memory: a graph structure, and two
 arrays that can contain graph nodes. Initially, $\keyword{n0}$ contains the
-starting nodes to process. Threads keep three local variables: $\keyword{level}$, which indicates the frontier level currently being
-processed, and $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$, which point to
-distinct node arrays. The nodes to be
-processed for the current frontier are contained in $\keyword{in\_nodes}$, while $\keyword{out\_nodes}$ contains
-the nodes to be processed during the next frontier.
+starting nodes to process. Private variable $\keyword{level}$ indicates the frontier level currently being
+processed, and $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$ point to
+distinct node arrays recording the nodes to be processed during the current and next frontier, respectively.
 
 The application iterates as long as the current frontier contains
 nodes to process (line~\ref{line:graph:iterate}). At each frontier,
@@ -602,13 +582,12 @@ the computation. After processing the frontier, the threads swap their
 node array pointers (line~\ref{line:graph:swap}).
 
 At this point, the GPU threads must wait for all other threads to
-finishing processing the frontier before they can continue. To achieve
+finishing processing the frontier. To achieve
 this, we use a global barrier construct
 (line~\ref{line:graph:gb1}). After all threads reach this point, the
 output node array is reset (line~\ref{line:graph:reset}) and the level
-is incremented. Again, threads must wait until the output node is
-reset at a global barrier (line~\ref{line:graph:gb2}). At this point
-threads can continue to the next frontier.
+is incremented. The threads use another global barrier to wait until the output node is
+reset (line~\ref{line:graph:gb2}), after which the threads can continue to the next frontier.
 
 The global barrier used in this application is not provided as a GPU
 primitive, though previous works have shown that such a global
@@ -617,11 +596,10 @@ based on CPU barrier designs~\cite[ch. 17]{HS08}.
  These barriers employ spinning to ensure threads wait at the barrier until all
 threads have arrived, which requires fair
 scheduling between workgroups for the barrier to operate correctly.
-Again, fairness is not guaranteed by current GPU programming models.
 
-The mutexes and barriers required by these two examples appear to run
+The mutexes and barriers used by these two examples appear to run
 reliably on current GPUs for kernels that are executed with no more
-workgroups than there are compute units; this is due to the fairness
+workgroups than there are compute units.  This is due to the fairness
 of the occupancy-bound execution model that current GPUs have been
 shown, experimentally, to provide.  But, as discussed in
 \mysec\ref{sec:intro}, this model is not endorsed
@@ -635,27 +613,21 @@ the scheduling issue.
 
 \section{Cooperative Kernels}\label{sec:cooperativekernels}
 
-We describe our cooperative kernels programming model as an extension
+We present our cooperative kernels programming model as an extension
 to OpenCL.  However, the cooperative kernels concept is more general,
 and could be applied to extend other GPU programming models, such as
-CUDA and HSA.
-
-We describe the semantics of cooperative kernels
-(\mysec\ref{sec:semantics}) and summarise the important
-differences between programming with regular vs.\ cooperative kernels
-by showing how the motivating examples of \mysec\ref{sec:openclexamples} can be adapted to use cooperative kernels
-(\mysec\ref{sec:programmingguidelines}).
-We then focus on the non-functional
-properties that a developer of a cooperative kernel, and the
-implementer of a scheduler for cooperative kernels, should strive for
-(\mysec\ref{sec:nonfunctional}).  The semantics of cooperative
-kernels has been guided by the practical applications we have studied
-(described in \mysec\ref{sec:portingalgorithms}), and we discuss several cases where we
-might have taken different and also reasonable semantic decisions (\mysec\ref{sec:semanticalternatives}).
-We conclude the section by discussing the backwards-compatible nature
-of cooperative kernels with respect to blocking algorithms designed to
-run on current GPU platforms
+CUDA and HSA.  We describe the semantics of the model
+(\mysec\ref{sec:semantics}), use our motivating examples to discuss
+programmability (\mysec\ref{sec:programmingguidelines}), outline
+important nonfunctional properties that the model requires to work
+successfully (\mysec\ref{sec:nonfunctional}) and explain that the
+model is backwards-compatible
 (\mysec\ref{sec:backwardscompatibility}).
+%
+In Appendices~\ref{appendix:semantics} and~\ref{appendix:semanticalternatives} (supplementary material)
+we present a formal semantics for cooperative kernels atop an abstract GPU programming model,
+and discuss several cases where we
+might have taken different and also reasonable semantic decisions.
 
 \subsection{Semantics of Cooperative Kernels}\label{sec:semantics}
 
@@ -1065,88 +1037,6 @@ compute units are likely to be useful for other high priority tasks
 that are likely to arrive imminently.  With some additional language extensions, it would be possible for the cooperative kernel to hint to the scheduler if, for example, the kernel is at a point of computation where there is less work to do than usual, so that $\offerkill$ calls could be accepted in order to save energy.
 
 
-\subsection{Alternative Semantic Choices}\label{sec:semanticalternatives}
-
-\ADComment{Move this to the appendix.}
-
-\paragraph{Killing order}
-
-We opted for a semantics whereby only the active workgroup with the
-highest id can be killed.  This has an appealing property: it means
-that the ids of active workgroups are contiguous, which is important
-for processing of contiguous data.  The cooperative graph traversal
-algorithm of \myfig\ref{fig:cgraphsearch} illustrates this: the algorithm is prepared
-for $\getglobalsize()$ to change after each resizing barrier call, but
-depends on the fact that $\getglobalid()$ returns a contiguous range
-of thread ids.
-
-A disadvantage of this decision is that it may provide sub-optimal
-responsiveness from the point of view of the scheduler.  Suppose the
-scheduler requires an additional compute unit, but the active thread
-with the larget id is processing some computationally intensive work
-and will take a while to reach $\offerkill$.  Our semantics means that
-the scheuduler cannot take advantage of the fact that another active
-workgroup may invoke $\offerkill$ sooner.
-
-Cooperative kernels that do not require contiguous thread ids might me
-more suited to a semantics in which workgroups can be killed in any
-order, but where workgroup ids (and thus thread global ids) are not
-guaranteed to be contiguous.
-
-\paragraph{Keeping one workgroup alive}
-
-Our semantics dictate that the workgroup with id 0 will not be killed
-if it invokes $\offerkill$.  This avoids the possibility of the
-cooperative kernel terminating early due to the programmer
-inadvertantly allowing all workgroups to be killed, and the decision
-to keep workgroup 0 alive fits well with our choice to kill workgroups
-in descending order of id.
-
-However, there might be a use case for a cooperative kernel reaching a
-point where it would be acceptable for the kernel to exit, although
-desirable for some remaining computation to be performed if competing
-workloads allow it.  In this case, a semantics where all workgroups can be killed via $\offerkill$ would be appropriate, and the programmer would need to guard each $\offerkill$ with an id check in cases where killing all workgroups would be unacceptable.  For example:
-%
-\lstset{basicstyle=\tt,numbers=none}
-\begin{lstlisting}
-  if($\getgroupid{0}$ != 0) $\offerkill$();
-\end{lstlisting}
-\lstset{basicstyle=\scriptsize\tt,numbers=left}
-%
-would ensure that at least workgroup 0 is kept alive.
-
-\paragraph{Transmission of partial state from a single thread}
-
-Recall from the semantics of $\offerfork$ that newly forked workgroups
-inherit the variable valuation associated with thread 0 of the forking
-workgroup, but only for $\transmit$-annotated variables.  Alternative
-choices here would be to have forked workgroups inherit values for
-\emph{all} variables from the forking workgroup, and to have thread
-$i$ in the forking workgroup provide the valuation for thread $i$ in
-each spawned workgroup, rather than having thread 0 transmit the
-valuation to all new threads.
-
-We opted for transmitting only selected varibles based on the
-observation that many of a thread's private variables are dead at the
-point of issuing $\offerfork$ or $\resizingglobalbarrier$, thus it
-would be wasteful to transmit them.  A live variable analysis could
-instead be employed to over-approximate the variables that might be
-accessed by newly arriving workgroups, so that these are automatically
-transmitted.
-
-In all cases, we found that a variable that needed to be transmitted
-had the property of being uniform across the workgroup.  That is,
-despite each thread having its own copy of the variable, each thread
-is in agreement on the variable's value.  As an example, the
-$\keyword{level}$, $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$
-variables used in \myfig\ref{fig:cgraphsearch} are all stored in thread-private
-memory, but all threads in a workgroup agree on the values of these
-variables at each $\resizingglobalbarrier$ call.  As a result,
-transmitting the thread 0's valuation of the annotated variables is
-equivalent to (and more efficient than) transmitting values on a
-thread-by-thread basis.  We have not yet encountered a real-world
-example where our current semantics would not suffice.
-
 
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
@@ -1400,7 +1290,7 @@ game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 
 \mytablong\ref{tab:applications} gives an overview of the 8 irregular
 algorithms that we ported to cooperative kernels. Among them, 6 are
-graph algorithms, based on Pannotia~\cite{...} and Lonestar~\cite{...}
+graph algorithms, based on Pannotia~\cite{Pannotia} and Lonestar~\cite{BNP12}
 GPU application suites, using global barriers.  We indicate how many of
 the original number of barriers are changed to resizing barriers, and
 how many variables need to be transmitted.  In all cases all barriers
@@ -1702,11 +1592,10 @@ Each configuration was run 10 times on each GPU.
 \paragraph{Irregular algorithms and persistent kernels}
 
 There has been a lot of work on accelerating blocking irregular
-algorithms using GPUs~\cite{...}, and on the \emph{persistent threads}
-programming style for long-running kernels~\cite{...}.  These
+algorithms using GPUs, and on the \emph{persistent threads}
+programming style for long-running kernels~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10,BNP12,Pannotia}.  These
 approaches rely on the occupancy-bound execution model, and aim to
-take ownership of the GPU by scheduling as many workgroups as the GPU
-has compute units, relying on fair scheduling between these
+take ownership of the GPU by scheduling as many workgroups as the occupancy bound allows, relying on fair scheduling between these
 workgroups.  This means the GPU is unavailable for other tasks, and
 the method is not future-proof because (as discussed throughout the
 paper) the occupancy-bound execution model is not guaranteed by GPU
@@ -1724,11 +1613,12 @@ Hardware support for preemptive multitasking for \nvidia GPUs has been
 proposed, enabling full preemption as well as \emph{SM-draining},
 whereby workgroups occupying a symmetric multiprocessor (SM; a compute
 unit using our terminology) are drained until the SM becomes free for
-other tasks.  A follow-up work adds the notion of SM \emph{flushing},
+other tasks~\cite{DBLP:conf/isca/TanasicGCRNV14}.  A follow-up work adds the notion of SM \emph{flushing},
 whereby a workgroup running on an SM can be cancelled and re-scheduled
 from scratch if the workgroup has not yet committed any visible
-side-effects to shared memory.  Both approaches have been evaluated
-using simulators, over sets of regular GPU kernels.
+side-effects to shared memory~\cite{DBLP:conf/asplos/ParkPM15}.  Both approaches have been evaluated
+using simulators, over sets of regular GPU kernels.  State-of-the-art \nvidia GPUs targeting data centers (where multi-tasking is essential) do support
+preemption, though it is not clear whether they guarantee fair scheduling~\cite{PascalWhitepaper}.
 
 The advantages of these approaches are that they do not require manual
 programmer effort, and the capability to fully preempt a workgroup
@@ -1741,8 +1631,8 @@ workgroup cannot be drained.
 
 Our solution does not impose a performance penalty on non-cooperative
 kernels, which run in an unmodified manner, and careful placement of
-our new language primitives that exploit the structure of a
-cooperative kernel may enable more efficient multitasking than
+our new language primitives can exploit the structure of a
+cooperative kernel, enabling more efficient multitasking than
 kernel-oblivious preemption.
 
 There is scope for combining the approaches: if a
@@ -1771,91 +1661,40 @@ to exploit memory caches associated with that compute
 unit~\cite{DBLP:conf/ics/WuCLSV15}.  None of these approaches tackle
 the problem of \emph{fair} scheduling on GPUs that our work addresses, thus they do not aid in safe deployment of blocking irregular algorithms.
 
-\paragraph{Dynamic parallelism} Recent version of CUDA and OpenCL allow a kernel to spawn further kernels~\cite{...}.
-This \emph{dynamic parallelism} can be exploited to implement a GPU-based scheduler: an initial scheduler kernel uses the feature to spawn additional kernels as required~\cite{ }.
-
- is launched
-
-%
-\ADComment{Kepler preemption support?  Mention in related work?}
-
-\ADComment{Sreepathi mentioned the NCCL framework.}
-
-
-\cite{TPO10}
-
-
-
-Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
-
-\cite{} \ADComment{Basic idea: map tasks to
-  SMs, not to workgroups, so that tasks that would benefit from being
-  processed by the same SM can be scheduled to the same SM.  Has
-  little to do with preemption, but more to do with irregular
-  computation.}
-
-\cite{DBLP:conf/isca/TanasicGCRNV14} \ADComment{I have not read, but
-  it's about enabling preemptive multiprogramming, so we should read
-  it carefully.}
-
-\cite{DBLP:conf/ppopp/Muyan-OzcelikO16} \ADComment{I have not read; we
-  should understand this one carefully.}
+\paragraph{Dynamic parallelism} Recent versions of CUDA and OpenCL allow a kernel to spawn further kernels~\cite{cuda-75,opencl2Spec}.
+This \emph{dynamic parallelism} can be exploited to implement a
+GPU-based scheduler, by having an initial scheduler kernel repeatedly
+spawn further kernels as required, according to some scheduling
+policy~\cite{DBLP:conf/ppopp/Muyan-OzcelikO16}.  However, a kernel
+that uses dynamic parallelism is still subject to the scheduling
+limitations of current GPU programming models, and in particular the
+problem that workgroups are not fairly scheduled.  Hence this feature
+does not offer a solution to the problem of deploying blocking
+algorithms on GPUs in a safe manner that we tackle with this work.
 
 \paragraph{Cooperative multitasking}
 
-\HEComment{cooperative multitasking: OS: RISC OS, IBM CICS, Windows
-  before 95, old MacOS, maybe Oberon? TRON?. In GPU context: some
-  paper mention ``cooperative'' multitasking but they simply refer to
-  the fact that kernels should not compute for too long in order to
-  let other have access to it. Also, many prog languages implements
-  variations of coroutines, We can see blocking channels of CSP (or
-  Golang more recently) as yielding (sending a message is yielding
-  computation to the process which receives it)}
-
-Cooperative multitasking was offered in ancient operating systems
-(e.g. Windows before the 95 edition) and is still used nowadays in
-RISC OS for instance. Many programming languages offer cooperative
-multitasking via variations of coroutines, e.g. coroutine objects in
+Cooperative multitasking was offered in older operating systems
+(e.g. Windows before the 95 edition) and is still used by some
+operating systems, such as RISC
+OS.\footnote{\url{http://www.riscos.info/index.php/Preemptive_multitasking}}
+Many programming languages offer cooperative multitasking via
+variations of coroutines, e.g. coroutine objects in
 Python\footnote{\url{https://docs.python.org/3/reference/datamodel.html\#coroutine-objects}}
-or Lua\footnote{\url{https://www.lua.org/pil/9.1.html}}, or Ruby's
-fiber \footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}. In
-the context of GPU resources, cooperative multitasking seems to refer
-to sizing kernels such that they do not compute for too long in order
-to yield the whole GPU regularly~\cite{adriaens2012case}. Our
-contribution present a much more flexible cooperative multitasking,
-where the long-running application is never totally stopped.
+or Lua,\footnote{\url{https://www.lua.org/pil/9.1.html}} or Ruby's
+\emph{fiber}.\footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}
 
-\HEComment{ RISC OS see :
-\url{http://www.riscos.info/index.php/Preemptive_multitasking}
-}
-
-% ###
-% Cooperative multitasking for GPU-accelerated grid systems
-
-% http://onlinelibrary.wiley.com/doi/10.1002/cpe.1722/full
-
-% @article {CPE:CPE1722,
-% author = {Ino, Fumihiko and Ogita, Akihiro and Oita, Kentaro and Hagihara, Kenichi},
-% title = {Cooperative multitasking for GPU-accelerated grid systems},
-% journal = {Concurrency and Computation: Practice and Experience},
-% volume = {24},
-% number = {1},
-% publisher = {John Wiley & Sons, Ltd},
-% issn = {1532-0634},
-% url = {http://dx.doi.org/10.1002/cpe.1722},
-% doi = {10.1002/cpe.1722},
-% pages = {96--107},
-% keywords = {multitasking, GPU, CUDA, grid computing},
-% year = {2012},
-% }
-
-% Not super interesting: they just divide blocking computation in
-% smaller independent kernels, and fires them at regular intervals to
-% let the system be responsive.
-
+In the context of GPUs, cooperative multitasking has been used to
+refer to the standard setup today, whereby the onus is on a GPU kernel
+to complete execution within a reasonable time budget and return
+control to the CPU application~\cite{adriaens2012case,CPE:CPE1722}.  In this setting, the programmer is responsible for ensuring cooperation between the host application and GPU kernel so that a kernel does not run for too long.
+%
+This is in contrast to our notion of cooperative kernels, which is designed specifically to support the needs of long-running kernels that one might wish to multitask with other workloads.
 
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
+
+\ADComment{Do citation tidy-up.}
 
 \ADComment{Next-generation GPUs and drivers for evaluation,
   implementation in a real driver, migration of work between multiple
@@ -1935,7 +1774,7 @@ introduced by our programming model.
 
 \paragraph{Memory synchronisation}
 
-GPUs are known to have relaxed memory models~\cite{ }.  To abstractly
+GPUs are known to have relaxed memory models~\cite{ABDGKPSW-2015}.  To abstractly
 account for this, we assume that the shared state component $\sigma$
 is not simplyl a mapping from locations to values, but instead
 captures all the intricacies of GPU memory that can lead to this
@@ -2115,6 +1954,95 @@ variables), and the rest of the local state.
  \ADComment{Local memory is not
   explicitly modeled but can be captured inside shared state.}
 \ADComment{Semantics for intra-workgroup barriers are ignored.}
+
+
+
+\section{Alternative Semantic Choices}\label{appendix:semanticalternatives}
+
+The semantics of cooperative kernels has been guided by the practical
+applications we have studied (described in
+\mysec\ref{sec:portingalgorithms}).  We now discuss several cases
+where we might have taken different and also reasonable semantic
+decisions.
+
+\paragraph{Killing order}
+
+We opted for a semantics whereby only the active workgroup with the
+highest id can be killed.  This has an appealing property: it means
+that the ids of active workgroups are contiguous, which is important
+for processing of contiguous data.  The cooperative graph traversal
+algorithm of \myfig\ref{fig:cgraphsearch} illustrates this: the
+algorithm is prepared for $\getglobalsize()$ to change after each
+resizing barrier call, but depends on the fact that $\getglobalid()$
+returns a contiguous range of thread ids.
+
+A disadvantage of this decision is that it may provide sub-optimal
+responsiveness from the point of view of the scheduler.  Suppose the
+scheduler requires an additional compute unit, but the active thread
+with the larget id is processing some computationally intensive work
+and will take a while to reach $\offerkill$.  Our semantics means that
+the scheuduler cannot take advantage of the fact that another active
+workgroup may invoke $\offerkill$ sooner.
+
+Cooperative kernels that do not require contiguous thread ids might me
+more suited to a semantics in which workgroups can be killed in any
+order, but where workgroup ids (and thus thread global ids) are not
+guaranteed to be contiguous.
+
+\paragraph{Keeping one workgroup alive}
+
+Our semantics dictate that the workgroup with id 0 will not be killed
+if it invokes $\offerkill$.  This avoids the possibility of the
+cooperative kernel terminating early due to the programmer
+inadvertantly allowing all workgroups to be killed, and the decision
+to keep workgroup 0 alive fits well with our choice to kill workgroups
+in descending order of id.
+
+However, there might be a use case for a cooperative kernel reaching a
+point where it would be acceptable for the kernel to exit, although
+desirable for some remaining computation to be performed if competing
+workloads allow it.  In this case, a semantics where all workgroups can be killed via $\offerkill$ would be appropriate, and the programmer would need to guard each $\offerkill$ with an id check in cases where killing all workgroups would be unacceptable.  For example:
+%
+\lstset{basicstyle=\tt,numbers=none}
+\begin{lstlisting}
+  if($\getgroupid{0}$ != 0) $\offerkill$();
+\end{lstlisting}
+\lstset{basicstyle=\scriptsize\tt,numbers=left}
+%
+would ensure that at least workgroup 0 is kept alive.
+
+\paragraph{Transmission of partial state from a single thread}
+
+Recall from the semantics of $\offerfork$ that newly forked workgroups
+inherit the variable valuation associated with thread 0 of the forking
+workgroup, but only for $\transmit$-annotated variables.  Alternative
+choices here would be to have forked workgroups inherit values for
+\emph{all} variables from the forking workgroup, and to have thread
+$i$ in the forking workgroup provide the valuation for thread $i$ in
+each spawned workgroup, rather than having thread 0 transmit the
+valuation to all new threads.
+
+We opted for transmitting only selected varibles based on the
+observation that many of a thread's private variables are dead at the
+point of issuing $\offerfork$ or $\resizingglobalbarrier$, thus it
+would be wasteful to transmit them.  A live variable analysis could
+instead be employed to over-approximate the variables that might be
+accessed by newly arriving workgroups, so that these are automatically
+transmitted.
+
+In all cases, we found that a variable that needed to be transmitted
+had the property of being uniform across the workgroup.  That is,
+despite each thread having its own copy of the variable, each thread
+is in agreement on the variable's value.  As an example, the
+$\keyword{level}$, $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$
+variables used in \myfig\ref{fig:cgraphsearch} are all stored in thread-private
+memory, but all threads in a workgroup agree on the values of these
+variables at each $\resizingglobalbarrier$ call.  As a result,
+transmitting the thread 0's valuation of the annotated variables is
+equivalent to (and more efficient than) transmitting values on a
+thread-by-thread basis.  We have not yet encountered a real-world
+example where our current semantics would not suffice.
+
 
 
 \end{document}
