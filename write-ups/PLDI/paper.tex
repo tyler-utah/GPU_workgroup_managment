@@ -1074,8 +1074,9 @@ be worthwhile.
 
 We have built a tool, \kernelmerge{}, that takes a cooperative kernel
 and a non-cooperative kernel and merges them to produce a megakernel
-with an embedded GPU scheduler.  We implemented \kernelmerge{} using the Clang LibTooling framework,\footnote{\url{http://clang.llvm.org/docs/LibTooling.html}}
-leveraging recent Clang support for OpenCL 2.0~\cite{ClangOpenCL20}.
+with an embedded GPU scheduler.  We implemented \kernelmerge{} using the
+Clang LibTooling framework~\cite{clang}, leveraging recent Clang support
+for OpenCL 2.0~\cite{ClangOpenCL20}.
 
 \subsection{Scheduler design}\label{sec:resizingbarrier}\label{sec:schedulerimpl}
 
@@ -1289,15 +1290,15 @@ confirmed this by trying the upstream driver that requires a patched
 Linux kernel). AMD support SVM atomics only their Kaveri family of
 chips and only on Linux, requiring to compile the latest driver.
 
-Among the GPUs available to us, four met our
-requirements: Intel HD 520, HD 5500 and Iris 6100, and AMD Radeon R7.
-However, AMD's Linux drivers for OpenCL suffer from a known defect
-whereby long-running kernels lead to defunct processes that the OS
-cannot kill.\footnote{See \url{http://developer.amd.com/download/AMD_APP_SDK_Release_Notes_Developer.pdf}}  We observed this on our AMD platform with the latest
-driver, and simultaneously obtained alarming results on this platform
-when using SVM atomics: modifying a kernel to include a simple
-host/device handshake through SVM slowed down kernel execution by an
-order of magnitude in some cases.  This behaviour, combined with the
+Among the GPUs available to us, four met our requirements: Intel HD 520,
+HD 5500 and Iris 6100, and AMD Radeon R7.  However, AMD's Linux drivers
+for OpenCL suffer from a known defect whereby long-running kernels lead
+to defunct processes that the OS cannot
+kill~\cite{amd-defunct-process}. We observed this on our AMD platform
+with the latest driver, and simultaneously obtained alarming results on
+this platform when using SVM atomics: modifying a kernel to include a
+simple host/device handshake through SVM slowed down kernel execution by
+an order of magnitude in some cases.  This behaviour, combined with the
 defunt processes issue, lead us to suspect that the support we require
 for cooperative kernels is not yet mature enough within AMD's drivers,
 which we plan to discuss with engineers at AMD.
@@ -1349,7 +1350,7 @@ emphasised under the mouse pointer; \emph{medium}, whereby window
 dragging over the desktop is smoothly animated; and \emph{heavy}, which
 requires smooth animation of a WebGL shader in a browser.  For
 \emph{heavy} we used WebGL demos from the Chrome
-experiments\footnote{\url{https://www.chromeexperiments.com}} running
+experiments~\cite{chrome-experiments} running
 in a recent version of Firefox.
 
 % the Paper Planes\footnote{\url{https://paperplanes.world}} and
@@ -1711,7 +1712,7 @@ algorithms on GPUs.
 Cooperative multitasking was offered in older operating systems
 (e.g. Windows before the 95 edition) and is still used by some
 operating systems, such as RISC
-OS.\footnote{\url{http://www.riscos.info/index.php/Preemptive_multitasking}}
+OS~\cite{risc-os-multitasking}.
 Many programming languages offer cooperative multitasking via
 variations of coroutines, e.g. coroutine objects in
 Python
