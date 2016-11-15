@@ -14,7 +14,8 @@
 \usepackage{courier}            % standard fixed width font
 \usepackage[scaled]{helvet} % see www.ctan.org/get/macros/latex/required/psnfss/psnfss2e.pdf
 \usepackage{url}                  % format URLs
-\urlstyle{same}
+\urlstyle{same}                   % URL use same font as regular text
+                                  %   (regular font is less wide than tt)
 \usepackage{listings}          % format code
 \usepackage{enumitem}      % adjust spacing in enums
 \usepackage[colorlinks=true,allcolors=blue,breaklinks,draft=false]{hyperref}   % hyperlinks, including DOIs and URLs in bibliography
@@ -1290,20 +1291,22 @@ game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 
 \mytablong\ref{tab:applications} gives an overview of the 8 irregular
 algorithms that we ported to cooperative kernels. Among them, 6 are
-graph algorithms, based on Pannotia~\cite{Pannotia} and Lonestar~\cite{BNP12}
-GPU application suites, using global barriers.  We indicate how many of
-the original number of barriers are changed to resizing barriers, and
-how many variables need to be transmitted.  In all cases all barriers
-were converted, except for bc which contains barriers deeper in the call
-stack, a case not supported by our prototype. Still, these barriers
-could in principle also be converted. The remaining 2 algorithms are
-workstealing applications: each required the addition of $\offerfork$
-and $\offerkill$ at the start of the main loop, and no variables needed
-to be transmitted.  For all these examples the porting to cooperative
-kernels was similarly straightforward to the porting illustrated in
+graph algorithms, based on Pannotia~\cite{Pannotia} and
+Lonestar~\cite{BNP12} GPU application suites, using global barriers.  We
+indicate how many of the original number of barriers are changed to
+resizing barriers, and how many variables need to be transmitted.  In
+all cases all barriers were converted, except for bc which contains
+barriers deeper in the call stack, a case not supported by our
+prototype. Still, these barriers could in principle also be
+converted. The remaining 2 algorithms are workstealing applications:
+each required the addition of $\offerfork$ and $\offerkill$ at the start
+of the main loop, and no variables needed to be transmitted.  For all
+these examples the porting to cooperative kernels was similarly
+straightforward to the porting illustrated in
 \mysec\ref{sec:programmingguidelines} for our running examples, and did
 not require reshaping of the original algorithm. Most graph come with 2
-different input data sets, leading to 13 application/data set pairs in total.
+different data sets as input, leading to 13 application/input pairs in
+total.
 
 From the Lonestar suite we omit two applications that use global barriers:
 dmr has been shown to be unstable across GPU vendors~\cite{DBLP:conf/iwocl/SorensenD16}, and mst is trivially short-running so that it is not
@@ -1517,12 +1520,13 @@ compare execution times.
 
 \paragraph{Results}
 For each GPU, \mytab\ref{tab:overhead} shows the geometric mean and
-maximum slowdown across all applications and data sets, with averages and maxima computed over 10 runs per benchmark. For the maximum slowdowns, we indicate which
-application and data set was responsible.  The slowdown is below 2 even
-in the worst case, and closer to 1 on average. We consider these results
-as encouraging, especially since the performance of our prototype could
-clearly be improved upon if cooperative scheduling was implemented
-directly in the GPU driver.
+maximum slowdown across all applications and inputs, with averages and
+maxima computed over 10 runs per benchmark. For the maximum slowdowns,
+we indicate which application and input was responsible. The slowdown is
+below 2 even in the worst case, and closer to 1 on average. We consider
+these results as encouraging, especially since the performance of our
+prototype could clearly be improved upon if cooperative scheduling was
+implemented directly in the GPU driver.
 
 \ADComment{Can we remark a bit more on the outliers?}
 
