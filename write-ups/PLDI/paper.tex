@@ -1184,28 +1184,17 @@ When a workgroup $w$ of $K_c$ subsequently executes $\offerfork$, thread 0 of $w
 
 \paragraph{Safe implementation}
 
-Concurrent calls to $\offerfork()$ must be protected with a mutex,
-otherwise workgroups calling $\offerfork()$ will conflict over the
+Concurrent calls to $\offerfork$ must be protected by a mutex
+to avoid racing on the
 available workgroups. The same conflict over available workgroups can
 occur at a new kernel launch between the scheduler and a workgroup
-calling $\offerfork()$ occurs between the scheduler assigning tasks.
-Thus we provide a mutex, called the \emph{assignment mutex}, in the
-scheduler context which must be held anytime a group of available
-resources is assigned to a kernel.
+calling $\offerfork()$.
 
-The provides an indirect mutex protecting concurrent calls to
-$\offerfork()$ and $\offerkill()$. That is, $\offerkill()$ only
-commands a workgroup to exit when the scheduler holds the
-\emph{assignment lock}, as the scheduler is trying to obtain work
-groups to send to a task, and $\offerfork()$ cannot spawn workgroups
-without holding this lock.
+The scheduler context provides an \emph{assignment mutes} to protecting concurrent calls to
+$\offerfork$ and $\offerkill$.  On calling $\offerkill$, a workgroup is only permitted to exit if the scheduler currently holds the assignment mutex; that is, the scheduler is trying to obtain work
+groups to send to a task.  Conversely, on calling $\offerfork$ a workgroup can only spawn new workgroups if the assignment mutex is not held by the scheduler.
 
-The semantics of $\offerkill()$, which allow only the workgroup with
-the highest id provide natural mutual exclusion for exiting workgroups
-(as part of the exit, the kernel context is updated). That is, a
-workgroup can only exit at $\offerkill()$ if it is the workgroup with
-the highest id. An exiting thread releases this natural mutex by
-decrementing the number of active workgroups in the kernel context.
+Concurrent calls to $\offerkill$ are acceptable because only the workgroup with the highest id may exit, automatically ensuring mutual exclusion for exit-related modifications.
 
 \paragraph{Example}
 
@@ -1226,15 +1215,15 @@ decrementing the number of active workgroups in the kernel context.
 
 \paragraph{An efficient resizing barrier}
 
-In section~\ref{??}, we show that a resizing barrier is semantically
-equivalent to three normal barrier calls with calls to cfork and ckill
-in between. It is possible, however to implement the resizing with
+In \mysec\ref{sec:semantics}, we defined the semantics of a resizing barrier in terms
+of a series of calls to $\globalbarrier$, $\offerfork$ and $\offerkill$.
+ It is possible, however to implement the resizing with
 only one call to a global barrier with $\offerfork$ and $\offerkill$
 baked into the implementation. \TSComment{note here that these
   implementations require no cfork or ckill outside of the barrier}
 
 We consider barriers which have the master/slave model
-(e.g. \cite{??}). That is, one workgroup (the master) collects signals
+(e.g.\ \cite{XF10}). That is, one workgroup (the master) collects signals
 from the other workgroups (the slaves) indicating that they have
 arrived at the barrier and are waiting for a reply indicating that
 they may leave the barrier. Once the master has recieved a signal from
@@ -1272,14 +1261,8 @@ new workgroups as slaves. (3) Master calls {\tt query()} and gets
 value $W$; (4) master releases slaves and broadcasts the value from
 {\tt query} to slaves. (5) Workgroups with id greater than $M-W$ spin
 on $\offerkill$, as they know from {\tt query()} that the scheduler
-needs them to exit. We show in Section~\ref{} that the barrier using
+needs them to exit. We show in \mysec\ref{sec:responsiveness} that the barrier using
 query greatly reduces the gather time in practice.
-
-\subsection{Vendor Implementation Defects}
-
-\ADComment{Briefly rant about our pain.  Compiler hang, compiler crashes, deadlocks, defunct processes.  Caution: don't make it sound so terrible that you can't trust our results.  Gently acknowledge that our implementation may be imperfect.}
-
-
 
 
 
@@ -2033,7 +2016,7 @@ a set of kernel states that can arise due to memory synchronization
 taking place.  An arbitary member of this set is selected as the next
 kernel state.
 
-Despite its apparent complexity, the $\textsc{Resizing-Barrier}$ rule simply implements the rewriting of $\resizingglobalbarrier$ in terms of $\globalbarrier$, $\offerkill$ and $\offerfork$ discussed in \mysec\ref{ }.
+Despite its apparent complexity, the $\textsc{Resizing-Barrier}$ rule simply implements the rewriting of $\resizingglobalbarrier$ in terms of $\globalbarrier$, $\offerkill$ and $\offerfork$ discussed in \mysec\ref{sec:semantics}.
 
 
 \section{Alternative Semantic Choices}\label{appendix:semanticalternatives}
