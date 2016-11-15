@@ -210,7 +210,7 @@ interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
 by the computation itself.  The last decade has seen growing interest in accelerating irregular
 data-parallel algorithms on GPUs, particularly algorithms that
-traverse and manipulate linked data structures~\cite{owens-persistent,TPO10,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10}.
+traverse and manipulate linked data structures~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10,BNP12,Pannotia}.
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
@@ -229,7 +229,7 @@ indefinitely at a global barrier so that other workgroups do not reach the barri
 
 \paragraph{A degree of fairness: occupancy-bound execution}
 GPU schedulers are \emph{not} fair. the current GPU
-programming models---OpenCL~\cite{opencl2Spec}, \ADComment{Tyler, please add best CUDA since I've asked you to add it below in any case} CUDA~\cite{...}  and
+programming models---OpenCL~\cite{opencl2Spec}, CUDA~\cite{cuda-75}  and
 HSA~\cite{HSAprogramming11}---specify almost no guarantees regarding scheduling of
 workgroups, and current GPUs do not
 provide fair scheduling in practice.  Roughly speaking, each workgroup
@@ -241,12 +241,12 @@ executing a GPU kernel is mapped to a hardware \emph{compute
 The simplest way for a GPU driver to handle 
 the case where more workgroups are launched than there are compute
 units is via an \emph{occupancy-bound}
-execution model~\cite{DBLP:conf/oopsla/SorensenDBGR16}. \ADComment{Tyler, please add best cite for OB model; I guess our OOPSLA paper introduced the term, but we should cite that + Owens?}  With this model, once a workgroup has commenced execution on a
+execution model~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16}.  With this model, once a workgroup has commenced execution on a
 compute unit (it has become \emph{occupant}), the workgroup has
 exclusive access to the compute unit until it has finished execution,
 after which a subsequent workgroup can be bound to the compute unit.
 Experiments suggest that the occupancy-bound execution model is widely
-implemented by today's GPU devices and drivers~\cite{DBLP:conf/oopsla/SorensenDBGR16}. \ADComment{For the previous cite, should we cite other papers as well as ours?}  It is
+implemented by today's GPU devices and drivers~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/oopsla/PaiP16,BNP12}.   It is
 evidently a simple model for device vendors to implement efficiently.
 
 The occupancy-bound execution model does not guarantee fair scheduling
@@ -258,8 +258,7 @@ bound to separate compute units that operate in parallel.  Current GPU
 implementations of irregular data parallel algorithms assume the
 occupancy-bound execution model, which they exploit by launching 
 no more workgroups than there are available compute
-units~\cite{...}. \ADComment{Tyler, please pick best cite for previous
-  claim.} This works because \emph{today}'s GPUs seem to provide the
+units~\cite{owens-persistent}. This works because \emph{today}'s GPUs seem to provide the
 occupancy-bound execution model.
 
 \paragraph{Resistance to guaranteeing occupancy-bound execution}
@@ -469,7 +468,7 @@ workgroups executing the same kernel, stating~\cite[p.\ 31]{opencl2Spec}: \emph{
 %  parallel.  
 \dots There is no safe and portable way to synchronize across
   the independent execution of workgroups since once in the work-pool,
-  they can execute in any order.''}  \ADComment{Tyler: please provide CUDA reference with page} CUDA similarly provides no guarantees~\cite{...}.
+  they can execute in any order.''}  CUDA similarly provides no guarantees~\cite{cuda-75}.
 
 HSA provides limited, one-way guarantees,
 stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
@@ -576,7 +575,7 @@ not guaranteed by current GPU programming models.
 
 \paragraph{Graph traversal example} \myfiglong\ref{fig:graphsearch} shows the
 skeleton of a frontier-based graph traversal algorithm; such algorithms have
-been shown to be execute efficiently on GPUs~\cite{...}. \ADComment{Tyler, can you please work out which of the graph algorithm papers is the right one to cite here?}
+been shown to be execute efficiently on GPUs~\cite{BNP12,DBLP:conf/oopsla/PaiP16}. 
 The kernel is
 given three arguments in global memory: a graph structure, and two
 arrays that can contain graph nodes. Initially, $\keyword{n0}$ contains the
@@ -1400,7 +1399,7 @@ game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 
 \mytablong\ref{tab:applications} gives an overview of the 8 irregular
 algorithms that we ported to cooperative kernels. Among them, 6 are
-graph algorithms, based on Pannotia~\cite{...} and Lonestar~\cite{...}
+graph algorithms, based on Pannotia~\cite{Pannotia} and Lonestar~\cite{BNP12}
 GPU application suites, using global barriers.  We indicate how many of
 the original number of barriers are changed to resizing barriers, and
 how many variables need to be transmitted.  In all cases all barriers
@@ -1677,11 +1676,10 @@ use matmult to represent system workload, ref to previous section
 \paragraph{Irregular algorithms and persistent kernels}
 
 There has been a lot of work on accelerating blocking irregular
-algorithms using GPUs~\cite{...,TPO10}, and on the \emph{persistent threads}
-programming style for long-running kernels~\cite{...}.  These
+algorithms using GPUs, and on the \emph{persistent threads}
+programming style for long-running kernels~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10,BNP12,Pannotia}.  These
 approaches rely on the occupancy-bound execution model, and aim to
-take ownership of the GPU by scheduling as many workgroups as the GPU
-has compute units, relying on fair scheduling between these
+take ownership of the GPU by scheduling as many workgroups as the occupancy bound allows, relying on fair scheduling between these
 workgroups.  This means the GPU is unavailable for other tasks, and
 the method is not future-proof because (as discussed throughout the
 paper) the occupancy-bound execution model is not guaranteed by GPU
@@ -1717,8 +1715,8 @@ workgroup cannot be drained.
 
 Our solution does not impose a performance penalty on non-cooperative
 kernels, which run in an unmodified manner, and careful placement of
-our new language primitives that exploit the structure of a
-cooperative kernel may enable more efficient multitasking than
+our new language primitives can exploit the structure of a
+cooperative kernel, enabling more efficient multitasking than
 kernel-oblivious preemption.
 
 There is scope for combining the approaches: if a
@@ -1747,7 +1745,7 @@ to exploit memory caches associated with that compute
 unit~\cite{DBLP:conf/ics/WuCLSV15}.  None of these approaches tackle
 the problem of \emph{fair} scheduling on GPUs that our work addresses, thus they do not aid in safe deployment of blocking irregular algorithms.
 
-\paragraph{Dynamic parallelism} Recent version of CUDA and OpenCL allow a kernel to spawn further kernels~\cite{CUDASpec,opencl2Spec}.
+\paragraph{Dynamic parallelism} Recent versions of CUDA and OpenCL allow a kernel to spawn further kernels~\cite{cuda-75,opencl2Spec}.
 This \emph{dynamic parallelism} can be exploited to implement a
 GPU-based scheduler, by having an initial scheduler kernel repeatedly
 spawn further kernels as required, according to some scheduling
@@ -1760,59 +1758,27 @@ algorithms on GPUs in a safe manner that we tackle with this work.
 
 \paragraph{Cooperative multitasking}
 
-\HEComment{cooperative multitasking: OS: RISC OS, IBM CICS, Windows
-  before 95, old MacOS, maybe Oberon? TRON?. In GPU context: some
-  paper mention ``cooperative'' multitasking but they simply refer to
-  the fact that kernels should not compute for too long in order to
-  let other have access to it. Also, many prog languages implements
-  variations of coroutines, We can see blocking channels of CSP (or
-  Golang more recently) as yielding (sending a message is yielding
-  computation to the process which receives it)}
-
-Cooperative multitasking was offered in ancient operating systems
-(e.g. Windows before the 95 edition) and is still used nowadays in
-RISC OS for instance. Many programming languages offer cooperative
-multitasking via variations of coroutines, e.g. coroutine objects in
+Cooperative multitasking was offered in older operating systems
+(e.g. Windows before the 95 edition) and is still used by some
+operating systems, such as RISC
+OS.\footnote{\url{http://www.riscos.info/index.php/Preemptive_multitasking}}
+Many programming languages offer cooperative multitasking via
+variations of coroutines, e.g. coroutine objects in
 Python\footnote{\url{https://docs.python.org/3/reference/datamodel.html\#coroutine-objects}}
-or Lua\footnote{\url{https://www.lua.org/pil/9.1.html}}, or Ruby's
-fiber \footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}. In
-the context of GPU resources, cooperative multitasking seems to refer
-to sizing kernels such that they do not compute for too long in order
-to yield the whole GPU regularly~\cite{adriaens2012case}. Our
-contribution present a much more flexible cooperative multitasking,
-where the long-running application is never totally stopped.
+or Lua,\footnote{\url{https://www.lua.org/pil/9.1.html}} or Ruby's
+\emph{fiber}.\footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}
 
-\HEComment{ RISC OS see :
-\url{http://www.riscos.info/index.php/Preemptive_multitasking}
-}
-
-% ###
-% Cooperative multitasking for GPU-accelerated grid systems
-
-% http://onlinelibrary.wiley.com/doi/10.1002/cpe.1722/full
-
-% @article {CPE:CPE1722,
-% author = {Ino, Fumihiko and Ogita, Akihiro and Oita, Kentaro and Hagihara, Kenichi},
-% title = {Cooperative multitasking for GPU-accelerated grid systems},
-% journal = {Concurrency and Computation: Practice and Experience},
-% volume = {24},
-% number = {1},
-% publisher = {John Wiley & Sons, Ltd},
-% issn = {1532-0634},
-% url = {http://dx.doi.org/10.1002/cpe.1722},
-% doi = {10.1002/cpe.1722},
-% pages = {96--107},
-% keywords = {multitasking, GPU, CUDA, grid computing},
-% year = {2012},
-% }
-
-% Not super interesting: they just divide blocking computation in
-% smaller independent kernels, and fires them at regular intervals to
-% let the system be responsive.
-
+In the context of GPUs, cooperative multitasking has been used to
+refer to the standard setup today, whereby the onus is on a GPU kernel
+to complete execution within a reasonable time budget and return
+control to the CPU application~\cite{adriaens2012case,CPE:CPE1722}.  In this setting, the programmer is responsible for ensuring cooperation between the host application and GPU kernel so that a kernel does not run for too long.
+%
+This is in contrast to our notion of cooperative kernels, which is designed specifically to support the needs of long-running kernels that one might wish to multitask with other workloads.
 
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
+
+\ADComment{Do citation tidy-up.}
 
 \ADComment{Next-generation GPUs and drivers for evaluation,
   implementation in a real driver, migration of work between multiple
