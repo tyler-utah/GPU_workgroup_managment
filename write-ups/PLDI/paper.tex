@@ -1589,12 +1589,16 @@ our new language primitives that exploit the structure of a
 cooperative kernel may enable more efficient multitasking than
 kernel-oblivious preemption.
 
-\ADComment{Rewrite:} There is scope for combining the approaches by using cooperative scheduling...
+There is scope for combining the approaches: if a
+cooperative kernel is insufficiently cooperative, i.e.\ it does not
+invoke $\offerkill$ enough, then hardware support for preemption could
+be invoked to prevent the kernel from denying other tasks access to
+the GPU indefinitely.
 
 \paragraph{Optimizing GPU scheduling}
 %
-A number of works have considered how best to schedulel dynamic
-workloads on GPUs.  The Whippletree approach employs a persistent
+A number of works have considered how best to schedule dynamic
+workloads on GPUs~\cite{DBLP:journals/tog/SteinbergerKKHKS12,DBLP:conf/ics/WuCLSV15,DBLP:conf/usenix/KatoLRI11,DBLP:journals/tog/SteinbergerKBKDS14,DBLP:journals/rts/ElliottA12,DBLP:conf/sosp/RossbachCSRW11}.  Among these, the Whippletree approach employs a persistent
 megakernel to schedule multiple, dynamic tasks in a manner that aims
 to best utilise GPU
 resources~\cite{DBLP:journals/tog/SteinbergerKBKDS14}.  The TimeGraph
@@ -1611,10 +1615,19 @@ to exploit memory caches associated with that compute
 unit~\cite{DBLP:conf/ics/WuCLSV15}.  None of these approaches tackle
 the problem of \emph{fair} scheduling on GPUs that our work addresses, thus they do not aid in safe deployment of blocking irregular algorithms.
 
+\paragraph{Dynamic parallelism} Recent version of CUDA and OpenCL allow a kernel to spawn further kernels~\cite{...}.
+This \emph{dynamic parallelism} can be exploited to implement a GPU-based scheduler: an initial scheduler kernel uses the feature to spawn additional kernels as required~\cite{ }.
+
+ is launched
+
 %
 \ADComment{Kepler preemption support?  Mention in related work?}
 
 \ADComment{Sreepathi mentioned the NCCL framework.}
+
+
+\cite{TPO10}
+
 
 
 Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
