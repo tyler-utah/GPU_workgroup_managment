@@ -1492,14 +1492,8 @@ implemented directly in the GPU driver.
 
 \subsection{Multitasking via Cooperative Scheduling}\label{sec:responsiveness}
 
-We now assess the performance impact and responsiveness of
-multitasking between a long-running cooperative kernel and a series of
-short, non-cooperative kernel launches.  Performance is measured by
-comparing the time for multitasked execution with the time taken to
-perform all kernel launches in sequence.  Responsiveness, i.e.\ how
-fast a non-cooperative kernel can be scheduled, depends not only on
-the scheduler implementation, but also on how often the cooperative
-kernel offers workgroups to be killed.
+We now assess the responsiveness of multitasking between a long-running cooperative kernel and a series of
+short, non-cooperative kernel launches, and the performance impact of multitasking on the cooperative kernel.
 
 % In order to simulate non-persistent workloads alongside kernels of
 % blocking algorithms, we use a matrix multiplication kernel where
@@ -1556,9 +1550,9 @@ severe failures such as machine freezes and blue screens.
 \paragraph{Responsiveness}
 
 \myfiglong\ref{fig:fine-grained-timing} reports, on three
-configurations, the gather and execution time of the non-cooperative
-kernel w.r.t. the quantity of workgroups allocated to it. 
-\ADComment{Not clear: are the times for light and heavy averages?} A logarithmic
+configurations, the average gather and execution times for the non-cooperative
+kernel w.r.t. the quantity of workgroups allocated to it.
+A logarithmic
 scale is used for time since gather times tend to be much smaller than
 execution times. The horizontal grey lines indicates the desired period
 for non-cooperative kernels.  These graphs show a representative sample of our results; the full set of graphs for all configurations is provided in Appendix~\ref{appendix:extraresponsiveness} (supplementary material).
