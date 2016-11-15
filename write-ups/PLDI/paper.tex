@@ -207,7 +207,7 @@ Many
 interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
 by the computation itself.  There is growing interest in accelerating such algorithms on GPUs, particularly algorithms that
-traverse and manipulate linked data structures~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10,BNP12,Pannotia}.
+traverse and manipulate linked data structures~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, to balance load and communicate intermediate
@@ -528,7 +528,7 @@ of GPUs, each workgroup has an associated queue from which it
 obtains tasks to process, and to which it stores newly created
 tasks. If a workgroup's queue is empty, the workgroup tries to \emph{steal} a task from an other
 queue. Previous work addresses the feasibility and efficiency of work
-stealing on GPUs~\cite{dlb-web,TPO10}.
+stealing on GPUs~\cite{DBLP:conf/egh/CedermanT08,TPO10}.
 
 \myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
 kernel that uses a work stealing queue. Each thread receives a pointer to the task
@@ -1195,6 +1195,8 @@ mega-kernel. If there are large constant inputs to the kernel, these
 can be copied before mega-kernel launch to decrease the amount of SVM
 traffic.
 
+\paragraph{Dynamically managing workgroups}
+
 The GPU scheduler then receives the data packet from the host
 describing a kernel $K$ to be executed and now must make decisions
 about how to schedule the $K$. Consider the case where $K$ requires
@@ -1206,7 +1208,7 @@ executing. The scheduler can signal $K_c$ through $K_c$'s
 communication channel in the scheduler context communication
 requesting that $K_c$ provide $W - W_a$ workgroups (via $\offerkill$)
 as soon as possible. The scheduler then waits until $W$ workgroups
-become available. 
+become available.
 
 When $W$ workgroups become available, the scheduler initialises a
 kernel context $KC$ for $K$, setting the number of active workgroups
@@ -1215,15 +1217,92 @@ context) to their new $KC$ workgroup ids. The scheduler then sends $W$
 workgroups from the available workgroups to execute kernel $K$ with
 kernel context $KC$.
 
-\paragraph{$\offerkill$ implementation}
+In the case where a cooperative kernel $K_c$ is executing and there
+are $W$ avaiable workgroups, the scheduler may decide to give $K_c$
+$W_k <= W$ additional workgroups via an $\offerfork$ command issued by
+$K_c$. To do this, scheduler signals $K_c$ through the $K_c$'s
+scheduler context communication channel to indicate the number of
+workgroups that are allowed to join at the next $\offerfork$ command.
+Then, when a workgroup $w$ of $K_c$ executes $\offerfork$, $w$
+observes $W_k$, and takes $W_k$ workgroups from the pool of available
+workgroups, provides them with transmit variables, target, and updated
+kernel context.
+\TSComment{this is sloppy}
 
 
+\paragraph{Efficient implementation}
 
+The interesting interactions with respect to performance and safety
+occur in the interaction of the scheduler and cooperative kernel. We
+discuss these details now.
 
+At the core of the scheduler is the workgroup pool, which maps each
+workgroup to a status and keeps track of the number of workgroups in
+each status. The workgroup pool can change in two ways: (1)
+\emph{assigning tasks}, where workgroups are changed from available to
+computing a kernel (2) \emph{becoming available}, where a workgroup
+exits a kernel computation (either through completion or $\offerkill$)
+and changes its status from computing a kernel to available.
 
+\emph{Assigning tasks} occurs either when the scheduler is launches a
+new kernel, or when a workgroup calls $\offerfork$ and observes that
+there are available resources. This creates a potential conflict
+between forking workgroups as well as the scheduler, as they may try
+to assign the same available workgroup to different tasks
+simultaneously. To fix this conflict, we introduce an
+\emph{assignment} mutex in the scheduler context. 
 
+When the scheduler determines a new kernel has been launched, it spins
+waiting to acquire the assignment lock. Once acquired, it determines
+how to obtain the required number of workgroups (possibly by
+signalling a cooperative kernel to enable $\offerkill$). The scheduler
+than waits until the required number of workgroups become available.
+Because it holds the assignment mutex, the scheduler knows that the
+number of available workgroups in the workgroup pool can only
+increase.
 
+When $\offerfork$ is executed, the calling workgroup has a single
+attempt to acquire the assignment mutex.  If it fails, the call
+returns without a fork. This provides a quick return of $\offerfork$
+when another actor is doing an assigning task. If the assignment mutex
+is acquired, then the calling workgroup can check the scheduler
+context to see if its allowed to fork by the scheduler and safely
+assign available workgroups from the workgroup pool in isolation from
+other actors that which to assign tasks. \TSComment{it also updates
+  the kernel context, and sends transmit variables while holding this
+  lock}
 
+As opposed to assignment tasks, availability tasks can be performed in
+a lock-free manner without conflict. This is because a workgroup only
+modifies its own state in the task pool and can atomically increment
+and decrement the required counters. Availability tasks are also able
+to be performed lock-free with assignment tasks (although accesses to
+the workgroup state and counters must be performed
+atomically). Availability tasks will only increase the number of
+available workgroups, and do not conflict with assignment tasks
+sending available workgroups to kernels.
+
+Although assignment tasks to the workgroup pool can be performed
+concurrently, concurrent calls to $\offerkill$ must be protected
+because workgroups that exit (a) modify the kernel context which
+causes a conflict and (b) the semantics of $\offerkill$ guarantee that
+only the workgroup with the highest id can exit. Rather than introduce
+a new mutex to protect $\offerkill$, we instead use the number of
+active groups from the kernel context.  The call to $\offerkill$
+begins by checking the calling workgroup id against the number of
+active groups for the kernel. If the calling workgroup is the last
+workgroup, it enters and is then able to check if it can be
+killed. Otherwise it immediately returns. If a workgroup determines
+it should be killed, it updates 
+
+From this implementation, it falls out that $\offerkill$ and
+$\offerfork$ from the same workgroup can never succeed concurrently.
+If $\offerkill$ terminates the calling workgroup, then the scheduler
+is holding the assignment lock and will continue to hold it until 
+the call to $\offerkill$ finishes. Thus, any call to $\offerfork$
+during this time will not result in forking workgroups.
+
+\paragraph{Example}
 
 \ADComment{Give most attention to interesting performance and safety
   issues, e.g.\ reverse ticket lock, efficient barrier, the query
@@ -1599,7 +1678,7 @@ Each configuration was run 10 times on each GPU.
 
 There has been a lot of work on accelerating blocking irregular
 algorithms using GPUs, and on the \emph{persistent threads}
-programming style for long-running kernels~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,dlb-web,TPO10,BNP12,Pannotia}.  These
+programming style for long-running kernels~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.  These
 approaches rely on the occupancy-bound execution model, and aim to
 take ownership of the GPU by scheduling as many workgroups as the occupancy bound allows, relying on fair scheduling between these
 workgroups.  This means the GPU is unavailable for other tasks, and
@@ -1700,11 +1779,29 @@ This is in contrast to our notion of cooperative kernels, which is designed spec
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
 
-\ADComment{Do citation tidy-up.}
+We have proposed \emph{cooperative kernels}, a small set of extensions
+to the GPUP programming model that allow long-running, blocking
+kernels to be fairly scheduled and to share GPU resources with other
+workloads via multitasking.  Our prototype implementation uses a
+megakernel to mock up the environment in which a cooperative kernel
+would run if native support for our programming model was provided.
+Our experimental results over three Intel GPUs show that the
+programming model is a good fit for the needs of current irregular
+algorithms that operate on graphs and use work stealing.  The
+performance that could be gained through a native implementation with
+dedicated driver support would be even better.
 
-\ADComment{Next-generation GPUs and drivers for evaluation,
-  implementation in a real driver, migration of work between multiple
-  GPUs.}
+There are three main avenues for future work at present: seeking out
+additional classes of irregular algorithms that would benefit from GPU
+acceleration using cooperartive kernels, investigating providing
+native driver support for cooperative kernels in an open source
+graphics driver, and integrating cooperative kernels into the back-end
+of a compiler that generates irregular OpenCL from a higher-level DSL,
+e.g.\ an OpenCL version of a recent compiler for graph algorithms that
+targets CUDA~\cite{DBLP:conf/oopsla/PaiP16}.  Longer-term, as more
+vendors adopt the advanced features of OpenCL that our approach
+requires, we will be in a position to assess the programming model
+across a wider range of devices.
 
 \clearpage
 
@@ -1756,10 +1853,12 @@ workgroups that should execute the cooperative kernel, a \emph{kernel
 (\sigma, (w_0, \dots, w_{M-1}, \underbrace{\bot, \dots,
 \bot}_{N-M}))\]
 %
-where: $\sigma$ represents the shared state of the kernel; $M
-\leq N$ is the number of \emph{active} workgroups; $w_i$ is the
-workgroup state for active workgroup $i$ ($0 \leq i < M$); and $N-M$
-occurrences of $\bot$ indicate \emph{absent} workgroups.  Let $\sharedstates$ denote the set of all possible shared states.
+where: $\sigma$ represents the shared state of the kernel; $M \leq N$
+is the number of \emph{active} workgroups; $w_i$ is the workgroup
+state for active workgroup $i$ ($0 \leq i < M$); and $N-M$ occurrences
+of $\bot$ indicate \emph{absent} workgroups.  Let $\sharedstates$
+denote the set of all possible shared states.  We regard
+workgroup-local storage as being part of the shared state of a kernel.
 
 \paragraph{Thread-level transitions}
 
@@ -1863,11 +1962,11 @@ k \in [0, N - M]
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \globalbarrier();\myss)
 \\
 \forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \myss)
-\\
+\\\\
 \kappa \in \sync((\sigma , (w_{0}', \dots, w_{M-1}', \bot, \dots, \bot))
 }
 {
-(\sigma, (w_{0}, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow \kappa)
+(\sigma, (w_{0}, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow \kappa
 }
 (\textsc{Barrier})
 \]
@@ -1903,7 +2002,8 @@ states.
 Rule $\textsc{Thread-Step}$ defines the semantics for thread making a
 single execution step, delegating to the abstract $\rightarrow_{\tau}$
 relation to determine how the thread's local state and the shared
-state component change.
+state component change.  For simplicity, this rule ignores the
+semantics of intra-workgroup barriers, which are not our focus here.
 
 Rule $\textsc{Kill-No-Op}$ reflects the fact that when a workgroup
 reaches $\offerkill$, this can always be treated as a no-op.  Whether
@@ -1952,15 +2052,16 @@ memory component of a thread state to be split into two: the part of
 the local state to be transmitted (modelling $\transmit$-annotated
 variables), and the rest of the local state.
 
-\ADComment{TODO: $\textsc{Barrier}$}
+The $\textsc{Barrier}$ rule requires that \emph{every} thread
+executing the kernel reaches $\globalbarrier()$ an identical following
+statement.  This reflects that fact that $\globalbarrier()$ is a
+kernel-level function.  Each thread then skips over the
+$\globalbarrier()$ call, and the $\sync$ function is applied to yield
+a set of kernel states that can arise due to memory synchronization
+taking place.  An arbitary member of this set is selected as the next
+kernel state.
 
-\ADComment{TODO: $\textsc{Resizing-Barrier}$}
-
-
- \ADComment{Local memory is not
-  explicitly modeled but can be captured inside shared state.}
-\ADComment{Semantics for intra-workgroup barriers are ignored.}
-
+Despite its apparent complexity, the $\textsc{Resizing-Barrier}$ rule simply implements the rewriting of $\resizingglobalbarrier$ in terms of $\globalbarrier$, $\offerkill$ and $\offerfork$ discussed in \mysec\ref{ }.
 
 
 \section{Alternative Semantic Choices}\label{appendix:semanticalternatives}
@@ -2049,6 +2150,10 @@ equivalent to (and more efficient than) transmitting values on a
 thread-by-thread basis.  We have not yet encountered a real-world
 example where our current semantics would not suffice.
 
+
+\section{Full Set of Graphs for Responsiveness Experiments}
+
+\ADComment{TODO: we need this.  Probably not the right title.}
 
 
 \end{document}
