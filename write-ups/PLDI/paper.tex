@@ -790,7 +790,7 @@ transmitted to the threads of the new workgroups.
 
 The semantics of $\resizingglobalbarrier$ can be modelled via the following sequence of calls:
 
-\lstset{basicstyle=\tt,numbers=none}
+\lstset{basicstyle=\small\tt,numbers=none}
 \begin{lstlisting}
   $\globalbarrier()$;
   if($\getgroupid()$ == 0) $\offerfork$();
@@ -802,48 +802,43 @@ The semantics of $\resizingglobalbarrier$ can be modelled via the following sequ
 
 The enclosing $\globalbarrier$ calls ensure that the change in number
 of active workgroups from $M$ to $M'$ occurs entirely within the
-resizing barrier, so that from a programmer's perspective, $M$ changes atomically.  The middle $\globalbarrier$ ensures that forking occurs before killing, so that while the barrier may kill a workgroup with id $i$, it should not also fork a new workgroup with id $i$.  That is, workgroups $[0, \textrm{min}(M, M') - 1]$ should be left intact.
+resizing barrier, so that from a programmer's perspective, $M$ changes atomically.  The middle $\globalbarrier$ ensures that forking occurs before killing, so that workgroups $[0, \textrm{min}(M, M') - 1]$ are left intact.
 
-Because $\resizingglobalbarrier$ can be implemented in the above
-manner, we do not regard it \emph{conceptually} as a primitive of our
-programming model.  However, we discuss in
-\mysec\ref{sec:resizingbarrier} how $\resizingglobalbarrier$ can be
-implemented significantly more efficiently if it is treated as a
-primitive operation that interacts directly with the scheduler.
+Because $\resizingglobalbarrier$ can be implemented as above, we do not regard it \emph{conceptually} as a primitive of our
+model.  However, in
+\mysec\ref{sec:resizingbarrier} we show how a resizing barrier can be
+implemented significantly more efficiently through direct interaction with the scheduler.
 
 \subsection{Programming With Cooperative Kernels}\label{sec:programmingguidelines}
 
-We discuss the main semantic change induced by our programming
-model---that the number of workgroups executing a kernel varies
-dynamically---and illustrate the new language constructs and the
-impact of this semantic change by adapting the work stealing and graph
-traversal algorithms of \mysec\ref{sec:openclexamples} to use
-cooperative kernels.
+%We discuss the main semantic change induced by our programming
+%model---that the number of workgroups executing a kernel varies
+%dynamically---and illustrate the new language constructs and the
+%impact of this semantic change by adapting the work stealing and graph
+%traversal algorithms of \mysec\ref{sec:openclexamples} to use
+%cooperative kernels.
 
-\paragraph{A changing number of workgroups}  Unlike in regular OpenCL,
+\paragraph{A changing workgroup count}  Unlike in regular OpenCL,
 the value returned by $\getnumgroups()$ is not fixed during the
-lifetime of a cooperative kernel: it corresponds to the active group count $M$ and may change due to workgroups executing
-$\offerkill$, $\offerfork$ and $\resizingglobalbarrier$.  Being a function of $\getnumgroups()$, the value returned by $\getglobalsize()$
-is also subject to change.
-A cooperative kernel must therefore be written in a manner that is
+lifetime of a cooperative kernel: it corresponds to the active group count $M$, which changes as workgroups execute
+$\offerkill$, $\offerfork$ and $\resizingglobalbarrier$.  The value returned by $\getglobalsize()$
+is similarly subject to change.
+A cooperative kernel must thus be written in a manner that is
 robust to changes in the values returned by these functions.
 
 In general, their volatility means that use of these functions should be avoided.
-However, the situation is more stable if a cooperative kernel does not directly
-issue $\offerkill$ and $\offerfork$ calls directly.  In this case,
-only calls to $\resizingglobalbarrier$ can cause the number of active
-workgroups to change.  At any point
+However, the situation is more stable if a cooperative kernel does not call
+$\offerkill$ and $\offerfork$ directly, so that only $\resizingglobalbarrier$ can affect the number of active
+workgroups.  Then, at any point
 during execution, the threads of a kernel are executing between some
 pair of resizing barrier calls, which we call a \emph{resizing barrier
-  interval} (here we consider the kernel entry and exit points
-conceptually to be special cases of resizing barriers).  The number of
-workgroups executing the kernel is thus constant within each resizing
-barrier interval, i.e.\ the result returned by repeated calls to
-$\getnumgroups()$ will be identical during such an interval; the same holds for $\getglobalsize()$.
+  interval} (considering the kernel entry and exit points
+conceptually to be special cases of resizing barriers).  The active workgroup count is constant within each resizing
+barrier interval, so that 
+$\getnumgroups()$ and $\getglobalsize()$ return stable values during such intervals.
 %
-This guarantee can be exploited by algorithms that perform strided
-data processing, which we illustrate below using the graph traversal
-example.
+As we illustrate below for graph traversal, this can be exploited by algorithms that perform strided
+data processing.
 
 
 \paragraph{Adapting work stealing}
