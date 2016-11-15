@@ -1556,18 +1556,24 @@ GPU. For each run, we record the execution time of the cooperative
 kernel. For each scheduling of the non-cooperative kernel during the
 run, we also record the \emph{gather time} needed by the scheduler to
 collect enough workgroups to launch the non-cooperative kernel, and the
-non-cooperative kernel execution time.
+non-cooperative kernel execution time. We make sure all kernels perform
+their computations by comparing their result with expected results. We
+had to ignore some configurations where the non-cooperative kernel asks
+for all but one workgroups (namely bc, bfs and l-sssp on all chips, and
+color on Iris), and the game application on HD520, since they lead to
+system issues like GPU deadlock or blue screens---which we think are
+manifestations of driver bugs.
 
-Whenever a cooperative or non-cooperative kernel terminates, we verify
-that it has really performed its computation by comparing its results
-against the expected one. We encountered two kind of issues during the
-experiments: some configurations would lead to a system freeze or crash
-although they run fine on other GPUs. Although we don't claim that our
-programs are all correct, this issue seems to indicate a bug in the
-OpenCL compiler or driver of the problematic GPU. We also have some
-cooperative kernels that returned invalid results when the
-non-cooperative kernel takes all but one of the cooperative kernel
-workgroups, we decided to ignore these results.
+% Whenever a cooperative or non-cooperative kernel terminates, we verify
+% that it has really performed its computation by comparing its results
+% against the expected one. We encountered two kind of issues during the
+% experiments: some configurations would lead to a system freeze or crash
+% although they run fine on other GPUs. Although we don't claim that our
+% programs are all correct, this issue seems to indicate a bug in the
+% OpenCL compiler or driver of the problematic GPU. We also have some
+% cooperative kernels that returned invalid results when the
+% non-cooperative kernel takes all but one of the cooperative kernel
+% workgroups, we decided to ignore these results.
 
 \paragraph{Results}  \ADComment{Discuss the results.}
 explain horizontal lines 
