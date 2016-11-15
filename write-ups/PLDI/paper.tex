@@ -40,7 +40,6 @@
 \usepackage{booktabs}
 \usepackage{subfig}
 
-
 \newcommand{\doi}[1]{doi:~\href{http://dx.doi.org/#1}{\Hurl{#1}}}   % print a hyperlinked DOI
 
 \newcommand\crule[3][black]{\textcolor{#1}{\rule{#2}{#3}}}
@@ -1608,49 +1607,98 @@ Dynamic parallelism could be extended to give barriers, but doesn't work with wo
 \bibliographystyle{abbrvnat}
 \bibliography{tyler}
 
+\clearpage
+
 \appendix
 
 \section{Operational Semantics for Cooperative Kernels}\label{appendix:semantics}
 
-\ADComment{TODO: write it up properly.}
+\newcommand{\myss}{\mathit{ss}}
+\newcommand{\Stmts}{\mathsf{Stmts}}
+\newcommand{\threadstates}{\mathsf{ThreadStates}}
+\newcommand{\sharedstates}{\mathsf{SharedStates}}
+\newcommand{\sync}{\mathsf{sync}}
 
-\ADComment{TODO: remark that we do not model transmit faithfully.}
+In \mysec\ref{sec:semantics} we presented the semantics of cooperative
+kernels relatively informally, using English, to provide the intuition
+behind our programmming model.  We now back this up with a more formal
+presentation as an operational semantics for an abstract GPU
+programming model.
 
-Thread state: $(l, \mathit{ss})$, where $l \in L$ is the thread's
-local state, and $\mathit{ss}$ is a semi-colon-separated sequence of
-program statements that the thread remains to execute.
+\paragraph{States}
 
-Workgroup state: $((l_1, \mathit{ss}_1), \dots, (l_d,
-\mathit{ss}_d))$, where each $(l_i, \mathit{ss}_i)$ is a thread state.
+Let $L$ be a set of \emph{local states} that abstractly captures the
+private memory associated with a thread executing a GPU kernel.  Let
+$\Stmts$ denote the set of all possible statements that a
+thread can execute.  We do not detail the structure of these
+statements, except that we assume sequential composition of statements
+is provided by the $\code{;}$ separator, and that the $\offerkill$,
+$\offerfork$, $\globalbarrier$ and $\resizingglobalbarrier$ primitives
+from our cooperative kernels programming model are valid statements.
 
-Kernel state: a pair $(\sigma, (w_1, w_2, \dots, w_M, \bot, \dots, \bot))$, where $\sigma$ is the shared state,
-each $w_i$ is a workgroup state, which are
-followed by $N-M$ occurrences of $\bot$ to indicate absent workgroups.
+A \emph{thread state} is then a pair $(l, \myss)$, where $l \in L$ and
+$\myss \in \Stmts$.  The $l$ component captures the valuation of all the
+thread's private memory, and the $\myss$ component captures the
+remaining statements to be executed by the thread.  Let $\threadstates$ denote the set of all thread states.
 
-We treat thread-level semantics abstractly by assuming a transition
-relation $(\sigma, (l, \mathit{ss})) \rightarrow_{\tau} (\sigma', (l',
-\mathit{ss}'))$ that is defined unless $\mathit{ss} =
-\mathsf{special}(); \mathit{tt}$, where $\mathsf{special}$ is one of
-$\offerkill$, $\offerfork$, $\globalbarrier$ or
-$\resizingglobalbarrier$.
+Assuming that $d > 0$ threads per workgroup were requested on kernel launch, a \emph{workgroup state}
+is a $d$-tuple $((l_0, \myss_0), \dots, (l_{d-1}, \myss_{d-1}))$, where each $(l_i, \myss_i)$ is the thread state for the $i$th thread in the workgroup $(0\leq i < d$).
 
-To abstractly accounts for the interaction between global barrier
-synchronization and the GPU memory model, we assume a function
-$\mathsf{sync}$ that is applied to a global state.  This returns a new
-global state in which the shared state and thread local states have
-been updated to reflect the fact that all stores to memory and loads
-from memory to thread-local storate have completed.
+Assuming that $N > 0$ was specified as the maximum number of
+workgroups that should execute the cooperative kernel, a \emph{kernel
+  state} is then a pair
+%
+\[
+(\sigma, (w_0, \dots, w_{M-1}, \underbrace{\bot, \dots,
+\bot}_{N-M}))\]
+%
+where: $\sigma$ represents the shared state of the kernel; $M
+\leq N$ is the number of \emph{active} workgroups; $w_i$ is the
+workgroup state for active workgroup $i$ ($0 \leq i < M$); and $N-M$
+occurrences of $\bot$ indicate \emph{absent} workgroups.  Let $\sharedstates$ denote the set of all possible shared states.
+
+\paragraph{Thread-level transitions}
+
+We leave the semantics for thread-level transitions abstract, assuming
+a binary relation $\rightarrow_{tau}$ on $\sharedstates{} \times
+\threadstates{}$.  If $(\sigma, (l, \myss)) \rightarrow_{\tau}
+(\sigma', (l', \myss'))$, this indicates that if a thread is in local
+state $(l, \myss)$, the thread can transition to local state $(l',
+\myss')$, changing the shared state from $\sigma$ to $\sigma'$ in the
+process.
+
+All we require is that $(\sigma, (l, \myss)) \rightarrow_{\tau}
+(\sigma', (l', \myss'))$ if $\myss$ has the form $\mathsf{special}();
+\mathit{tt}$, where $\mathsf{special}$ is one of $\offerkill$,
+$\offerfork$, $\globalbarrier$ or $\resizingglobalbarrier$.  This is
+because we shall specifically define the meaning of the new primitives
+introduced by our programming model.
+
+\paragraph{Memory synchronisation}
+
+GPUs are known to have relaxed memory models~\cite{ }.  To abstractly
+account for this, we assume that the shared state component $\sigma$
+is not simplyl a mapping from locations to values, but instead
+captures all the intricacies of GPU memory that can lead to this
+relaxed behaviour.  We also assume a function $\sync$ which, given a
+kernel state $\kappa$, returns a set of kernel states.  The idea is
+that each $\kappa' \in \sync(\kappa)$ is a possible kernel state that
+can be reached from $\kappa$ by stalling until all stores to memory
+and loads from memory to thread-local storage have completed.  All we
+require is that $\sync$ does not modify the number of active
+workgroups nor the component of a thread state that determines which
+statements remain to be executed.
 
 \begin{figure*}
 \begin{center}
 
 \[
 \inferrule{
-w_i(j) = (l, \mathit{ss})
+w_i(j) = (l, \myss)
 \\
-(\sigma, (l, \mathit{ss})) \rightarrow_{\tau} (\sigma', (l', \mathit{ss}'))
+(\sigma, (l, \myss)) \rightarrow_{\tau} (\sigma', (l', \myss'))
 \\
-w_i' = w_i[j \mapsto (l', \mathit{ss}')]
+w_i' = w_i[j \mapsto (l', \myss')]
 }
 {
 (\sigma, (\dots, w_i, \dots)) \rightarrow (\sigma', (\dots, w_i', \dots))
@@ -1662,9 +1710,9 @@ w_i' = w_i[j \mapsto (l', \mathit{ss}')]
 
 \[
 \inferrule{
-\forall j \;.\; w_i(j) = (l_j, \offerkill();\mathit{ss})
+\forall j \;.\; w_i(j) = (l_j, \offerkill();\myss)
 \\
-w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
+w_i' = ((l_0, \myss), \dots, (l_{d-1}, \myss))
 }
 {
 (\sigma, (\dots, w_i, \dots)) \rightarrow (\sigma, (\dots, w_i', \dots))
@@ -1676,12 +1724,12 @@ w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
 
 \[
 \inferrule{
-\forall j \;.\; w_M(j) = (l_j, \offerkill();\mathit{ss})
+\forall j \;.\; w_{M-1}(j) = (l_j, \offerkill();\myss)
 \\
 M > 0
 }
 {
-(\sigma, (\dots, w_{M-1}, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_{M-1}, \bot, \bot, \dots, \bot))
+(\sigma, (\dots, w_{M-2}, w_{M-1}, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_{M-2}, \bot, \bot, \dots, \bot))
 }
 (\textsc{Kill})
 \]
@@ -1690,16 +1738,16 @@ M > 0
 
 \[
 \inferrule{
-\forall j \;.\; w_i(j) = (l_j, \offerfork();\mathit{ss})
+\forall j \;.\; w_i(j) = (l_j, \offerfork();\myss)
 \\
-w_i' = ((l_1, \mathit{ss}), \dots, (l_d, \mathit{ss}))
+w_i' = ((l_{0}, \myss), \dots, (l_{d-1}, \myss))
 \\
 k \in [0, N - M]
 \\
-\forall a \in [1, k] \;.\; w_{M+a} = ((l_1, \mathit{ss}), \dots, (l_1, \mathit{ss}))
+\forall a \in [0, k - 1] \;.\; w_{M+a} = ((l_{0}, \myss), \dots, (l_{0}, \myss))
 }
 {
-(\sigma, (\dots, w_i, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_i', \dots, w_M, w_{M+1}, \dots, w_{M+k}, \bot, \dots, \bot))
+(\sigma, (\dots, w_i, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_i', \dots, w_{M-1}, w_{M}, \dots, w_{M+k-1}, \bot, \dots, \bot))
 }
 (\textsc{Fork})
 \]
@@ -1708,12 +1756,14 @@ k \in [0, N - M]
 
 \[
 \inferrule{
-\forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \globalbarrier();\mathit{ss})
+\forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \globalbarrier();\myss)
 \\
-\forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \mathit{ss})
+\forall i \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \myss)
+\\
+\kappa \in \sync((\sigma , (w_{0}', \dots, w_{M-1}', \bot, \dots, \bot))
 }
 {
-(\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow \mathsf{sync}(\sigma , (w_1', \dots, w_M', \bot, \dots, \bot))
+(\sigma, (w_{0}, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow \kappa)
 }
 (\textsc{Barrier})
 \]
@@ -1722,24 +1772,73 @@ k \in [0, N - M]
 
 \[
 \inferrule{
-\forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \resizingglobalbarrier();\mathit{ss})
+\forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \resizingglobalbarrier();\myss)
 \\
-\forall j\;.\;w_1'(j) = (l_{1,j}, \globalbarrier(); \offerfork(); \globalbarrier(); \globalbarrier();\mathit{ss})
+\forall j\;.\;w_{0}'(j) = (l_{1,j}, \globalbarrier(); \offerfork(); \globalbarrier(); \globalbarrier();\myss)
 \\
-\forall i \neq 1 \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \globalbarrier(); \globalbarrier(); \offerkill(); \globalbarrier();\mathit{ss})
+\forall i \neq 1 \;.\;\forall j\;.\;w_i'(j) = (l_{i,j}, \globalbarrier(); \globalbarrier(); \offerkill(); \globalbarrier();\myss)
 }
 {
-(\sigma, (w_1, \dots, w_M, \bot, \dots, \bot)) \rightarrow (\sigma, (w_1', \dots, w_M', \bot, \dots, \bot))
+(\sigma, (w_{0}, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow (\sigma, (w_{0}', \dots, w_{M-1}', \bot, \dots, \bot))
 }
 (\textsc{Resizing-Barrier})
 \]
 
 \end{center}
 
-\caption{Abstract operational semantics for our cooperative kernels language extensions}
+\caption{Abstract operational semantics for our cooperative kernels language extensions}\label{fig:semanticrules}
 
 \end{figure*}
 
+\paragraph{Operational semantics rules}
+
+\myfiglong\ref{fig:semanticrules} presents the rules of our
+operational semantics, defining a relation $\rightarrow$ on kernel
+states.
+
+Rule $\textsc{Thread-Step}$ defines the semantics for thread making a
+single execution step, delegating to the abstract $\rightarrow_{\tau}$
+relation to determine how the thread's local state and the shared
+state component change.
+
+Rule $\textsc{Kill-No-Op}$ reflects the fact that when a workgroup
+reaches $\offerkill$, this can always be treated as a no-op.  Whether
+a scheduler implementation accepts $\offerkill$ calls or not depends
+on competing workloads and how the scheduler has been designed to meet
+the non-functinoal requirements discussed in
+\mysec\ref{sec:nonfunctional}, but in general the programmer should
+always be prepared for the possiblity that a workgroup survives after
+calling $\offerkill$.
+
+The case where a workgroup's offer to be killed is accepted by the
+scheduler is captured by rule $\textsc{Kill}$.  Because we have
+adopted a semantics where workgroup 0 is never killed and where only
+the workgroup with the highest id can be killed, the rule only fires
+if $M > 0$ and workgroup $M-1$ has reached $\offerkill$.  The rule has
+the effect of replacing the workgroup state for $w_{M-1}$
+with $\bot$.
+
+Recall that $\offerkill$ is a workgroup-level function: the same
+syntactic $\offerfork$ call must be reached by all threads in a
+workgroup.  This is captured in our rules by requiring in both
+$\textsc{Kill-No-Op}$ and $\textsc{Kill}$ that every thread is ready
+to execute $\offerkill$ followed by an identical statement $\myss$.
+Neither rule applies until all threads in a workgroup reach
+$\offerfork$, and the workgroup gets stuck if multiple threads in a
+workgroiup reach $\offerfork$ with different subsequent statements.
+
+\ADComment{TODO: $\textsc{Fork}$}
+
+\ADComment{TODO: $\textsc{Barrier}$}
+
+\ADComment{TODO: $\textsc{Resizing-Barrier}$}
+
+
+\paragraph{Simplifications}
+
+\ADComment{All state is transmitted.}  \ADComment{Local memory is not
+  explicitly modeled but can be captured inside shared state.}
+\ADComment{Semantics for intra-workgroup barriers are ignored.}
 
 
 \end{document}
