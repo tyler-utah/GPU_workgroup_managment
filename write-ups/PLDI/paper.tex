@@ -270,7 +270,7 @@ clear reasons why this model is undesirable.
 % from the point-of-view of
 %GPU vendors and end users.
 First, the execution model does not enable
-multi-tasking, because a workgroup effectively \emph{owns} a compute
+multitasking, because a workgroup effectively \emph{owns} a compute
 unit until the workgroup has completed execution.  If a long-running
 kernel occupies all compute units, the GPU cannot be used for other
 tasks, such as graphics rendering, in the meantime.
@@ -294,7 +294,7 @@ standardisation efforts
 (including~\cite{PersonalCommunicationRichards,PersonalCommunicationHowes}
 and various engineers from GPU vendors), is that (1) GPU vendors will
 not commit to the occupancy-bound execution model that they currently
-implement, due to the need for multi-tasking and energy throttling,
+implement, due to the need for multitasking and energy throttling,
 yet (2) GPU vendors will not guarantee fair scheduling, due to the
 runtime overhead associated with supporting full preemption of
 workgroups~\cite{ISCAPAPERSreeMentioned}.  Vendors instead wish to
@@ -370,7 +370,7 @@ properties:
   proof-of-concept implementation that requires
   no special-purpose hardware or driver support.
 
-\item Our experiments with a range of applications using three GPUs show that the model can enable efficient multi-tasking of cooperative and non-cooperative
+\item Our experiments with a range of applications using three GPUs show that the model can enable efficient multitasking of cooperative and non-cooperative
   tasks.
 
 \end{enumerate}
@@ -1012,7 +1012,7 @@ for.
 %
 However, the aim of cooperative kernels is to find a balance that
 allows \emph{efficient} execution of algorithms that require fair scheduling, and
-\emph{responsive} multi-tasking, so that the GPU can be shared between
+\emph{responsive} multitasking, so that the GPU can be shared between
 cooperative kernels and other shorter tasks with soft real-time constraints.
 %
 To achieve this balance, an implementation of the cooperative
@@ -1404,7 +1404,7 @@ wk.steal. max & $1.42^{\diamond}$ & $1.18^{\diamond}$ & $1.23^{\diamond}$ \\
 {\footnotesize
 $^{\ast}$color ecology, $^{\dagger}$bc 1k\_128k, $^{\ddagger}$sssp usa\_ny, $^{\diamond}$octree
 }
-\caption{Execution time slowdown associated with cooperative scheduling mode without multi-tasking}
+\caption{Execution time slowdown associated with cooperative scheduling mode without multitasking}
 \label{tab:overhead}
 \end{table}
 
@@ -1508,7 +1508,7 @@ future GPU platforms.
 As we have demonstrated for a representative set of irregular
 algorithms, our cooperative kernels model allows blocking algorithms
 to be upgraded to run under a fair scheduler in a manner that, with
-appropriate care, facilitates responsive multi-tasking.
+appropriate care, facilitates responsive multitasking.
 
 \paragraph{Preemptive multitasking on GPUs}
 
@@ -1534,27 +1534,29 @@ workgroup cannot be drained.
 Our solution does not impose a performance penalty on non-cooperative
 kernels, which run in an unmodified manner, and careful placement of
 our new language primitives that exploit the structure of a
-cooperative kernel may enable more efficient multi-tasking than
+cooperative kernel may enable more efficient multitasking than
 kernel-oblivious preemption.
 
-\paragraph{GPU multitasking}
+\paragraph{Optimizing GPU scheduling}
 %
-\cite{DBLP:journals/tog/SteinbergerKBKDS14} \ADComment{Shows how to
-  keep a GPU busy by flooding it with work.  Would absolutely not
-  stand up to preemption.}
+A number of works have considered how best to schedulel dynamic
+workloads on GPUs.  The Whippletree approach employs a persistent
+megakernel to schedule multiple, dynamic tasks in a manner that aims
+to best utilise GPU
+resources~\cite{DBLP:journals/tog/SteinbergerKBKDS14}.  The TimeGraph
+approach similarly aims to optimise scheduling of competing workloads,
+in the context of OpenGL, using GPU-CPU synchronisation so that the
+CPU can monitor and control the work that is scheduled on the
+GPU~\cite{DBLP:conf/usenix/KatoLRI11}.  To best utilise the compute
+units of a GPU for a particular kernel, SM-centric program
+transformations have been proposed, which aim to direct work to
+specific compute units, rather than to specific workgroups, based on
+the observation that in practice multiple workgroups may share the
+same compute unit, so that said workgrops might be in a good position
+to exploit memory caches associated with that compute
+unit~\cite{DBLP:conf/ics/WuCLSV15}.  None of these approaches tackle
+the problem of \emph{fair} scheduling on GPUs that our work addresses, thus they do not aid in safe deployment of blocking irregular algorithms.
 
-\cite{DBLP:conf/usenix/KatoLRI11} \ADComment{Idea seems to be to
-  accept that GPUs do not offer epreemption, but find a reasonable way
-  to schedule tasks to maximise responsiveness or throughput.}
-
-\paragraph{Preemption support for GPUs}
-%
-\cite{DBLP:conf/asplos/ParkPM15} \ADComment{Investigates how one might
-  implement preemption, i.e.\ shows that it can be achieved.
-  Simulator only preemption.  Not sure whether their approach would
-  give fair scheduling.}
-%
-Proposals to implement preemption, but these require hardware support and may be overkill.  Advantage: fully automatic; disadvantage: doesn't capture domain knowledge.
 %
 \ADComment{Kepler preemption support?  Mention in related work?}
 
@@ -1563,7 +1565,7 @@ Proposals to implement preemption, but these require hardware support and may be
 
 Dynamic parallelism could be extended to give barriers, but doesn't work with work stealing (less general).  It is in recent OpenCL.
 
-\cite{DBLP:conf/ics/WuCLSV15} \ADComment{Basic idea: map tasks to
+\cite{} \ADComment{Basic idea: map tasks to
   SMs, not to workgroups, so that tasks that would benefit from being
   processed by the same SM can be scheduled to the same SM.  Has
   little to do with preemption, but more to do with irregular
