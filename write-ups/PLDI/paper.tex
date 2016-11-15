@@ -1569,10 +1569,9 @@ gather time increases since the scheduler must collect more and more
 workgroups.
 
 The middle and right graphs show results for graph algorithms on the
-other two GPUs.  \ADComment{Added this; is it right?}  These
+other two GPUs.  These
 algorithms use barriers, and we experimented with the regular and
-query barrier implementations described in \mysec\ref{sec:resizingbarrier}.  The
-results shown are for executions that use the more efficient query barrier, except that we also show the gather time associated with the regular barrier for comparison.  The graphs show a similar trend to the left-most graph: as the number of non-cooperative workgroups grows, the
+query barrier implementations described in \mysec\ref{sec:resizingbarrier}.  The execution times for the non-cooperative task are averaged across all runs, including with both types of barrier.  We show separately the average gather time associated with each type of barrier.  The graphs show a similar trend to the left-most graph: as the number of non-cooperative workgroups grows, the
 execution time decreases and the gather time increases.\footnote{The right
 figure has only 3 points per line: recall that for bfs there are no runs
 with ``all-but-one'' non-cooperative workgroups.}
