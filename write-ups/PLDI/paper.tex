@@ -1618,17 +1618,36 @@ number of workgroups that needs to be collected.
 \paragraph{Performance}
 \myfig~\ref{fig:} reports the overhead brought by the scheduling of
 non-cooperative kernels over the cooperative kernel execution time
-(geometric mean over all experiences), along with the period at which
-non-cooperative kernels can be scheduled. Non-cooperative kernels
-running on a single workgroup lead to almost no overhead, but the period
-is far too high to meet the needs of graphics workloads. As more
-workgroups are dedicated to non-cooperative kernels, they execute
-quickly enough to be scheduled at the expected period. Yet, as expected,
-this increase the execution time overhead of the cooperative
-kernel. Still, in average heavy workloads meet their period for an
-overhead less than 1.4, which we consider reasonable, while light and
-medium workloads meet their period with only a very light overhead on
-the cooperative kernel.
+(geometric mean over all applications and inputs on the Iris chip, other
+chips look similar\HEComment{We can put the graphs of ther chips in
+appendix}), along with the period (aritmetic mean over all applications
+and inputs) at which non-cooperative kernels can be scheduled. We show
+results for the three workloads listed in
+\mysec~\ref{sec:sizingnoncoop}. The two gray horizontal lines in the
+period graph correspond to the period goals of the workloads: the higher
+(resp. lower) line corresponds to a period of 70ms (resp. 40ms) for the
+light (resp. medium and heavy) workload.
+
+Non-cooperative kernels running a workload with a single workgroup leads
+to almost no overhead, but the period is far too high to meet the needs
+of any of our three workloads. For example, a heavy workload averages a
+period of 939 ms. As more workgroups are dedicated to non-cooperative
+kernels, they execute quickly enough to be scheduled at the expected
+period. More concretely, for the light and medium workloads, a quarter
+of the workgroups executing the non-cooperative kernel are able to meet
+their goal period (70 and 40 ms resp.). However, a quarter of the
+workgroups are not sufficient to meet the goal for the heavy workload
+(giving a mean period of 88 ms). Finally, if half of the workgroups are
+allocated to the non-cooperative kernel, the heavy workload gets
+averages \~10\% over its goal period (mean of 44 ms). If asking for all
+but one, the heavy workload can reach its goal period.
+
+Yet, as expected, allocating more non-cooperative workgroups increases
+the execution time overhead of the cooperative kernel. Still the heavy
+workloads meet their period (by allocating all but one workgroup for
+non-cooperative kernels) for an overhead less than 1.4 on average. Light
+and medium workloads meet their period with only a negligable overhead
+of the cooperative kernel (less than 1.03 slowdown).
 
 \section{Related Work}\label{sec:relatedwork}
 
