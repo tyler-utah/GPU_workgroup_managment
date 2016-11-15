@@ -1043,21 +1043,20 @@ extensions.
 
 \section{Prototype Implementation}\label{sec:implementation}
 
-We envisage cooperative kernels being implemented as part of the
-runtime for a GPU implementation of OpenCL, requiring changes to the
-device driver allowing it to intercept our new primitives and schedule
-and deschedule workgroups accordingly.
+Our vision is that support for cooperative kernels will be integrated
+in the runtimes of future GPU implementations of OpenCL and related
+programming models, with driver and compiler support for our new
+primitives.  To experiment with our ideas on current GPUs, we have
+developed a prototype that mocks up the required runtime support via a
+\emph{megakernel}, and exploits the occupancy-bound execution model
+that these GPUs provide to ensure fair scheduling between workgroups.
+We emphasise that an aim of cooperative kernels is to \emph{avoid}
+depending on the occupancy-bound model.  Our protoytpe exploits this
+model simply to allow us to experiment with current GPUs whose
+proprietary drivers we cannot change.  We describe the megakernel approach (\mysec\ref{sec:megakernel})
+and detail various aspects of the scheduler component of our implementation (\mysec\ref{sec:schedulerimpl}).
 
-To experiment with our ideas on current GPUs, we have instead
-developed a prototype implementation that mocks up the required
-runtime support via a \emph{megakernel}, and exploits the
-occupancy-bound execution model that these GPUs provide.  To be clear:
-an aim of cooperative kernels is to avoid depending on the
-occupancy-bound model; our protoytpe exploits this model simply to
-allow us to experiment with current GPUs whose proprietary drivers we
-cannot change.
-
-\subsection{The megakernel approach}
+\subsection{The megakernel approach}\label{sec:megakernel}
 
 The mock-up works as follows.  Instead of multitasking multiple
 separate kernels, we merge a set of kernels into a megakernel---a
@@ -1106,7 +1105,7 @@ and a non-cooperative kernel and merges them to produce a megakernel
 with an embedded GPU scheduler.  We implemented \kernelmerge{} using the Clang LibTooling framework,\footnote{\url{http://clang.llvm.org/docs/LibTooling.html}}
 leveraging recent Clang support for OpenCL 2.0~\cite{ClangOpenCL20}.
 
-\subsection{Scheduler design}\label{sec:resizingbarrier}
+\subsection{Scheduler design}\label{sec:resizingbarrier}\label{sec:schedulerimpl}
 
 To enable multitasking through cooperative kernels, the runtime (in
 our case, the mega-kernel), must (a) track the state of all
@@ -1619,53 +1618,47 @@ setup, do we need to say it here ?}
 
 There has been a lot of work on accelerating blocking irregular
 algorithms using GPUs, and on the \emph{persistent threads}
-programming style for long-running kernels~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.  These
-approaches rely on the occupancy-bound execution model, and aim to
-take ownership of the GPU by scheduling as many workgroups as the occupancy bound allows, relying on fair scheduling between these
-workgroups.  This means the GPU is unavailable for other tasks, and
-the method is not future-proof because (as discussed throughout the
-paper) the occupancy-bound execution model is not guaranteed by GPU
-programming models and is unlikely to be guaranteed in practice by
-future GPU platforms.
-
-As we have demonstrated for a representative set of irregular
-algorithms, our cooperative kernels model allows blocking algorithms
+programming style for long-running
+kernels~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.
+These approaches rely on the occupancy-bound execution model, flooding
+available compute units with work, so that the GPU is unavailable for
+other tasks, and assuming fair scheduling between occupant workgroups,
+which is unlikely to be guaranteed on future GPU platforms.
+%
+As our experiments demonstrate, our cooperative kernels model allows blocking algorithms
 to be upgraded to run under a fair scheduler in a manner that, with
 appropriate care, facilitates responsive multitasking.
 
 \paragraph{Preemptive multitasking on GPUs}
 
-Hardware support for preemptive multitasking for \nvidia GPUs has been
-proposed, enabling full preemption as well as \emph{SM-draining},
+Hardware support for preemption has been proposed for \nvidia GPUs,
+as well as \emph{SM-draining}
 whereby workgroups occupying a symmetric multiprocessor (SM; a compute
-unit using our terminology) are drained until the SM becomes free for
-other tasks~\cite{DBLP:conf/isca/TanasicGCRNV14}.  A follow-up work adds the notion of SM \emph{flushing},
-whereby a workgroup running on an SM can be cancelled and re-scheduled
-from scratch if the workgroup has not yet committed any visible
-side-effects to shared memory~\cite{DBLP:conf/asplos/ParkPM15}.  Both approaches have been evaluated
-using simulators, over sets of regular GPU kernels.  State-of-the-art \nvidia GPUs targeting data centers (where multi-tasking is essential) do support
+unit using our terminology) are allowed to complete until the SM becomes free for
+other tasks~\cite{DBLP:conf/isca/TanasicGCRNV14}.  SM draining is limited the presence of blocking constructs, since it may not be possible to drain a blocked workgroup.
+%
+A follow-up work adds the notion of SM \emph{flushing},
+where a workgroup can be cancelled and re-scheduled
+from scratch if it has not yet committed side-effects~\cite{DBLP:conf/asplos/ParkPM15}.  Both approaches have been evaluated
+using simulators, over sets of regular GPU kernels.  Very recent \nvidia GPUs targeting data centers now support
 preemption, though it is not clear whether they guarantee fair scheduling~\cite{PascalWhitepaper}.
 
-The advantages of these approaches are that they do not require manual
-programmer effort, and the capability to fully preempt a workgroup
-guards against a rogue long-running kernel making the GPU unavailable
-for other tasks.  The drawbacks are that (a) because preemption is
-enabled by default, \emph{every} kernel takes a potential performance
-hit, and (b) the SM draining optimisation does not help in the case of
-blocking algorithms (not considered in these works), since a blocked
-workgroup cannot be drained.
-
-Our solution does not impose a performance penalty on non-cooperative
-kernels, which run in an unmodified manner, and careful placement of
-our new language primitives can exploit the structure of a
-cooperative kernel, enabling more efficient multitasking than
-kernel-oblivious preemption.
-
-There is scope for combining the approaches: if a
+The advantages of preemption are that it does not require programmer
+effort, and guards against a rogue long-running kernel making the GPU
+unavailable for other tasks.  The main drawback is that \emph{every}
+kernel takes a potential performance hit.
+%
+If implemented natively, our solution does not impact performance on regular kernels that are not scheduled with cooperative kernels.
+Furthermore, careful placement of
+our new primitives can exploit problem structure, enabling more efficient multitasking than
+application-oblivious preemption.  There is scope for combining the approaches: if a
 cooperative kernel is insufficiently cooperative, i.e.\ it does not
 invoke $\offerkill$ enough, then hardware support for preemption could
 be invoked to prevent the kernel from denying other tasks access to
 the GPU indefinitely.
+
+
+
 
 \paragraph{Optimizing GPU scheduling}
 %
@@ -1673,30 +1666,20 @@ A number of works have considered how best to schedule dynamic
 workloads on GPUs~\cite{DBLP:journals/tog/SteinbergerKKHKS12,DBLP:conf/ics/WuCLSV15,DBLP:conf/usenix/KatoLRI11,DBLP:journals/tog/SteinbergerKBKDS14,DBLP:journals/rts/ElliottA12,DBLP:conf/sosp/RossbachCSRW11}.  Among these, the Whippletree approach employs a persistent
 megakernel to schedule multiple, dynamic tasks in a manner that aims
 to best utilise GPU
-resources~\cite{DBLP:journals/tog/SteinbergerKBKDS14}.  The TimeGraph
+resources~\cite{DBLP:journals/tog/SteinbergerKBKDS14}, and the TimeGraph
 approach similarly aims to optimise scheduling of competing workloads,
-in the context of OpenGL, using GPU-CPU synchronisation so that the
-CPU can monitor and control the work that is scheduled on the
-GPU~\cite{DBLP:conf/usenix/KatoLRI11}.  To best utilise the compute
-units of a GPU for a particular kernel, SM-centric program
-transformations have been proposed, which aim to direct work to
-specific compute units, rather than to specific workgroups, based on
-the observation that in practice multiple workgroups may share the
-same compute unit, so that said workgrops might be in a good position
-to exploit memory caches associated with that compute
-unit~\cite{DBLP:conf/ics/WuCLSV15}.  None of these approaches tackle
-the problem of \emph{fair} scheduling on GPUs that our work addresses, thus they do not aid in safe deployment of blocking irregular algorithms.
+in the context of OpenGL~\cite{DBLP:conf/usenix/KatoLRI11}.
+None of these approaches tackle
+the problem of \emph{fair} scheduling on GPUs, thus they do not aid in safe deployment of blocking irregular algorithms.
 
-\paragraph{Dynamic parallelism} Recent versions of CUDA and OpenCL allow a kernel to spawn further kernels~\cite{cuda-75,opencl2Spec}.
-This \emph{dynamic parallelism} can be exploited to implement a
+CUDA and OpenCL provide the facility for a kernel to spawn further kernels~\cite{cuda-75,opencl2Spec}.
+This \emph{dynamic parallelism} can be used to implement a
 GPU-based scheduler, by having an initial scheduler kernel repeatedly
 spawn further kernels as required, according to some scheduling
-policy~\cite{DBLP:conf/ppopp/Muyan-OzcelikO16}.  However, a kernel
-that uses dynamic parallelism is still subject to the scheduling
-limitations of current GPU programming models, and in particular the
-problem that workgroups are not fairly scheduled.  Hence this feature
-does not offer a solution to the problem of deploying blocking
-algorithms on GPUs in a safe manner that we tackle with this work.
+policy~\cite{DBLP:conf/ppopp/Muyan-OzcelikO16}.  However, kernels
+that uses dynamic parallelism are still prone to unfair scheduling of workgroups, so this feature
+does not help solve the problem of safely deploying blocking
+algorithms on GPUs.
 
 \paragraph{Cooperative multitasking}
 
@@ -1706,16 +1689,19 @@ operating systems, such as RISC
 OS.\footnote{\url{http://www.riscos.info/index.php/Preemptive_multitasking}}
 Many programming languages offer cooperative multitasking via
 variations of coroutines, e.g. coroutine objects in
-Python\footnote{\url{https://docs.python.org/3/reference/datamodel.html\#coroutine-objects}}
-or Lua,\footnote{\url{https://www.lua.org/pil/9.1.html}} or Ruby's
-\emph{fiber}.\footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}
+Python
+%\footnote{\url{https://docs.python.org/3/reference/datamodel.html\#coroutine-objects}}
+and Lua,
+%\footnote{\url{https://www.lua.org/pil/9.1.html}}
+and Ruby's
+\emph{fiber}.
+%\footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}
 
 In the context of GPUs, cooperative multitasking has been used to
-refer to the standard setup today, whereby the onus is on a GPU kernel
-to complete execution within a reasonable time budget and return
-control to the CPU application~\cite{adriaens2012case,CPE:CPE1722}.  In this setting, the programmer is responsible for ensuring cooperation between the host application and GPU kernel so that a kernel does not run for too long.
+refer to the standard programming model, where the onus is on the GPU kernel
+to complete execution within a reasonable time budget~\cite{adriaens2012case,CPE:CPE1722}.
 %
-This is in contrast to our notion of cooperative kernels, which is designed specifically to support the needs of long-running kernels that one might wish to multitask with other workloads.
+This is in contrast to our cooperative kernels, which specifically aim to support the needs of long-running GPU tasks.
 
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
