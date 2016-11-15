@@ -1264,7 +1264,7 @@ We discuss our experience porting irregular algorithms to cooperative kernels (\
 \small
 \centering
 \begin{tabular}{ l r r r r r r}
-App. & resizing barr. & kill & fork & transmit & LoC & data sets\\
+App. & barriers & kill & fork & transmit & LoC & inputs\\
 \hline
 \rowcolor{Gray1}
 color & 2 / 2 & 0 & 0 & 4 & 55 & 2\\
@@ -1344,14 +1344,14 @@ which we plan to discuss with engineers at AMD.
 We thus present experimental results for the Intel GPUs, whose characteristics are summarised in \mytab\ref{tab:chipstested}.
 
 \begin{table}
-\small
+\footnotesize
 \centering
 \begin{tabular}{ l l l l }
 Chip & HD520 & HD5500 & Iris\\
 \hline
-\# comp. units  & 24 & 24 & 47 \\
-Driver   & 20.19.15.4501 & \ADComment{...} & 20.19.15.4463 \\
-Host CPU & i3-6100U & \ADComment{...} & i3-5157U \\
+\# CU  & 24 & 24 & 47 \\
+Driver   & 20.19.15.4501 & 10.18.15.4281 & 20.19.15.4463 \\
+Host CPU & i3-6100U & i7-5600U & i3-5157U \\
 \end{tabular}
 \caption{The Intel GPU platforms used in our evaluation}
 \label{tab:chipstested}
