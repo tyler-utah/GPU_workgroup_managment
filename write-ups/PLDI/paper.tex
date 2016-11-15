@@ -1177,6 +1177,9 @@ extensions.
 
 \section{Prototype Implementation}\label{sec:implementation}
 
+\HEComment{I consider that the reason why we need SVM fine grain and
+  atomics is discussed in the implementation section}
+
 \ADComment{Explain carefully that doing this properly would require
   driver support, etc., and then explain what we've actually done.}
 
@@ -1199,101 +1202,114 @@ extensions.
 
 \section{Applications and Experiments}\label{sec:experiments}
 
-\subsection{Porting Irregular GPU Algorithms to Cooperative Kernels}\label{sec:portingalgorithms}
+We discuss our experience porting irregular algorithms to cooperative kernels (\mysec\ref{sec:portingalgorithms}) and discuss the GPUs on which we evaluate these applications (\mysec\ref{sec:gpus}).  For these GPUs, we report on experiments to determine non-cooperative workloads that model the requirements of various graphics rendering tasks (\mysec\ref{sec:sizingnoncoop}).  We then examine the overhead associated with moving to cooperative kernels when multitasking is \emph{not} required (\mysec\ref{sec:overhead}), as well as the responsiveness and throughput observed when a cooperative kernel is multi-tasked with non-cooperative workloads (\mysec\ref{sec:responsiveness}).
+
+\subsection{Porting Irregular GPU Algorithms}\label{sec:portingalgorithms}
 
 \begin{table}
 \small
 \centering
-\begin{tabular}{ l c c c }
-App. & resizing barriers & kill - fork & transmit vars\\
+\begin{tabular}{ l c c c c }
+App. & resizing barriers & kill & fork & transmit vars\\
 \hline
 \rowcolor{Gray1}
-color & 2 / 2 & 0 - 0 & 4\\
+color & 2 / 2 & 0 & 0 & 4\\
 \rowcolor{Gray1}
-mis & 3 / 3 & 0 - 0 & 0\\
+mis & 3 / 3 & 0 & 0 & 0\\
 \rowcolor{Gray1}
-bc & 3 / 6 & 0 - 0 & 3\\
+bc & 3 / 6 & 0 & 0 & 3\\
 \rowcolor{Gray1}
-p-sssp & 3 / 3 & 0 - 0 & 0 \\
+p-sssp & 3 / 3 & 0 & 0 & 0 \\
 \rowcolor{Gray2}
-bfs & 2 / 2 & 0 - 0  & 4 \\
+bfs & 2 / 2 & 0 & 0  & 4 \\
 \rowcolor{Gray2}
-l-sssp & 2 / 2 & 0 - 0  & 4 \\
+l-sssp & 2 / 2 & 0 & 0  & 4 \\
 \rowcolor{Gray3}
-octree & 0 / 0 & 1 - 1 & 0\\
+octree & 0 / 0 & 1 & 1 & 0\\
 \rowcolor{Gray3}
-game & 0 / 0 & 1 - 1 & 0\\
+game & 0 / 0 & 1 & 1 & 0\\
 \end{tabular} \\
 \vspace{.2cm}
-\crule[Gray1]{.2cm}{.2cm} - Pannotia \hspace{.4cm} \crule[Gray2]{.2cm}{.2cm} - Lonestar GPU  \hspace{.4cm}  \crule[Gray3]{.2cm}{.2cm} - work stealing
+\crule[Gray1]{.2cm}{.2cm} Pannotia \hspace{.4cm} \crule[Gray2]{.2cm}{.2cm} Lonestar GPU  \hspace{.4cm}  \crule[Gray3]{.2cm}{.2cm} work stealing
 \caption{Blocking GPU applications investigated}
 \label{tab:applications}
 \end{table}
 
-\HEComment{Add citations for pannotia, lonestar, workstealing}
+\ADComment{It might be good to add a LOC column to \mytab\ref{tab:applications} to indicate how large the original versions of these applicaitons were.}
 
-\mytablong~\ref{tab:applications} gives an overview of the 8 irregular
+\ADComment{I thought we had some examples where we actually wanted a non-resizing barrier; we say this earlier in the paper so we need to smooth.}
+
+\ADComment{Missing: a discussion of what we did not port.}
+
+\ADComment{We need to say something about the number of data sets
+  associated with each application, so that we know the total number
+  of application/data-set pairs.}
+
+\mytablong\ref{tab:applications} gives an overview of the 8 irregular
 algorithms that we ported to cooperative kernels. Among them, 6 are
-graph algorithms, based on Pannotia and Lonestar GPU application suite,
-using global barriers; we indicate how many barriers become resizing
-ones out of the total number of barriers, and how many variables need to
-be transmitted. In all cases all barriers were converted, except for bc
+graph algorithms, based on Pannotia~\cite{...} and Lonestar~\cite{...} GPU application suites,
+using global barriers.  We indicate how many of the original number of barriers are changed to resizing barriers, and how many variables need to
+be transmitted.  In all cases all barriers were converted, except for bc
 which contains barriers deeper in the call stack, a case not supported
 by our prototype. Still, these barriers could in principle also be
 converted.  The remaining 2 algorithms are workstealing applications:
 each required the addition of $\offerfork$ and $\offerkill$ at the start
 of the main loop, and no variables needed to be transmitted. For all
-these examples the porting to cooperative kernels was pretty
-straightforward and did not require to bend the original algorithm.
+these examples the porting to cooperative kernels was similarly straightforward to the porting illustrated in \mysec\ref{sec:programmingguidelines} for our running examples, and did not require reshaping of the original algorithm.
 
-\ADComment{Describe the algorithms that we ported.}
+\subsection{The GPUs we Tested}\label{sec:gpus}
 
-\ADComment{Give stats on how many variables had to be marked with
-  $\transmit$ (i.e., occurred in the restoration context), how many
-  barriers we changed to resizing, how many offer kill and offer fork
-  calls we included.}
-
-  \TSComment{check out Table~\ref{tab:applications}. The barrier column
-  shows how many of the original barriers were ported to resizing
-  barriers. In all cases except bc we converted all of them. The only
-  reason why bc is different is because barriers occur deeper in the
-  call stack and our prototype cannot handle that. The algorithm itself
-  is compatable (i.e. changing these barriers is as easy as any other,
-  there is nothing special about them.)}
-
-\ADComment{Make sure we address the point that placing the primitives was pretty easy.}
-
-\subsection{The GPUs we Tested}
-
-\ADComment{Describe the platforms.  Explain why we could not try other
-platforms.}
-
-\HEComment{I consider that the reason why we need SVM fine grain and
-  atomics is discussed in the implementation section}
-
-Our implementation approach requires two optional features of OpenCL
-$2.0$, namely SVM fine-grained buffers and SVM atomics, which are
-currently not widely supported. \nvidia chips are ruled out since
-\nvidia does not support OpenCL $2.0$. Intel drivers meet our
-requirements on Windows, but not on Linux, although we tried the
-upstream driver that requires a patched Linux kernel. AMD support SVM
+Our prototype implementation (\mysec\ref{sec:implementation}) requires two optional features of OpenCL
+2.0: SVM fine-grained buffers and SVM atomics. This rules out evaluation on \nvidia and ARM Mali GPUs at present, since
+these vendors do not yet support OpenCL $2.0$, equivalent functionality is not provided by \nvidia's CUDA. Intel drivers meet our
+requirements on Windows, but not on Linux (we confirmed this by trying the
+upstream driver that requires a patched Linux kernel). AMD support SVM
 atomics only their Kaveri family of chips and only on Linux, requiring
-to compile the latest driver. Among the GPUs available to us, only 4
-turned out to provide our requirements: Intel HD 520, HD 5500 and IRIS
-6100, and AMD Radeon R7.
+to compile the latest driver.
 
-\HEComment{To decide: do we mention carrot AMD, in which terms?}
+\ADComment{Check:} Among the GPUs available to us, four met our
+requirements: Intel HD 520, HD 5500 and Iris 6100, and AMD Radeon R7.
+However, AMD's Linux drivers for OpenCL suffer from a known defect
+whereby long-running kernels lead to defunct processes that the OS
+cannot kill.  We observed this on our AMD platform with the latest
+driver, and simultaneously obtained alarming results on this platform
+when using SVM atomics: modifying a kernel to include a simple
+host/device handshake through SVM slowed down kernel execution by an
+order of magnitude in some cases.  This behaviour, combined with the
+defunt processes issue, lead us to suspect that the support we require
+for cooperative kernels is not yet mature enough within AMD's drivers,
+which we plan to discuss with engineers at AMD.
+
+We thus present experimental results for the Intel GPUs, whose characteristics are summarised in \mytab\ref{tab:chipstested}.
+
+\begin{table}
+\small
+\centering
+\begin{tabular}{ l l l l }
+Chip & HD520 & HD5500 & Iris\\
+\hline
+\# compute units  & \ADComment{...} & \ADComment{...} & \ADComment{...} \\
+Driver   & \ADComment{...} & \ADComment{...} & \ADComment{...} \\
+Host CPU & \ADComment{...} & \ADComment{...} & \ADComment{...} \\
+\end{tabular}
+\caption{The Intel GPU platforms used in our evaluation}
+\label{tab:chipstested}
+\end{table}
 
 \subsection{Sizing Non-Cooperative Kernels}\label{sec:sizingnoncoop}
 
-A cooperative kernel can yield workgroups to let a non-cooperative,
-transient one execute. We size non-cooperative kernels to represent
-approximatively the workload required by a system to maintain smooth
-screen animations.
+\ADComment{Refer back to nonfunctional requirements section, \mysec\ref{sec:nonfunctional}.}
 
-\paragraph{Experimental setup} We repetitively launch a kernel with a
+Enabling rendering of smooth graphics in parallel with execution of irregular algorithms is an important use case for our approach.  Because our prototype implementation is based on a mega-kernel that takes over the entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this use case directly.
+
+As a proxy for genuine graphics rendering, we devised the following
+procedure to determine non-cooperative OpenCL workloads that simulate
+the computational intensity of various graphics rendering workloads.
+%
+\ADComment{I think this is good but could be clearer and it would be helpful to discuss.}
+We repetitively launch a kernel with a
 controlled workload and detect from which workload size the screen
-animation starts to jitter. Given the kernel workload and its
+animation starts to jitter. \ADComment{Be clear that this is manual.} Given the kernel workload and its
 scheduling frequency, we can deduce what is the workload and frequency
 needed by the system to maintain a smooth animation. We use this
 approach to measure the system workloads needed to maintain smooth
@@ -1304,14 +1320,14 @@ desktop, and (\emph{heavy}) WebGL animations in a browser.
 \begin{table}
 \small
 \centering
-\begin{tabular}{ l c c }
+\begin{tabular}{ l r r }
 Workload & Duration (ms) & Period (ms)\\
 \hline
 light & 3 & 70\\
 medium & 3 & 40\\
 heavy & 10 & 40\\
 \end{tabular}
-\caption{Caracteristics of non-cooperative kernels workload}
+\caption{\ADComment{Clearer caption?} Characteristics of non-cooperative kernels workload}
 \label{tab:noncooperativeworkload}
 \end{table}
 
@@ -1323,7 +1339,7 @@ of seconds, which coincides with the human persistence of vision. The
 3ms execution duration of both light and medium configurations may
 indicate a lower bound of GPU execution time for system workloads.
 
-\subsection{The Overhead of Moving to Cooperative Kernels}
+\subsection{The Overhead of Moving to Cooperative Kernels}\label{sec:overhead}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % chip: hd520
@@ -1389,12 +1405,9 @@ wk.steal. max & $1.42^{\diamond}$ & $1.18^{\diamond}$ & $1.23^{\diamond}$ \\
 {\footnotesize
 $^{\ast}$color ecology, $^{\dagger}$bc 1k\_128k, $^{\ddagger}$sssp usa\_ny, $^{\diamond}$octree
 }
-\caption{Overhead of cooperative kernels: execution time slowdown}
+\caption{Execution time slowdown associated with cooperative scheduling mode without multi-tasking}
 \label{tab:overhead}
 \end{table}
-
-\HEComment{We will probably do not show figure \ref{fig:overhead}, just
-table \ref{tab:overhead} should be enough}
 
 \begin{figure}
 \includegraphics[width=\columnwidth]{cooperative_overhead.pdf}
@@ -1402,23 +1415,37 @@ table \ref{tab:overhead} should be enough}
 \end{figure}
 
 \paragraph{Experimental setup}
-Cooperative scheduling primitives entails an overhead even if no
-killing, forking or resizing happen. We measure this overhead via the
-execution time slowdown between the original kernel and the
-cooperative one, forcing the scheduler to never modify the number of
-active workgroups. Since the cooperative kernel contains the
-non-cooperative kernel code anyway, its occupancy bound may be less
-than the original kernel; we make sure to use this occupancy bound as
-the number of workgroups for the original kernel in order to compare
-relevant execution times. \HEComment{Do we need to mention the
-  possible occupancy reduction as an overhead?}
+Invoking the cooperative scheduling primitives incurs some overhead
+even if no killing, forking or resizing actually occurs, because the cooperative kernel still needs to interact with the scheduler to determine this.
+We assess this overhead by measuring the
+ slowdown in execution time between the original and cooperative versions of a kernel, forcing the scheduler to never modify the number of
+active workgroups in the cooperative case.
+
+Recall that our mega kernel-based implementation merges the code for a
+cooperative kernel with that of the non-cooperative task to be
+co-scheduled.  This blow-up in code size can have a negative impact on
+compiliation, e.g.\ due to higher register pressure, reducing the
+occupancy for the merged kernel---the maximum number of workgroups
+that the GPU driver will schedule.  This is an artifact of our
+proof-of-concept implementation strategy, and would not be a problem
+if our cooperative scheduling approach was implemented inside the GPU
+driver.  We thus launch both the original and cooperative versions of
+a kernel with the reduced occupancy bound in order to meaningfully
+compare execution times.
+
+\ADComment{How many times did we run each benchmark?}
 
 \paragraph{Results}
-\mytab~\ref{tab:overhead} lists both geometric mean and maximum value
-of measured overheads. The slowdown is below 2 even in the worst case,
-and closer to 1 in general. We consider these results as encouraging,
-especially since our prototype performance is likely a far upper bound
-of what a scheduler implemented directly in the runtime could achieve.
+For each GPU, \mytab\ref{tab:overhead} shows the geometric mean and
+maximum slowdown across all applications and data sets.  For the
+maximum slowdowns, we indicate which application and data set was
+responsible.  The slowdown is below 2 even in the worst case, and
+closer to 1 on average. We consider these results as encouraging,
+especially since the performance of our prototype could clearly be
+improved upon if cooperative scheduling was implemented directly in
+the GPU driver.
+
+\ADComment{Can we remark a bit more on the outliers?}
 
 \subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
 
