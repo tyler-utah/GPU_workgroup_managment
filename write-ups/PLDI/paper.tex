@@ -46,7 +46,6 @@
 
 \newcommand\crule[3][black]{\textcolor{#1}{\rule{#2}{#3}}}
 
-
 %\newcommand{\todo}[1]{}
 %\renewcommand{\todo}[1]{{\color{red} TODO: {#1}}}
 \newcolumntype{C}[1]{>{\centering}m{#1}}
@@ -1585,21 +1584,24 @@ resources and thus lower its execution time: here the non-cooperative
 kernel becomes fast enough with a quarter (resp. half) of available
 workgroups for light (resp. heavy) graphics workload. Inversely, the
 gather time augments since the scheduler must collect more and more
-workgroups from the cooperative kernel.
+workgroups.
 
-On the middle and right figures, which depict graph algorithms, we find
-again the same trend: as the number of workgroups allocated to the
-non-cooperative task grows, the non-cooperative kernel execution time
-lowers and the gather time raises. When the regular resizing barrier is
-used, gather time can become quite long and exceed the execution time.
-However, the scheduling responsiveness can benefits from the query
-barrier: when this barrier is used, the gather time becomes almost
-stable w.r.t. the number of workgroups that needs to be collected, since
-the scheduler collects all needed workgroups as soon as they hit a
-resizing barrier.
-
-\HEComment{missing results for all but one in bfs, discussed in expe
-setup, do we need to say it here ?}
+The middle and right figures, which depict graph algorithms, expose the
+same trend: as the number of non-cooperative workgroups grows, the
+execution time lowers and the gather time raises.\footnote{The right
+figure has only 3 points per line: recall that for bfs there are no runs
+with ``all but one'' non-cooperative workgroups}
+%
+The gather time is higher on the right figure: the rmat22 input graph is
+rather wide than deep, so the graph algorithm reaches resizing barriers
+less often than for the ecology input of the middle figure for
+instance. The scheduler has thus fewer opportunities to collect
+workgroups and gather time increases. Nonetheless, scheduling
+responsiveness can benefit from the query barrier: when used, this
+barrier let the scheduler collects all needed workgroups as soon as they
+hit a resizing barrier. As we can see on both the middle and right
+figure, the gather time of the query barrier is almost stable w.r.t. the
+number of workgroups that needs to be collected.
 
 \begin{figure*}
 \includegraphics[width=.7\columnwidth]{iris_octree_NA.pdf} 
