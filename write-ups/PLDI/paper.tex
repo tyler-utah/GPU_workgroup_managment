@@ -182,7 +182,7 @@
 \begin{abstract}
 There is growing interest in accelerating irregular data-parallel
 algorithms on GPUs.  These algorithms are typically \emph{blocking},
-so require fair scheduling.  But GPU programming models (e.g.\ OpenCL)
+so they require fair scheduling.  But GPU programming models (e.g.\ OpenCL)
 do not mandate fair scheduling, and GPU schedulers are
 unfair in practice.  Current approaches avoid this issue by exploiting
 scheduling quirks of today's GPUs in a manner that does not
@@ -213,7 +213,8 @@ which cooperative kernels can be implemented in practice.
 Many
 interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
-by the computation itself.  There is growing interest in accelerating such algorithms on GPUs, particularly algorithms that
+by the computation itself.  There is growing interest in accelerating
+such algorithms on GPUs, particularly the ones that
 traverse and manipulate linked data structures~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.
 
 Irregular algorithms usually require \emph{blocking synchronization}
@@ -279,12 +280,12 @@ tasks, such as graphics rendering.
 %heuristically detect and kill long-running computations on the GPU
 %being used for display rendering~\cite{DBLP:conf/iwocl/SorensenD16}.
 Second, \emph{energy throttling} is
-an important concern for battery-powered devices~\cite{DBLP:journals/comsur/Vallina-RodriguezC13}.  In the future, it will be desirable for a mobile GPU driver to be able to
-power down some compute units if the battery level is low or if
-the user puts the device into a low power state.  Implementing energy
+an important concern for battery-powered devices~\cite{DBLP:journals/comsur/Vallina-RodriguezC13}.  In the future, it will be desirable for a mobile GPU driver to
+power down some compute units if the battery level is low.
+Implementing energy
 throttling would require being able to suspend the execution of a
 workgroup, powering down the compute unit to which the workgroup was
-bound, something which the occupancy-bound execution model does not allow.
+bound, something that the occupancy-bound execution model does not allow.
 
 Our assessment, informed by discussions with a number of industrial
 practitioners who have been involved in the OpenCL and/or HSA
@@ -316,26 +317,26 @@ language primitives, $\offerkill$ and $\offerfork$, placed by the programmer.
 At a point where the cooperative kernel could proceed with fewer
 workgroups, a workgroup can execute $\offerkill$, offering to
 sacrifice itself to the scheduler.  This indicates that the workgroup
-would ideally continue executing, but that if required, the
-scheduler may destroy the workgroup for good; the cooperative kernel
+would ideally continue executing, but that the
+scheduler may preempt the workgroup; the cooperative kernel
 must be prepared to deal with either scenario.
 %
 At a point where the cooperative kernel could benefit from having
 additional workgroups join the computation, a workgroup can execute
-$\offerfork$.  This indicates that the cooperative
+$\offerfork$ to indicates that the
 kernel is prepared to proceed with the existing set of workgroups, but
-is able to take advantage of having one or more additional workgroups
-commence execution directly after the $\offerfork$ program point.
+is able to benefit from one or more additional workgroups
+commencing execution directly after the $\offerfork$ program point.
 
 The use of $\offerfork$ and $\offerkill$ creates a contract between
-the scheduler and (the programmer of the) cooperative kernel.
+the scheduler and the (programmer of the) cooperative kernel.
 Functionally, the
 scheduler must guarantee that the workgroups executing a cooperative
 kernel are fairly scheduled, while the cooperative kernel must be
 robust to workgroups leaving and joining the computation in response
 to $\offerkill$ and $\offerfork$.  Non-functionally, a cooperative
 kernel must ensure that $\offerkill$ is executed frequently enough
-that the scheduler can accommodate soft-real time constraints,
+such that the scheduler can accommodate soft-real time constraints,
 e.g.\ allowing a smooth frame-rate for graphics, or allowing compute
 units to be powered down quickly when required.  The scheduler should
 respond to $\offerkill$ and $\offerfork$ calls in a manner that avoids
@@ -365,7 +366,7 @@ properties:
 
 \item Cooperative kernels can be implemented over the occupancy-bound
   execution model that current GPUs provide: our prototype implementation requires
-  no additional hardware or driver support.  Thus the model should be eay for vendors to implement directly.
+  no additional hardware or driver support.  Thus the model should be easy for vendors to implement directly.
 
 \item Our experiments with a range of applications using three GPUs show that the model can enable efficient multitasking of cooperative and non-cooperative
   tasks.
@@ -408,20 +409,21 @@ An OpenCL program is divided into \emph{host} and \emph{device}
 components.  A host application runs on the CPU and launches one or
 more \emph{kernels} that run on accelerator devices---GPUs in the
 context of this paper.  A kernel is written in OpenCL C, based on C99.
-All threads executing a kernel execute the same entry function with
-identical arguments.  A thread can call $\getglobalid()$
+All threads executing a kernel start at the same entry function with
+identical arguments.  A thread can call $\getglobalid$
 to obtain its unique id, to access distinct data or follow different control flow paths to other threads.
 
 The threads of a kernel are divided into \emph{workgroups}, each consisting of a fixed number of threads.  Functions
 $\getlocalid$ and $\getgroupid$ return a thread's local id within
 its workgroup and the id of the workgroup.\footnote{For simplicity we assume 1D kernels, which captures all the
 irregular algorithms we know of, and write
-e.g.\ $\getglobalid()$ for $\getglobalid(0)$.
+e.g.\ $\getglobalid$ for $\getglobalid(0)$.
 }  The number
 of threads per workgroup and number of workgroups are obtained via
 $\getlocalsize$ and $\getnumgroups$.  A thread's local and global
-id are related by $\getglobalid() = \getgroupid() \times
-\getlocalsize() + \getlocalid()$.  The total number of threads executing the kernel is given by $\getglobalsize() = \getlocalsize()\times\getnumgroups()$.
+id are related by $\getglobalid = \getgroupid \times
+\getlocalsize + \getlocalid$.  The total number of threads executing the
+kernel is given by $\getglobalsize = \getlocalsize \times \getnumgroups$.
 
 Execution of the threads in a workgroup can be synchronised via a
 workgroup barrier, which also ensures memory consistency.  This
@@ -461,7 +463,7 @@ workgroups executing the same kernel, stating~\cite[p.\ 31]{opencl2Spec}: \emph{
 %
 HSA provides limited, one-way guarantees,
 stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
-  for values written by work-group B without deadlock provided ... A
+  for values written by work-group B without deadlock provided ... (if) A
   comes after B in work-group flattened ID order}. This is not sufficient to support blocking algorithms that use
 mutexes and inter-workgroup barriers, both of which require \emph{symmetric} communication between
 threads.
@@ -477,7 +479,6 @@ threads.
 (*@\label{line:wksteal:mainloop}@*)  while (more_work(queues)) {
 (*@\label{line:wksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id);
     if (t) {
-      // task processing may create more work
 (*@\label{line:wksteal:processtask}@*)      process_task(t, queues, queue_id);
     }
   }
@@ -518,28 +519,27 @@ Work stealing enables dynamic balancing of tasks across several
 processing units. It is useful when the number of tasks to be
 processed is dynamic, due to one task creating an arbitrary number of new tasks.  In the context
 of GPUs, each workgroup has an associated queue from which it
-obtains tasks to process, and to which it stores newly created
-tasks. If a workgroup's queue is empty, the workgroup tries to \emph{steal} a task from an other
-queue. Previous work addresses the feasibility and efficiency of work
-stealing on GPUs~\cite{DBLP:conf/egh/CedermanT08,TPO10}.
+obtains tasks to process, and to which it stores new
+tasks. If a workgroup's queue is empty, the workgroup tries to \emph{steal} a task from another
+queue. Previous work covers work stealing feasibility and efficiency on GPUs~\cite{DBLP:conf/egh/CedermanT08,TPO10}.
 
-\myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
-kernel that uses a work stealing queue. Each thread receives a pointer to the task
-queues, in global memory, initialized by the
+\myfiglong\ref{fig:workstealing} shows a simplified version of a work
+stealing kernel. Each thread receives a pointer to the
+task queues, in global memory, initialized by the
 host to contain the initial tasks. Each thread identifies
-the workgroup it belongs to via $\getgroupid()$
-(line~\ref{line:wksteal:getgroupid}), which is used as a queue id and used to access the relevant task queue. The
+its workgroup via $\getgroupid()$
+(line~\ref{line:wksteal:getgroupid}), which is used as a queue id to access the relevant task queue. The
 $\mathsf{pop\_or\_steal}$ function (line~\ref{line:wksteal:poporsteal})
 is called by all threads of a workgroup.  Inside
 $\mathsf{pop\_or\_steal}$ only the thread with a local id equal to $0$,
-the \emph{master thread}, will try to pop a
-task from the workgroup's queue, or steal a task from a different
+the \emph{master thread}, tries to pop a
+task from the workgroup's queue, or to steal a task from a different
 queue. The master thread uses local memory inside
 $\mathsf{pop\_or\_steal}$ to ensure that the returned value is valid for
-all threads of its workgroup. If a task was obtained, then all threads
-of the workgroup participate in the processing of the task (line~\ref{line:wksteal:processtask}).
+all threads of its workgroup. If a task was obtained, then all the
+workgroup threads participate in the task processing (line~\ref{line:wksteal:processtask}).
 This may lead to the creation of further tasks, which
-the master thread will push to the workgroup's queue.
+the master thread pushes to the workgroup's queue.
 
 Although not depicted here, concurrent accesses to queues inside
 $\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
@@ -551,18 +551,18 @@ on a fair scheduler, which is not guaranteed by current GPU programming models.
 
 \paragraph{Graph traversal example} \myfiglong\ref{fig:graphsearch} shows the
 skeleton of a frontier-based graph traversal algorithm; such algorithms have
-been shown to be execute efficiently on GPUs~\cite{BNP12,DBLP:conf/oopsla/PaiP16}. 
+been shown to execute efficiently on GPUs~\cite{BNP12,DBLP:conf/oopsla/PaiP16}. 
 The kernel is
 given three arguments in global memory: a graph structure, and two
-arrays that can contain graph nodes. Initially, $\keyword{n0}$ contains the
+arrays of graph nodes. Initially, $\keyword{n0}$ contains the
 starting nodes to process. Private variable $\keyword{level}$ indicates the frontier level currently being
 processed, and $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$ point to
 distinct node arrays recording the nodes to be processed during the current and next frontier, respectively.
 
 The application iterates as long as the current frontier contains
 nodes to process (line~\ref{line:graph:iterate}). At each frontier,
-the nodes to be processed are evenly distributed between the executing
-threads. This is done through \emph{stride} based processing. 
+the nodes to be processed are evenly distributed between
+threads through \emph{stride} based processing. 
 %
 In this case, the stride is the total number of threads, obtained via 
 $\getglobalsize()$.  Each thread processes nodes with the following sequence of indices:
@@ -575,12 +575,12 @@ the computation. After processing the frontier, the threads swap their
 node array pointers (line~\ref{line:graph:swap}).
 
 At this point, the GPU threads must wait for all other threads to
-finishing processing the frontier. To achieve
+finish processing the frontier. To achieve
 this, we use a global barrier construct
 (line~\ref{line:graph:gb1}). After all threads reach this point, the
 output node array is reset (line~\ref{line:graph:reset}) and the level
 is incremented. The threads use another global barrier to wait until the output node is
-reset (line~\ref{line:graph:gb2}), after which the threads can continue to the next frontier.
+reset (line~\ref{line:graph:gb2}), after which they continue to the next frontier.
 
 The global barrier used in this application is not provided as a GPU
 primitive, though previous works have shown that such a global
