@@ -1168,77 +1168,30 @@ channel to indicate the number of
 workgroups that should join at the next $\offerfork$ command.
 When a workgroup $w$ of $K_c$ subsequently executes $\offerfork$, thread 0 of $w$ updates the kernel and scheduler contexts so that the given number of new workgroups are directed to the program point after the $\offerfork$ call.  This involves selecting workgroups whose status is \emph{available}, as well as copying the values of $\transmit$-annotated variables to the new workgroups.
 
-\paragraph{Efficient implementation}
+\paragraph{Safe implementation}
 
-The interesting interactions with respect to performance and safety
-occur in the interaction of the scheduler and cooperative kernel. We
-discuss these details now.
+Concurrent calls to $\offerfork()$ must be protected with a mutex,
+otherwise workgroups calling $\offerfork()$ will conflict over the
+available workgroups. The same conflict over available workgroups can
+occur at a new kernel launch between the scheduler and a workgroup
+calling $\offerfork()$ occurs between the scheduler assigning tasks.
+Thus we provide a mutex, called the \emph{assignment mutex}, in the
+scheduler context which must be held anytime a group of available
+resources is assigned to a kernel.
 
-At the core of the scheduler is the workgroup pool, which maps each
-workgroup to a status and keeps track of the number of workgroups in
-each status. The workgroup pool can change in two ways: (1)
-\emph{assigning tasks}, where workgroups are changed from available to
-computing a kernel (2) \emph{becoming available}, where a workgroup
-exits a kernel computation (either through completion or $\offerkill$)
-and changes its status from computing a kernel to available.
+The provides an indirect mutex protecting concurrent calls to
+$\offerfork()$ and $\offerkill()$. That is, $\offerkill()$ only
+commands a workgroup to exit when the scheduler holds the
+\emph{assignment lock}, as the scheduler is trying to obtain work
+groups to send to a task, and $\offerfork()$ cannot spawn workgroups
+without holding this lock.
 
-\emph{Assigning tasks} occurs either when the scheduler is launches a
-new kernel, or when a workgroup calls $\offerfork$ and observes that
-there are available resources. This creates a potential conflict
-between forking workgroups as well as the scheduler, as they may try
-to assign the same available workgroup to different tasks
-simultaneously. To fix this conflict, we introduce an
-\emph{assignment} mutex in the scheduler context. 
-
-When the scheduler determines a new kernel has been launched, it spins
-waiting to acquire the assignment lock. Once acquired, it determines
-how to obtain the required number of workgroups (possibly by
-signalling a cooperative kernel to enable $\offerkill$). The scheduler
-than waits until the required number of workgroups become available.
-Because it holds the assignment mutex, the scheduler knows that the
-number of available workgroups in the workgroup pool can only
-increase.
-
-When $\offerfork$ is executed, the calling workgroup has a single
-attempt to acquire the assignment mutex.  If it fails, the call
-returns without a fork. This provides a quick return of $\offerfork$
-when another actor is doing an assigning task. If the assignment mutex
-is acquired, then the calling workgroup can check the scheduler
-context to see if its allowed to fork by the scheduler and safely
-assign available workgroups from the workgroup pool in isolation from
-other actors that which to assign tasks. \TSComment{it also updates
-  the kernel context, and sends transmit variables while holding this
-  lock}
-
-As opposed to assignment tasks, availability tasks can be performed in
-a lock-free manner without conflict. This is because a workgroup only
-modifies its own state in the task pool and can atomically increment
-and decrement the required counters. Availability tasks are also able
-to be performed lock-free with assignment tasks (although accesses to
-the workgroup state and counters must be performed
-atomically). Availability tasks will only increase the number of
-available workgroups, and do not conflict with assignment tasks
-sending available workgroups to kernels.
-
-Although assignment tasks to the workgroup pool can be performed
-concurrently, concurrent calls to $\offerkill$ must be protected
-because workgroups that exit (a) modify the kernel context which
-causes a conflict and (b) the semantics of $\offerkill$ guarantee that
-only the workgroup with the highest id can exit. Rather than introduce
-a new mutex to protect $\offerkill$, we instead use the number of
-active groups from the kernel context.  The call to $\offerkill$
-begins by checking the calling workgroup id against the number of
-active groups for the kernel. If the calling workgroup is the last
-workgroup, it enters and is then able to check if it can be
-killed. Otherwise it immediately returns. If a workgroup determines
-it should be killed, it updates 
-
-From this implementation, it falls out that $\offerkill$ and
-$\offerfork$ from the same workgroup can never succeed concurrently.
-If $\offerkill$ terminates the calling workgroup, then the scheduler
-is holding the assignment lock and will continue to hold it until 
-the call to $\offerkill$ finishes. Thus, any call to $\offerfork$
-during this time will not result in forking workgroups.
+The semantics of $\offerkill()$, which allow only the workgroup with
+the highest id provide natural mutual exclusion for exiting workgroups
+(as part of the exit, the kernel context is updated). That is, a
+workgroup can only exit at $\offerkill()$ if it is the workgroup with
+the highest id. An exiting thread releases this natural mutex by
+decrementing the number of active workgroups in the kernel context.
 
 \paragraph{Example}
 
@@ -1259,8 +1212,54 @@ during this time will not result in forking workgroups.
 
 \paragraph{An efficient resizing barrier}
 
-\ADComment{Optimised barrier implementation.}
+In section~\ref{??}, we show that a resizing barrier is semantically
+equivalent to three normal barrier calls with calls to cfork and ckill
+in between. It is possible, however to implement the resizing with
+only one call to a global barrier with $\offerfork$ and $\offerkill$
+baked into the implementation. \TSComment{note here that these
+  implementations require no cfork or ckill outside of the barrier}
 
+We consider barriers which have the master/slave model
+(e.g. \cite{??}). That is, one workgroup (the master) collects signals
+from the other workgroups (the slaves) indicating that they have
+arrived at the barrier and are waiting for a reply indicating that
+they may leave the barrier. Once the master has recieved a signal from
+all the slaves, it replies with a signal saying that the slaves may
+leave. \TSComment{Need to discuss new active workgroup number that
+is stable across iterations}
+
+A first-attempt at incorporating $\offerfork$ and $\offerkill$ into
+such a barrier is straight forward. Upon entering the barrier, the
+slaves first execute $\offerkill$, possibly exiting. The master then
+waits for $M$ slaves (the number of active workgroups), which may
+decrease, (based on the $\offerkill$ instructions executed by the
+slaves), but will not increase. Once the master observes $M$ slaves
+have arrived, it knows all other workgroups are in the kernel are
+spinning, waiting to be released. The master executes $\offerfork$,
+where there is a conditional for the potentially newly spawned threads
+to join the other slaves waiting to be released. Finally, the master
+releases all the slaves: the original slaves and the new slaves that
+joined at $\offerfork$.
+
+While this barrier implementation works, it has its flaws. Workgroups
+only execute $\offerkill$ once per global barrier call. Depending on
+the order in which workgroups arrive at the barrier, it is possible
+that only one workgroup is killed per barrier call which could lead to
+a high time for the scheduler to gather the sufficient amount of
+workgroups to execute another kernel concurrently.
+
+We observe if we provide an additional scheduler functionality for a
+workgroup executing a cooperative kernel, we can greatly reduce the
+gather time. We call the new function {\tt query()}. The semantics
+simply return the number of workgroups that the scheduler requires to
+kill from the cooperative kernel. A new barrier can now be implented
+as follows: (1) Master waits for all slaves; (2) Master forks and sets
+new workgroups as slaves. (3) Master calls {\tt query()} and gets
+value $W$; (4) master releases slaves and broadcasts the value from
+{\tt query} to slaves. (5) Workgroups with id greater than $M-W$ spin
+on $\offerkill$, as they know from {\tt query()} that the scheduler
+needs them to exit. We show in Section~\ref{} that the barrier using
+query greatly reduces the gather time in practice.
 
 \subsection{Vendor Implementation Defects}
 
@@ -1536,15 +1535,15 @@ directly in the GPU driver.
 
 \ADComment{Can we remark a bit more on the outliers?}
 
-\subsection{Performance and Responsiveness of Cooperative Scheduling}\label{sec:responsiveness}
+\subsection{Multitasking via Cooperative Scheduling}\label{sec:responsiveness}
 
-Cooperative scheduling enables to run a non-cooperative kernel alongside
-a cooperative one, we focus here on the performance impact of this
-multitasking and on the scheduling responsiveness. The performance is
-measured with respect to the performance of each kernel run in
-sequence. Responsiveness, i.e., how fast a non-cooperative kernel can be
-scheduled, depends not only on the scheduler implementation, but also on
-how often the cooperative kernel offer workgroups to be killed.
+We now assess the performance impact of multitasking between a
+coopoerative and non-cooperative kernel, and on scheduling
+responsiveness.  The performance is measured with respect to the
+performance of each kernel run in sequence. Responsiveness, i.e., how
+fast a non-cooperative kernel can be scheduled, depends not only on
+the scheduler implementation, but also on how often the cooperative
+kernel offer workgroups to be killed.
 
 % In order to simulate non-persistent workloads alongside kernels of
 % blocking algorithms, we use a matrix multiplication kernel where
@@ -1552,34 +1551,34 @@ how often the cooperative kernel offer workgroups to be killed.
 % duration.
 
 \paragraph{Experimental setup}
-For a given cooperative kernel and its data set, we make it run while
-regularly asking to schedule a non-cooperative kernel that simulates
-graphics rendering, according to the classes listed in
+For a given cooperative kernel and its data set, we launch the kernel
+asynchronously and then repeatedly schedule a non-cooperative kernel
+that aims to simulate the intensity of a graphics rendering workload,
+according to the classes listed in
 \mytab~\ref{tab:noncooperativeworkload}. In practice, we use a matrix
 multiplication kernel as the non-cooperative workload, with matrix
 dimensions tailored for each GPU to reach the appropriate execution
-duration.  In separate runs, we ask the scheduler to launch this
-non-cooperative kernels with different number of workgroups: either 1, a
-quarter, a half or all but one workgroups among the ones available for
-the cooperative kernel. Moreover, for graph algorithms we try both the
-regular and the query barrier.
+duration.  We conduct separate runs where we vary the number of workgroup slots requested by the non-cooperative kernel,
+considering the cases where one, a quarter, a half, and all-but-one, of the total number of workgroup slots is requested.
+Moreover, for the graph algorithms we try both the
+regular and query barrier implementations.
 
 Our experiments span 13 pairs of cooperative kernels and data sets, 3
-classes of non-cooperative kernel workloads and frequency, 4 quantities
+classes of non-cooperative kernel workloads \ADComment{cut ``and frequency''?} and frequency, 4 quantities
 of workgroups claimed for the non-cooperative kernel and 2 variations of
 resizing barriers for graph algorithms, leading to 288
-configurations. Each of this configuration is run 10 times on each
-GPU. For each run, we record the execution time of the cooperative
+configurations.  We run each configuration 10 times on each
+GPU, in order to report averaged performance numbers. For each run, we record the execution time of the cooperative
 kernel. For each scheduling of the non-cooperative kernel during the
 run, we also record the \emph{gather time} needed by the scheduler to
 collect enough workgroups to launch the non-cooperative kernel, and the
-non-cooperative kernel execution time. We make sure all kernels perform
-their computations by comparing their result with expected results. We
-had to ignore some configurations where the non-cooperative kernel asks
+non-cooperative kernel execution time. We sanity-check whether all kernels perform
+their computations corretly by comparing their computed result with expected reference results.
+
+To work around compiler crash and compiler hang bugs in Intel's current OpenCL drivers, we had to apply what semantics-preserving changes to the code generated by \kernelmerge{} for a few applications configurations.  We could not obtain results for some configurations where the non-cooperative kernel asks
 for all but one workgroups (namely bc, bfs and l-sssp on all chips, and
-color on Iris), and the game application on HD520, since they lead to
-system issues like GPU deadlock or blue screens---which we tend to think
-are manifestations of driver bugs.
+color on Iris), and could not get the game application to run at all on HD520; these configurations led to 
+catastrophic issues such as display freezes or blue screens; we also attribute these to bugs in Intel's current drivers.
 
 % Whenever a cooperative or non-cooperative kernel terminates, we verify
 % that it has really performed its computation by comparing its results
@@ -1592,11 +1591,9 @@ are manifestations of driver bugs.
 % non-cooperative kernel takes all but one of the cooperative kernel
 % workgroups, we decided to ignore these results.
 
-\paragraph{Results}  \ADComment{Discuss the results.}
+\paragraph{Results}
 
-
-
-\myfig~\ref{fig:fine-grained-timing} reports the measure for three
+\myfiglong\ref{fig:fine-grained-timing} reports the measure for three
 configurations and represents the gather and execution time of the
 non-cooperative kernel w.r.t. the quantity of workgroups allocated to
 it. Times are in milliseconds, and a logarithmic scale is used since
