@@ -14,6 +14,7 @@
 \usepackage{courier}            % standard fixed width font
 \usepackage[scaled]{helvet} % see www.ctan.org/get/macros/latex/required/psnfss/psnfss2e.pdf
 \usepackage{url}                  % format URLs
+\urlstyle{same}
 \usepackage{listings}          % format code
 \usepackage{enumitem}      % adjust spacing in enums
 \usepackage[colorlinks=true,allcolors=blue,breaklinks,draft=false]{hyperref}   % hyperlinks, including DOIs and URLs in bibliography
@@ -1301,7 +1302,7 @@ to be transmitted.  For all these examples the porting to cooperative
 kernels was similarly straightforward to the porting illustrated in
 \mysec\ref{sec:programmingguidelines} for our running examples, and did
 not require reshaping of the original algorithm. Most graph come with 2
-different data sets, leading to 13 application/data set pairs in total.
+different input data sets, leading to 13 application/data set pairs in total.
 
 From the Lonestar suite we omit two applications that use global barriers:
 dmr has been shown to be unstable across GPU vendors~\cite{DBLP:conf/iwocl/SorensenD16}, and mst is trivially short-running so that it is not
@@ -1379,43 +1380,50 @@ spent using the GPU to render the display between kernel calls and the
 rate at which the OS requires the GPU for display rendering,
 respectively.
 
-We used this approach to measure the GPU availability required for
-three types of rendering: \emph{light}, whereby desktop icons are
-smoothly emphasised under the mouse pointer; \emph{medium}, whereby
-window dragging over the desktop is smoothly animated; and
-\emph{heavy}, which requires smooth animation of a WebGL shader in a
-browser.  For \emph{heavy} we used the Paper
-Planes\footnote{\url{https://paperplanes.world}}
-and Kaleidoscope\footnote{\url{http://colordodge.com/Kaleidoscope/}}
-shaders running in a recent version of Firefox.
+We used this approach to measure the GPU availability required for three
+types of rendering: \emph{light}, whereby desktop icons are smoothly
+emphasised under the mouse pointer; \emph{medium}, whereby window
+dragging over the desktop is smoothly animated; and \emph{heavy}, which
+requires smooth animation of a WebGL shader in a browser.  For
+\emph{heavy} we used WebGL demos from the Chrome
+experiments\footnote{\url{https://www.chromeexperiments.com/}} running
+in a recent version of Firefox.
 
-\begin{table}
-\small
-\centering
-\begin{tabular}{ l r r }
-Workload & Duration (ms) & Rate (ms)\\
-\hline
-light & 3 & 70\\
-medium & 3 & 40\\
-heavy & 10 & 40\\
-\end{tabular}
-\caption{Computed estimates of the GPU requirements for three different classes of graphics rendering}
-\label{tab:noncooperativeworkload}
-\end{table}
+% the Paper Planes\footnote{\url{https://paperplanes.world}} and
+% Kaleidoscope\footnote{\url{http://colordodge.com/Kaleidoscope/}}
+% shaders running in a recent version of Firefox.
 
-\mytablong\ref{tab:noncooperativeworkload} illustrates the data
-computed for the three types of workloads across our GPUs.  The
-\emph{Duration} and \emph{Rate} columns report values corresponding to
-$(X-Y)/n$ and $X/n$ in the above discussion, respectively.  For the
-medium and heavy workloads, the 40ms rate corresponds to graphics
+% \begin{table}
+% \small
+% \centering
+% \begin{tabular}{ l r r }
+% Workload & Duration (ms) & Rate (ms)\\
+% \hline
+% light & 3 & 70\\
+% medium & 3 & 40\\
+% heavy & 10 & 40\\
+% \end{tabular}
+% \caption{Computed estimates of the GPU requirements for three different classes of graphics rendering}
+% \label{tab:noncooperativeworkload}
+% \end{table}
+
+Our results are the following: light workloads needs to run 3ms every
+70ms, medium ones 3ms every 40ms, and heavy ones 10ms every 40ms. For
+the medium and heavy workloads, the 40ms rate corresponds to graphics
 rendering occuring 25 times per second, which coincides with the human
 persistence of vision. The 3ms execution duration of both light and
 medium configurations indicates that, as expected, GPU computation is
 cheaper for basic display rendering compared with rendering that uses
-complex shaders.
+complex shaders. We use these results to guide our evaluation of the
+responsiveness of cooperative scheduling in
+\mysec\ref{sec:responsiveness}.
 
-We use these results to guide our evaluation of the responsiveness of
-cooperative scheduling in \mysec\ref{sec:responsiveness}.
+% The
+% \emph{Duration} and \emph{Rate} columns report values corresponding to
+% $(X-Y)/n$ and $X/n$ in the above discussion, respectively.  
+
+% \mytablong\ref{tab:noncooperativeworkload} illustrates the data
+% computed for the three types of workloads across our GPUs.  
 
 \subsection{The Overhead of Moving to Cooperative Kernels}\label{sec:overhead}
 
@@ -1536,26 +1544,28 @@ kernel offer workgroups to be killed.
 For a given cooperative kernel and its data set, we launch the kernel
 asynchronously and then repeatedly schedule a non-cooperative kernel
 that aims to simulate the intensity of a graphics rendering workload,
-according to the classes listed in
-\mytab~\ref{tab:noncooperativeworkload}. In practice, we use a matrix
-multiplication kernel as the non-cooperative workload, with matrix
-dimensions tailored for each GPU to reach the appropriate execution
-duration.  We conduct separate runs where we vary the number of workgroup slots requested by the non-cooperative kernel,
-considering the cases where one, a quarter, a half, and all-but-one, of the total number of workgroup slots is requested.
-Moreover, for the graph algorithms we try both the
-regular and query barrier implementations.
+according to the 3 classes listed in \mysec~\ref{sec:sizingnoncoop}. In
+practice, we use a matrix multiplication kernel as the non-cooperative
+workload, with matrix dimensions tailored for each GPU to reach the
+appropriate execution duration.  We conduct separate runs where we vary
+the number of workgroup slots requested by the non-cooperative kernel,
+considering the cases where one, a quarter, a half, and all-but-one, of
+the total number of workgroup slots is requested.  Moreover, for the
+graph algorithms we try both the regular and query barrier
+implementations.
 
 Our experiments span 13 pairs of cooperative kernels and data sets, 3
-classes of non-cooperative kernel workloads \ADComment{cut ``and frequency''?} and frequency, 4 quantities
-of workgroups claimed for the non-cooperative kernel and 2 variations of
-resizing barriers for graph algorithms, leading to 288
-configurations.  We run each configuration 10 times on each
-GPU, in order to report averaged performance numbers. For each run, we record the execution time of the cooperative
-kernel. For each scheduling of the non-cooperative kernel during the
-run, we also record the \emph{gather time} needed by the scheduler to
-collect enough workgroups to launch the non-cooperative kernel, and the
-non-cooperative kernel execution time. We sanity-check whether all kernels perform
-their computations corretly by comparing their computed result with expected reference results.
+classes of non-cooperative kernel workloads, 4 quantities of workgroups
+claimed for the non-cooperative kernel and 2 variations of resizing
+barriers for graph algorithms, leading to 288 configurations.  We run
+each configuration 10 times on each GPU, in order to report averaged
+performance numbers. For each run, we record the execution time of the
+cooperative kernel. For each scheduling of the non-cooperative kernel
+during the run, we also record the \emph{gather time} needed by the
+scheduler to collect enough workgroups to launch the non-cooperative
+kernel, and the non-cooperative kernel execution time. We sanity-check
+whether all kernels perform their computations corretly by comparing
+their computed result with expected reference results.
 
 To work around compiler crash and compiler hang bugs in Intel's current OpenCL drivers, we had to apply what semantics-preserving changes to the code generated by \kernelmerge{} for a few applications configurations.  We could not obtain results for some configurations where the non-cooperative kernel asks
 for all but one workgroups (namely bc, bfs and l-sssp on all chips, and
