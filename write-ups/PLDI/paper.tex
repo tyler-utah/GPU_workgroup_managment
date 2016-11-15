@@ -417,8 +417,8 @@ to obtain its unique id, to access distinct data or follow different control flo
 
 The threads executing a kernel are divided into a number of \emph{workgroups}, each consisting of a fixed number of threads.  Builtin functions
 $\getlocalid()$ and $\getgroupid()$ return a thread's local id within
-its workgroup and the id of the workgroup, respectively.\footnote{For simplicity we restrict attention to one-dimensional kernels, which captures all the
-GPU-accelerated irregular algorithms we are aware of, and use
+its workgroup and the id of the workgroup, respectively.\footnote{For simplicity we assume 1D kernels, which captures all the
+irregular algorithms we know of, using
 e.g.\ $\getglobalid()$ to mean $\getglobalid(0)$.
 }  The number
 of threads per workgroup and the number of workgroups are obtained via
@@ -461,12 +461,11 @@ workgroups executing the same kernel, stating~\cite[p.\ 31]{opencl2Spec}: \emph{
 \dots There is no safe and portable way to synchronize across
   the independent execution of workgroups since once in the work-pool,
   they can execute in any order.''}  CUDA similarly provides no guarantees~\cite{cuda-75}.
-
+%
 HSA provides limited, one-way guarantees,
 stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
   for values written by work-group B without deadlock provided ... A
-  comes after B in work-group flattened ID order}. However, this
-one-way communication is not sufficient to support blocking algorithms that use
+  comes after B in work-group flattened ID order}. This is not sufficient to support blocking algorithms that use
 mutexes and inter-workgroup barriers, both of which require \emph{symmetric} communication between
 threads.
 
@@ -523,26 +522,20 @@ kernel graph_app(global graph * g,
 \paragraph{Work stealing example}
 %
 Work stealing enables dynamic balancing of tasks across several
-processing units, and is useful when the number of tasks to be
-processed in parallel is dynamic, because processing
-one task may create an arbitrary number of new tasks.  In the context
+processing units. It is useful when the number of tasks to be
+processed is dynamic, due to one task creating an arbitrary number of new tasks.  In the context
 of GPUs, each workgroup has an associated queue from which it
 obtains tasks to process, and to which it stores newly created
 tasks. If a workgroup's queue is empty, the workgroup tries to \emph{steal} a task from an other
-queue. Workgroups keep on processing tasks until all the work is
-done. Previous work addresses the feasibility and efficiency of work
+queue. Previous work addresses the feasibility and efficiency of work
 stealing on GPUs~\cite{dlb-web,TPO10}.
 
 \myfiglong\ref{fig:workstealing} shows a simplified version of an OpenCL
-kernel that uses a work stealing queue. All threads start their
-execution at the function marked with the $\mathsf{kernel}$ keyword
-(line~\ref{line:wksteal:kernelfunc}). They receive a pointer to the task
+kernel that uses a work stealing queue. Each thread receives a pointer to the task
 queues, in global memory, initialized by the
 host to contain the initial tasks. Each thread identifies
-the workgroup it belongs to via the function $\getgroupid()$
-(line~\ref{line:wksteal:getgroupid}). Here the group id is stored into
-the variable $\mathsf{queue\_id}$ (which is, by default, in private
-memory) and used to access the relevant task queue. The
+the workgroup it belongs to via $\getgroupid()$
+(line~\ref{line:wksteal:getgroupid}), which is used as a queue id and used to access the relevant task queue. The
 $\mathsf{pop\_or\_steal}$ function (line~\ref{line:wksteal:poporsteal})
 is called by all threads of a workgroup.  Inside
 $\mathsf{pop\_or\_steal}$ only the thread with a local id equal to $0$,
@@ -551,19 +544,17 @@ task from the workgroup's queue, or steal a task from a different
 queue. The master thread uses local memory inside
 $\mathsf{pop\_or\_steal}$ to ensure that the returned value is valid for
 all threads of its workgroup. If a task was obtained, then all threads
-of the workgroup participate in the processing of the task via 
-$\mathsf{process\_task}$ (line~\ref{line:wksteal:processtask}).
-Processing this task may lead to the creation of further tasks, which
+of the workgroup participate in the processing of the task (line~\ref{line:wksteal:processtask}).
+This may lead to the creation of further tasks, which
 the master thread will push to the workgroup's queue.
 
 Although not depicted here, concurrent accesses to queues inside
 $\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
 mutex per queue, implemented using atomic compare and swap operations
-on global memory.  As a result, the kernel presents two opportunities
+on global memory.  The kernel presents two opportunities
 for spin-waiting: spinning to obtain a mutex, and spinning in the main
-kernel loop to obtain a task to process.  The algorithm thus depends
-on a fair scheduler, which, as discussed in \mysec\ref{sec:intro}, is
-not guaranteed by current GPU programming models.
+kernel loop to obtain a task.  The algorithm thus depends
+on a fair scheduler, which is not guaranteed by current GPU programming models.
 
 \paragraph{Graph traversal example} \myfiglong\ref{fig:graphsearch} shows the
 skeleton of a frontier-based graph traversal algorithm; such algorithms have
@@ -571,11 +562,9 @@ been shown to be execute efficiently on GPUs~\cite{BNP12,DBLP:conf/oopsla/PaiP16
 The kernel is
 given three arguments in global memory: a graph structure, and two
 arrays that can contain graph nodes. Initially, $\keyword{n0}$ contains the
-starting nodes to process. Threads keep three local variables: $\keyword{level}$, which indicates the frontier level currently being
-processed, and $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$, which point to
-distinct node arrays. The nodes to be
-processed for the current frontier are contained in $\keyword{in\_nodes}$, while $\keyword{out\_nodes}$ contains
-the nodes to be processed during the next frontier.
+starting nodes to process. Private variable $\keyword{level}$ indicates the frontier level currently being
+processed, and $\keyword{in\_nodes}$ and $\keyword{out\_nodes}$ point to
+distinct node arrays recording the nodes to be processed during the current and next frontier, respectively.
 
 The application iterates as long as the current frontier contains
 nodes to process (line~\ref{line:graph:iterate}). At each frontier,
@@ -593,13 +582,12 @@ the computation. After processing the frontier, the threads swap their
 node array pointers (line~\ref{line:graph:swap}).
 
 At this point, the GPU threads must wait for all other threads to
-finishing processing the frontier before they can continue. To achieve
+finishing processing the frontier. To achieve
 this, we use a global barrier construct
 (line~\ref{line:graph:gb1}). After all threads reach this point, the
 output node array is reset (line~\ref{line:graph:reset}) and the level
-is incremented. Again, threads must wait until the output node is
-reset at a global barrier (line~\ref{line:graph:gb2}). At this point
-threads can continue to the next frontier.
+is incremented. The threads use another global barrier to wait until the output node is
+reset (line~\ref{line:graph:gb2}), after which the threads can continue to the next frontier.
 
 The global barrier used in this application is not provided as a GPU
 primitive, though previous works have shown that such a global
@@ -608,11 +596,10 @@ based on CPU barrier designs~\cite[ch. 17]{HS08}.
  These barriers employ spinning to ensure threads wait at the barrier until all
 threads have arrived, which requires fair
 scheduling between workgroups for the barrier to operate correctly.
-Again, fairness is not guaranteed by current GPU programming models.
 
-The mutexes and barriers required by these two examples appear to run
+The mutexes and barriers used by these two examples appear to run
 reliably on current GPUs for kernels that are executed with no more
-workgroups than there are compute units; this is due to the fairness
+workgroups than there are compute units.  This is due to the fairness
 of the occupancy-bound execution model that current GPUs have been
 shown, experimentally, to provide.  But, as discussed in
 \mysec\ref{sec:intro}, this model is not endorsed
