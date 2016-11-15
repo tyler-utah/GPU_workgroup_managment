@@ -1255,7 +1255,7 @@ simultaneously. To fix this conflict, we introduce an
 When the scheduler determines a new kernel has been launched, it spins
 waiting to acquire the assignment lock. Once acquired, it determines
 how to obtain the required number of workgroups (possibly by
-signalling a cooperative kernel to enable $\offkill$). The scheduler
+signalling a cooperative kernel to enable $\offerkill$). The scheduler
 than waits until the required number of workgroups become available.
 Because it holds the assignment mutex, the scheduler knows that the
 number of available workgroups in the workgroup pool can only
