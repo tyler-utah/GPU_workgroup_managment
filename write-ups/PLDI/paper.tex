@@ -1682,7 +1682,7 @@ use matmult to represent system workload, ref to previous section
 \paragraph{Irregular algorithms and persistent kernels}
 
 There has been a lot of work on accelerating blocking irregular
-algorithms using GPUs~\cite{...}, and on the \emph{persistent threads}
+algorithms using GPUs~\cite{...,TPO10}, and on the \emph{persistent threads}
 programming style for long-running kernels~\cite{...}.  These
 approaches rely on the occupancy-bound execution model, and aim to
 take ownership of the GPU by scheduling as many workgroups as the GPU
@@ -1708,7 +1708,8 @@ other tasks.  A follow-up work adds the notion of SM \emph{flushing},
 whereby a workgroup running on an SM can be cancelled and re-scheduled
 from scratch if the workgroup has not yet committed any visible
 side-effects to shared memory.  Both approaches have been evaluated
-using simulators, over sets of regular GPU kernels.
+using simulators, over sets of regular GPU kernels.  State-of-the-art \nvidia GPUs targeting data centers (where multi-tasking is essential) do support
+preemption, though it is not clear whether they guarantee fair scheduling~\cite{PascalWhitepaper}.
 
 The advantages of these approaches are that they do not require manual
 programmer effort, and the capability to fully preempt a workgroup
@@ -1751,15 +1752,16 @@ to exploit memory caches associated with that compute
 unit~\cite{DBLP:conf/ics/WuCLSV15}.  None of these approaches tackle
 the problem of \emph{fair} scheduling on GPUs that our work addresses, thus they do not aid in safe deployment of blocking irregular algorithms.
 
-\paragraph{Dynamic parallelism} Recent version of CUDA and OpenCL allow a kernel to spawn further kernels~\cite{...}.
-This \emph{dynamic parallelism} can be exploited to implement a GPU-based scheduler: an initial scheduler kernel uses the feature to spawn additional kernels as required~\cite{ }.
-
- is launched
-
-%
-\ADComment{Kepler preemption support?  Mention in related work?}
-
-\ADComment{Sreepathi mentioned the NCCL framework.}
+\paragraph{Dynamic parallelism} Recent version of CUDA and OpenCL allow a kernel to spawn further kernels~\cite{CUDASpec,opencl2Spec}.
+This \emph{dynamic parallelism} can be exploited to implement a
+GPU-based scheduler, by having an initial scheduler kernel repeatedly
+spawn further kernels as required, according to some scheduling
+policy~\cite{DBLP:conf/ppopp/Muyan-OzcelikO16}.  However, a kernel
+that uses dynamic parallelism is still subject to the scheduling
+limitations of current GPU programming models, and in particular the
+problem that workgroups are not fairly scheduled.  Hence this feature
+does not offer a solution to the problem of deploying blocking
+algorithms on GPUs in a safe manner that we tackle with this work.
 
 
 \cite{TPO10}
