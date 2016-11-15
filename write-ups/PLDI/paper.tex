@@ -502,16 +502,12 @@ kernel graph_app(global graph * g,
   int level = 0;
   global nodes * in_nodes = n0;
   global nodes * out_nodes = n1;
-
   int tid = get_global_id();
   int stride = get_global_size();
-
 (*@\label{line:graph:iterate}@*)  while(in_nodes.size > 0) {
-
     for (int i = tid; i < nodes.size; i += stride) {
       process_node(g, in_nodes[i], out_nodes, level);
     }
-
 (*@\label{line:graph:swap}@*)    swap(&in_nodes, &out_nodes);
 (*@\label{line:graph:gb1}@*)    global_barrier();
 (*@\label{line:graph:reset}@*)    reset(out_nodes);
@@ -929,20 +925,15 @@ and in particular can be safely used inside the $\keyword{for}$ loop.
 \begin{lstlisting}
 kernel graph_app(global graph *g, 
                  global nodes *n0, global nodes *n1) {
-
 (*@\label{line:cgraph:transmit1}@*)  transmit int level = 0;
 (*@\label{line:cgraph:transmit2}@*)  transmit global nodes *in_nodes = n0;
 (*@\label{line:cgraph:transmit3}@*)  transmit global nodes *out_nodes = n1;
-
   while(in_nodes.size > 0) {
-
 (*@\label{line:cgraph:rechunking1}@*)    int tid = get_global_id();
 (*@\label{line:cgraph:rechunking2}@*)    int stride = get_global_size();
-
     for (int i = tid; i < nodes.size; i += stride) {
       process_node(g, in_nodes[i], out_nodes, level);
     }
-
     swap(&in_nodes, &out_nodes);
 (*@\label{line:cgraph:resizing1}@*)    resizing_global_barrier();
     reset(out_nodes);
