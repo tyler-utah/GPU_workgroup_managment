@@ -1827,16 +1827,33 @@ Neither rule applies until all threads in a workgroup reach
 $\offerfork$, and the workgroup gets stuck if multiple threads in a
 workgroiup reach $\offerfork$ with different subsequent statements.
 
-\ADComment{TODO: $\textsc{Fork}$}
+The $\textsc{Fork}$ rule similarly requires all threads in a workgroup
+to reach $\offerfork$ with identical following statements.  A
+nondeterministic number of new workgroups, $k$, is selected to be
+forked, where $k \in [0, N-M]$.  Importantly, $k=0$ is always a
+legitimate choice, in which case $\offerfork$ has no effect on the
+number of workgroups that are executing.  In the case where $k > 0$,
+$k$ new workgroup states are created, where each workgroup inherits
+the local state of thread 0 in $w_i$, the workgroup executing the fork
+call.  After $\offerfork$, all threads in all workgroups, including
+the new threads, proceed to execute the sequence of statements $\myss$
+that followed $\offerfork$.
+
+A simplification here is that we do not model transmission of
+particular annotated variables from thread 0 of the forking workgroup,
+instead specifying that the entire local state of the workgroup is
+transmitted.  Extending the semantics to transmit only annotated
+variables would be straightforward but verbose, requiring the local
+memory component of a thread state to be split into two: the part of
+the local state to be transmitted (modelling $\transmit$-annotated
+variables), and the rest of the local state.
 
 \ADComment{TODO: $\textsc{Barrier}$}
 
 \ADComment{TODO: $\textsc{Resizing-Barrier}$}
 
 
-\paragraph{Simplifications}
-
-\ADComment{All state is transmitted.}  \ADComment{Local memory is not
+ \ADComment{Local memory is not
   explicitly modeled but can be captured inside shared state.}
 \ADComment{Semantics for intra-workgroup barriers are ignored.}
 
