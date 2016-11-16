@@ -640,6 +640,7 @@ thread; $\offerkill$ and $\offerfork$, the key functions that enable
 cooperative scheduling; and $\globalbarrier$ and $\resizingglobalbarrier$
 primitives for inter-workgroup synchronisation.
 
+\vspace{-1mm}
 \paragraph{Transmitted variables}
 
 A variable declared in the root scope of the cooperative kernel can
@@ -650,6 +651,7 @@ current value for $v$ to the threads of the new workgroups, to serve
 as an initial value for $v$.  We detail the semantics for this when we
 describe $\offerfork$ below.
 
+\vspace{-1mm}
 \paragraph{Active workroups}
 
 If the host application launches a cooperative kernel requesting $N$
@@ -685,6 +687,7 @@ instruction.
 %workgroup, exhibiting lock-step predicated execution that is
 %inherently unfair.
 
+\vspace{-1mm}
 \paragraph{Semantics for $\offerkill$}
 
 The $\offerkill$ primitive allows the cooperative kernel to return
@@ -711,6 +714,7 @@ the number of active workgroups $M$ is atomically decremented by one.
 %the compute unit on which the workgroup was executing.
 
 
+\vspace{-1mm}
 \paragraph{Semantics for $\offerfork$}
 
 Recall that
@@ -747,11 +751,11 @@ portion of its local state to the threads of the forked workgroups.
 %as well as our reasons for selecting which variables to transmit via
 %annotations rather than transmitting the entire thread state.
 
-Notice that $k=0$ is always a legitimate choice for the number of
-workgroups to be spawned by an $\offerfork$ call, and if the number of
-active workgroups $M$ is equal to the workgroup limit $N$, $k=0$ is
-guaranteed.
+Notice that $k=0$ is always a valid choice for the number of
+workgroups to be spawned by $\offerfork$, and is guarateed if $M$
+is equal to the workgroup limit $N$.
 
+\vspace{-1mm}
 \paragraph{Global barriers}
 
 Because workgroups of a cooperative kernel are fairly scheduled, so a
