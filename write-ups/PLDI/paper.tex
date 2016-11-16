@@ -484,8 +484,9 @@ threads.
   }
 }
 \end{lstlisting}
-
+\vspace{-2mm}
 \caption{An excerpt of a work stealing algorithm in OpenCL}\label{fig:workstealing}
+\vspace{-2mm}
 \end{figure}
 
 \begin{figure}
@@ -510,7 +511,9 @@ kernel graph_app(global graph * g,
   }
 }
 \end{lstlisting}
+\vspace{-2mm}
 \caption{An OpenCL graph traversal algorithm, using a global barrier for synchronisation}\label{fig:graphsearch}
+\vspace{-2mm}
 \end{figure}
 
 \paragraph{Work stealing example}
@@ -920,7 +923,9 @@ kernel graph_app(global graph *g,
   }
 }
 \end{lstlisting}
+\vspace{-2mm}
 \caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
+\vspace{-2mm}
 \end{figure}
 
 \paragraph{Patterns for irregular algorithms}
@@ -1241,8 +1246,10 @@ game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 \end{tabular} \\
 \vspace{.2cm}
 \crule[Gray1]{.2cm}{.2cm} Pannotia \hspace{.4cm} \crule[Gray2]{.2cm}{.2cm} Lonestar GPU  \hspace{.4cm}  \crule[Gray3]{.2cm}{.2cm} work stealing
+\vspace{-2mm}
 \caption{Blocking GPU applications investigated}
 \label{tab:applications}
+\vspace{-2mm}
 \end{table}
 
 \begin{table}[t]
@@ -1255,8 +1262,10 @@ Chip & HD520 & HD5500 & Iris\\
 Driver   & 20.19.15.4501 & 10.18.15.4281 & 20.19.15.4463 \\
 Host CPU & i3-6100U & i7-5600U & i3-5157U \\
 \end{tabular}
+\vspace{-2mm}
 \caption{The Intel GPU platforms used in our evaluation}
 \label{tab:chipstested}
+\vspace{-2mm}
 \end{table}
 
 \mytablong\ref{tab:applications} gives an overview of the 8 irregular
@@ -1439,8 +1448,10 @@ wk.steal. max & $1.42^{\diamond}$ & $1.18^{\diamond}$ & $1.23^{\diamond}$ \\
 {\footnotesize
 $^{\ast}$color ecology, $^{\dagger}$bc 1k\_128k, $^{\ddagger}$sssp usa\_ny, $^{\diamond}$octree
 }
+\vspace{-2mm}
 \caption{Execution time slowdown associated with cooperative scheduling mode without multitasking}
 \label{tab:overhead}
+\vspace{-2mm}
 \end{table}
 
 \paragraph{Experimental setup}
@@ -1572,12 +1583,16 @@ number of workgroups that needs to be collected.
 \includegraphics[width=.7\columnwidth]{iris_octree_NA.pdf} 
 \includegraphics[width=.7\columnwidth]{hd520_mis_ecology.pdf}
 \includegraphics[width=.7\columnwidth]{hd5500_bfs_rmat22.pdf}
+\vspace{-2mm}
 \caption{Example gather time and non-cooperative timing results}\label{fig:fine-grained-timing}
+\vspace{-2mm}
 \end{figure*}
 
 \begin{figure}
 \includegraphics[width=\columnwidth]{heavy.pdf} 
+\vspace{-2mm}
 \caption{Performance impact of multitasking cooperative and non-cooperative workloads, and the period with which non-cooperative tasks execute}\label{fig:performance}
+\vspace{-2mm}
 \end{figure}
 
 
@@ -1717,17 +1732,18 @@ Intel GPUs shows that the model is a good fit for the needs of current
 GPU-accelerated irregular algorithms.  The
 performance that could be gained through a native implementation with
 dedicated driver support would be even better.
-
-There are three main avenues for future work at present: seeking
+%
+Avenues for future work include seeking
 additional classes of irregular algorithms to which the model might
-(be extended to) apply (to), investigating native driver support for
-cooperative kernels via open source graphics drivers, and integrating
+(be extended to) apply (to), investigating implementing native support
+in open source drivers, and integrating
 cooperative kernels into template- and compiler-based programming
 models for graph algorithms on
-GPUs~\cite{DBLP:conf/ppopp/WangDPWRO16,DBLP:conf/oopsla/PaiP16}.  As more vendors
-adopt the advanced features of OpenCL that our approach requires, we
-will be in a position to assess the programming model across a wider
-range of devices.
+GPUs~\cite{DBLP:conf/ppopp/WangDPWRO16,DBLP:conf/oopsla/PaiP16}.
+%  As more vendors
+%adopt the advanced features of OpenCL that our approach requires, we
+%will be in a position to assess the programming model across a wider
+%range of devices.
 
 \clearpage
 
