@@ -940,8 +940,8 @@ the graph algorithm, the next level could be processed by more or
 fewer workgroups, which $\resizingglobalbarrier$
 facilitates.  Some level-specific state must be transmitted to new workgroups.
 
-Our experience is that cooperative kernels are a good
-fit for at least these two classes of irregular algorithms, in part because they inspired the model.
+%Our experience is that cooperative kernels are a good
+%fit for at least these two classes of irregular algorithms, in part because they inspired the model.
 
 
 \subsection{Non-Functional Requirements}\label{sec:nonfunctional}
@@ -989,9 +989,9 @@ task, and responding positively to $\offerfork$ calls if compute units are avail
 implementation (\mysec\ref{sec:implementation}) is as
 generous as possible to the cooperative kernel in this regard.
 
-These guidelines are not hard-and-fast rules, and e.g.\ a smart scheduler might respond selectively to $\offerkill$
-and $\offerfork$ calls by predicting future high-priority workloads
-based on past workloads.
+%These guidelines are not hard-and-fast rules, and e.g.\ a smart scheduler might respond selectively to $\offerkill$
+%and $\offerfork$ calls by predicting future high-priority workloads
+%based on past workloads.
 
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
