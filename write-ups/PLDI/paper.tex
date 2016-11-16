@@ -1551,7 +1551,7 @@ kernel w.r.t. the quantity of workgroups allocated to it.
 A logarithmic
 scale is used for time since gather times tend to be much smaller than
 execution times. The horizontal grey lines indicates the desired period
-for non-cooperative kernels.  These graphs show a representative sample of our results; the full set of graphs for all configurations is provided in Appendix~\ref{appendix:extraresponsiveness} (supplementary material).
+for non-cooperative kernels.  These graphs show a representative sample of our results; the full set of graphs for all configurations is provided in Appendix~\ref{appendix:extragraphs} (supplementary material).
 
 Let us first focus on the left graph, which illustrates a work stealing
 example executing on the Iris GPU.  When the non-cooperative kernel is given only one workgroup, its
@@ -1600,7 +1600,7 @@ number of workgroups that needs to be collected.
 \myfiglong\ref{fig:performance} reports, for the Iris GPU, the overhead brought by the scheduling of
 non-cooperative kernels over the cooperative kernel execution time.  This is the slowdown associated with running the cooperative kernel in the presence of multitasking, vs.\ running the cooperative kenrel in isolation (geometric mean over all applications and inputs).  We also show the period at which non-cooperative kernels can be scheduled (aritmetic mean over all applications
 and inputs).
-The results for the other GPUs are similar and are graphed in Appendix~\ref{appendix:extraperformance} (supplementary material).
+The results for the other GPUs are similar.
  We show
 results for the three workloads listed in
 \mysec~\ref{sec:sizingnoncoop}. The two gray horizontal lines in the
@@ -2093,23 +2093,12 @@ thread-by-thread basis.  We have not yet encountered a real-world
 example where our current semantics would not suffice.
 
 
-\section{Graphs for Multitasking Experiments}
-
-In \mysec\ref{sec:responsiveness} we showed a selection of graphs to illustrate our
-experimental results related to performance and responsiveness.  Here
-we present the full set of graphs.
-
-\subsection{Responsiveness graphs}\label{appendix:extraresponsiveness}
+\section{Graphs for Multitasking Experiments}\label{appendix:extragraphhs}
 
 We present the full set of graphs exemplified by the examples in
 \myfig\ref{fig:fine-grained-timing}; for completeness we reproduce those graphs here too.
 
-\ADComment{Tyler: show all the graphs, perhaps grouped by GPU.}
+\ADComment{Tyler: show all the graphs.}
 
-\subsection{Performance graphs}\label{appendix:extraperformance}
-
-\myfiglong\ref{fig:performance} presents data on the performance impact and period associated with multitasking cooperative and non-cooperative workloads, for the Iris GPU.
-
-\ADComment{Tyler: say something like ``Corresponding graphs for the XXX and YYY GPUs are shown in \myfigs\ref{ } and~\ref{ }, respectively.'', adding the graphs.}
 
 \end{document}
