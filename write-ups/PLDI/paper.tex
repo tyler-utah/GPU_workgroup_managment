@@ -752,11 +752,7 @@ guaranteed.
 
 \paragraph{Global barriers}
 
-Many irregular algorithms require synchronisation across workgroups.
-This can be achieved via a \emph{global barrier}, as illustrated in the graph traversal example of \mysec\ref{sec:openclexamples} and \myfig\ref{fig:graphsearch}.
-Because a global barrier requires fair scheduling of workgroups it cannot be safely implemented in OpenCL, CUDA or HSA, and thus is not provided as a primitive in any of these programming models.
-
-Workgroups of a \emph{cooperative} kernel \emph{are} fairly scheduled, so a
+Because workgroups of a cooperative kernel are fairly scheduled, so a
 global barrier primitive can be provided, and we specify two variants: $\globalbarrier$
 and $\resizingglobalbarrier$.
 
@@ -925,7 +921,7 @@ kernel graph_app(global graph *g,
   }
 }
 \end{lstlisting}
-\caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing global barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
+\caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
 \end{figure}
 
 \paragraph{Patterns for irregular algorithms}
@@ -1099,7 +1095,7 @@ be able to query a consistent context to obtain a workgroup id value
 and the
 number of workgroups executing the kernel. For multi-kernel
 kernel execution, we emulate the $\getnumgroups$ and $\getgroupid$ 
-primitives via a per kernel \emph{context}.  For a given kernel this records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the total number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
+primitives via a per kernel \emph{context}, which records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
 id valid for the kernel.
 
 To dynamically manage workgroups executing cooperative
@@ -1166,8 +1162,7 @@ exclusion for exit-related state changes.
 \paragraph{An efficient resizing barrier}
 
 In \mysec\ref{sec:semantics}, we defined the semantics of a resizing barrier in terms
-of a series of calls to $\globalbarrier$, $\offerfork$ and $\offerkill$.
- It is possible, however to implement the resizing with
+of a series of calls to other primitives.  It is possible, however to implement the resizing with
 only one call to a global barrier with $\offerfork$ and $\offerkill$
 baked into the implementation. 
 
@@ -1192,11 +1187,9 @@ releases all the slaves: the original slaves and the new slaves that
 joined at $\offerfork$.
 
 This barrier implementation is suboptimal becuase workgroups only
-execute $\offerkill$ once per global barrier call and, depending on
-the order in which workgroups arrive at the barrier, it is possible
-that only one workgroup is killed per barrier call.  This may not
-allow the scheduler to gather workgroups required to execute another
-task in a timely fashion.
+execute $\offerkill$ once per barrier call and, depending on
+order of arrival, it is possible
+that only one workgroup is killed per barrier call, preventing the scheduler from gathering workgroups quickly.
 
 We can greatly reduce the gather time by providing a new $\keyword{query}()$
 function for a workgroup executing a cooperative kernel, which returns the number of workgroups that the scheduler needs to obtained
