@@ -661,11 +661,11 @@ of workgroups that execute the cooperative kernel can change during
 the lifetime of the kernel.
 
 The number of \emph{active workgroups}---workgroups executing the
-kernel---is denoted $M$.  The active workgroups
-have consecutive workgroup ids in the range $[0, M-1]$.
+kernel---is denoted $M$.  Active workgroups
+have consecutive ids in the range $[0, M-1]$.
 Initially, at least one workgroup is active;
-if necessary the scheduler must postpone execution of the kernel until
-a some compute unit becomes available.  
+if necessary the scheduler must postpone the kernel until
+some compute unit becomes available.  
 
 When executed by a cooperative
 kernel, $\getnumgroups()$ returns $M$, the \emph{current} number of
