@@ -1258,20 +1258,19 @@ Host CPU & i3-6100U & i7-5600U & i3-5157U \\
 
 \mytablong\ref{tab:applications} gives an overview of the 8 irregular
 algorithms that we ported to cooperative kernels. Among them, 6 are
-graph algorithms, based on Pannotia~\cite{Pannotia} and
+graph algorithms, based on the Pannotia~\cite{Pannotia} and
 Lonestar~\cite{BNP12} GPU application suites, using global barriers.  We
 indicate how many of the original number of barriers are changed to
 resizing barriers, and how many variables need to be transmitted.  In
 all cases all barriers were converted, except for bc which contains
 barriers deeper in the call stack, a case not supported by our
-prototype. Still, these barriers could in principle also be
+prototype although these barriers could in principle be
 converted. The remaining 2 algorithms are workstealing applications:
 each required the addition of $\offerfork$ and $\offerkill$ at the start
 of the main loop, and no variables needed to be transmitted.  For all
 these examples the porting to cooperative kernels was similarly
 straightforward to the porting illustrated in
-\mysec\ref{sec:programmingguidelines} for our running examples, and did
-not require reshaping of the original algorithm. Most graph come with 2
+\mysec\ref{sec:programmingguidelines} for our running examples. Most graph come with 2
 different data sets as input, leading to 13 application/input pairs in
 total.
 
