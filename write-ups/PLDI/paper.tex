@@ -636,9 +636,6 @@ extensions: $\transmit$, a qualifier on the variables of a
 thread; $\offerkill$ and $\offerfork$, the key functions that enable
 cooperative scheduling; and $\globalbarrier$ and $\resizingglobalbarrier$
 primitives for inter-workgroup synchronisation.
-%
-We present the semantics of these constructs intuitively, using English.
-In Appendix~\ref{appendix:semantics} (see supplementary material) we present an abstract operational semantics for our language extensions in a simple GPU-like programming model.
 
 \paragraph{Transmitted variables}
 
@@ -661,11 +658,11 @@ of workgroups that execute the cooperative kernel can change during
 the lifetime of the kernel.
 
 The number of \emph{active workgroups}---workgroups executing the
-kernel---is denoted $M$.  The active workgroups
-have consecutive workgroup ids in the range $[0, M-1]$.
+kernel---is denoted $M$.  Active workgroups
+have consecutive ids in the range $[0, M-1]$.
 Initially, at least one workgroup is active;
-if necessary the scheduler must postpone execution of the kernel until
-a some compute unit becomes available.  
+if necessary the scheduler must postpone the kernel until
+some compute unit becomes available.  
 
 When executed by a cooperative
 kernel, $\getnumgroups()$ returns $M$, the \emph{current} number of
@@ -752,11 +749,7 @@ guaranteed.
 
 \paragraph{Global barriers}
 
-Many irregular algorithms require synchronisation across workgroups.
-This can be achieved via a \emph{global barrier}, as illustrated in the graph traversal example of \mysec\ref{sec:openclexamples} and \myfig\ref{fig:graphsearch}.
-Because a global barrier requires fair scheduling of workgroups it cannot be safely implemented in OpenCL, CUDA or HSA, and thus is not provided as a primitive in any of these programming models.
-
-Workgroups of a \emph{cooperative} kernel \emph{are} fairly scheduled, so a
+Because workgroups of a cooperative kernel are fairly scheduled, so a
 global barrier primitive can be provided, and we specify two variants: $\globalbarrier$
 and $\resizingglobalbarrier$.
 
@@ -925,7 +918,7 @@ kernel graph_app(global graph *g,
   }
 }
 \end{lstlisting}
-\caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing global barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
+\caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
 \end{figure}
 
 \paragraph{Patterns for irregular algorithms}
@@ -944,8 +937,8 @@ the graph algorithm, the next level could be processed by more or
 fewer workgroups, which $\resizingglobalbarrier$
 facilitates.  Some level-specific state must be transmitted to new workgroups.
 
-Our experience is that cooperative kernels are a good
-fit for at least these two classes of irregular algorithms, in part because they inspired the model.
+%Our experience is that cooperative kernels are a good
+%fit for at least these two classes of irregular algorithms, in part because they inspired the model.
 
 
 \subsection{Non-Functional Requirements}\label{sec:nonfunctional}
@@ -993,9 +986,9 @@ task, and responding positively to $\offerfork$ calls if compute units are avail
 implementation (\mysec\ref{sec:implementation}) is as
 generous as possible to the cooperative kernel in this regard.
 
-These guidelines are not hard-and-fast rules, and e.g.\ a smart scheduler might respond selectively to $\offerkill$
-and $\offerfork$ calls by predicting future high-priority workloads
-based on past workloads.
+%These guidelines are not hard-and-fast rules, and e.g.\ a smart scheduler might respond selectively to $\offerkill$
+%and $\offerfork$ calls by predicting future high-priority workloads
+%based on past workloads.
 
 
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
@@ -1052,12 +1045,12 @@ values of all relevant $\transmit$-annotated variables.
 
 \paragraph{Simplifying assumptions}
 
-For ease of implementation, our current prototype supports
+For ease of implementation, our prototype supports
 multitasking a single cooperative kernel with a single non-cooperative
 kernel (though the non-cooperative kernel can be invoked many times).
-Rather than adding language support for $\transmit$ annotations, we
-assume that all variables declared at the root lexical scope of a
-cooperative kernel are $\transmit$-annotated; this allows our
+We
+assume all variables declared at the root lexical scope of a
+cooperative kernel are implicitly $\transmit$-annotated; this allows our
 implementation to piggy-back on top of Clang (see below) without
 requiring front-end changes.  Finally, we require that $\offerkill$,
 $\offerfork$ and $\resizingglobalbarrier$ are called from the entry
@@ -1081,7 +1074,7 @@ for OpenCL 2.0~\cite{ClangOpenCL20}.
 \subsection{Scheduler design}\label{sec:resizingbarrier}\label{sec:schedulerimpl}
 
 To enable multitasking through cooperative kernels, the runtime (in
-our case, the mega-kernel) must track the state of all
+our case, the megakernel) must track the state of all
 workgroups, i.e.\ whether a workgroup is waiting or computing a kernel,
 maintain consistent context states for each kernel, e.g.\ tracking the number
 of active workgroups, and provide a
@@ -1099,7 +1092,7 @@ be able to query a consistent context to obtain a workgroup id value
 and the
 number of workgroups executing the kernel. For multi-kernel
 kernel execution, we emulate the $\getnumgroups$ and $\getgroupid$ 
-primitives via a per kernel \emph{context}.  For a given kernel this records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the total number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
+primitives via a per kernel \emph{context}, which records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
 id valid for the kernel.
 
 To dynamically manage workgroups executing cooperative
@@ -1166,8 +1159,7 @@ exclusion for exit-related state changes.
 \paragraph{An efficient resizing barrier}
 
 In \mysec\ref{sec:semantics}, we defined the semantics of a resizing barrier in terms
-of a series of calls to $\globalbarrier$, $\offerfork$ and $\offerkill$.
- It is possible, however to implement the resizing with
+of a series of calls to other primitives.  It is possible, however to implement the resizing with
 only one call to a global barrier with $\offerfork$ and $\offerkill$
 baked into the implementation. 
 
@@ -1192,11 +1184,9 @@ releases all the slaves: the original slaves and the new slaves that
 joined at $\offerfork$.
 
 This barrier implementation is suboptimal becuase workgroups only
-execute $\offerkill$ once per global barrier call and, depending on
-the order in which workgroups arrive at the barrier, it is possible
-that only one workgroup is killed per barrier call.  This may not
-allow the scheduler to gather workgroups required to execute another
-task in a timely fashion.
+execute $\offerkill$ once per barrier call and, depending on
+order of arrival, it is possible
+that only one workgroup is killed per barrier call, preventing the scheduler from gathering workgroups quickly.
 
 We can greatly reduce the gather time by providing a new $\keyword{query}()$
 function for a workgroup executing a cooperative kernel, which returns the number of workgroups that the scheduler needs to obtained
@@ -1220,7 +1210,7 @@ We discuss our experience porting irregular algorithms to cooperative kernels an
 
 \subsection{Applications and GPUs}\label{sec:portingalgorithms}
 
-\begin{table}
+\begin{table}[t]
 \small
 \centering
 \begin{tabular}{ l r r r r r r}
@@ -1249,22 +1239,35 @@ game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 \label{tab:applications}
 \end{table}
 
+\begin{table}[h]
+\footnotesize
+\centering
+\begin{tabular}{ l l l l }
+Chip & HD520 & HD5500 & Iris\\
+\hline
+\# CU  & 24 & 24 & 47 \\
+Driver   & 20.19.15.4501 & 10.18.15.4281 & 20.19.15.4463 \\
+Host CPU & i3-6100U & i7-5600U & i3-5157U \\
+\end{tabular}
+\caption{The Intel GPU platforms used in our evaluation}
+\label{tab:chipstested}
+\end{table}
+
 \mytablong\ref{tab:applications} gives an overview of the 8 irregular
 algorithms that we ported to cooperative kernels. Among them, 6 are
-graph algorithms, based on Pannotia~\cite{Pannotia} and
+graph algorithms, based on the Pannotia~\cite{Pannotia} and
 Lonestar~\cite{BNP12} GPU application suites, using global barriers.  We
 indicate how many of the original number of barriers are changed to
 resizing barriers, and how many variables need to be transmitted.  In
 all cases all barriers were converted, except for bc which contains
 barriers deeper in the call stack, a case not supported by our
-prototype. Still, these barriers could in principle also be
+prototype although these barriers could in principle be
 converted. The remaining 2 algorithms are workstealing applications:
 each required the addition of $\offerfork$ and $\offerkill$ at the start
 of the main loop, and no variables needed to be transmitted.  For all
 these examples the porting to cooperative kernels was similarly
 straightforward to the porting illustrated in
-\mysec\ref{sec:programmingguidelines} for our running examples, and did
-not require reshaping of the original algorithm. Most graph come with 2
+\mysec\ref{sec:programmingguidelines} for our running examples. Most graph come with 2
 different data sets as input, leading to 13 application/input pairs in
 total.
 
@@ -1297,37 +1300,22 @@ which we plan to discuss with engineers at AMD.
 
 We thus present experimental results for the Intel GPUs, whose characteristics are summarised in \mytab\ref{tab:chipstested}.
 
-\begin{table}
-\footnotesize
-\centering
-\begin{tabular}{ l l l l }
-Chip & HD520 & HD5500 & Iris\\
-\hline
-\# CU  & 24 & 24 & 47 \\
-Driver   & 20.19.15.4501 & 10.18.15.4281 & 20.19.15.4463 \\
-Host CPU & i3-6100U & i7-5600U & i3-5157U \\
-\end{tabular}
-\caption{The Intel GPU platforms used in our evaluation}
-\label{tab:chipstested}
-\end{table}
 
 \subsection{Sizing Non-Cooperative Kernels}\label{sec:sizingnoncoop}
 
-Enabling rendering of smooth graphics in parallel with execution of irregular algorithms is an important use case for our approach.  Because our prototype implementation is based on a mega-kernel that takes over the entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this use case directly.
+Enabling rendering of smooth graphics in parallel with execution of irregular algorithms is an important use case for our approach.  Because our prototype implementation is based on a megakernel that takes over the entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this use case directly.
 
-As a proxy for genuine graphics rendering, we devised the following
+We devised the following
 procedure to determine non-cooperative OpenCL workloads that simulate
 the computational intensity of various graphics rendering workloads.
 %
 We designed a synthetic kernel that occupies all workgrouops of a
-given GPU for a parameterised length of time $t$.  We wrote a host
-program to repeatedly launch this kernel in an infinite loop.  We then
-searched for a maximum value for the parameter $t$ that allowed the
+GPU for a parameterised time period $t$, invoked in an infinite loop by a host application.  We then
+searched for a maximum value for $t$ that allowed the
 synthetic kernel to execute without having an observable impact on
-graphics rendering, where ``observable'' was decided manually by one
-of the paper authors.  Having found the appropriate value for $t$, we
+graphics rendering.  Using the computed value, we
 ran the host application for $X$ seconds, measuring the time $Y < X$
-dedicated to GPU execution during this period, as well as the number
+dedicated to GPU execution during this period and the number
 of kernel launches $n$ that were issued.  We used $X \geq 10$ in all
 experiments.  The values $(X-Y)/n$ and $X/n$ estimate the average time
 spent using the GPU to render the display between kernel calls and the
@@ -1475,8 +1463,7 @@ maxima computed over 10 runs per benchmark. For the maximum slowdowns,
 we indicate which application and input was responsible. The slowdown is
 below 2 even in the worst case, and closer to 1 on average. We consider
 these results as encouraging, especially since the performance of our
-prototype could clearly be improved upon if cooperative scheduling was
-implemented directly in the GPU driver.
+prototype could clearly be improved upon in a native implementation.
 
 \subsection{Multitasking via Cooperative Scheduling}\label{sec:responsiveness}
 
@@ -1609,8 +1596,7 @@ of the workgroups executing the non-cooperative kernel are able to meet
 their goal period (70 and 40 ms resp.). However, a quarter of the
 workgroups are not sufficient to meet the goal for the heavy workload
 (giving a mean period of 88 ms). Finally, if half of the workgroups are
-allocated to the non-cooperative kernel, the heavy workload gets
-averages \~10\% over its goal period (mean of 44 ms). If asking for all-but-one, the heavy workload can reach its goal period.
+allocated to the non-cooperative kernel, the heavy workload averages \~10\% over its goal period (mean of 44 ms). If asking for all-but-one, the heavy workload can reach its goal period.
 %
 Yet, as expected, allocating more non-cooperative workgroups increases
 the execution time overhead of the cooperative kernel.
