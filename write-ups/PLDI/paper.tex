@@ -689,8 +689,9 @@ compute units to the scheduler by offering to sacrifice workgroups.
 The idea is as follows: allowing the scheduler to arbitrarily and abruptly terminate execution
 of workgroups might be drastic, yet the kernel
 may contain specific program points at which a workgroup could
-\emph{gracefully} leave the computation.  We give examples of these
-for work stealing and graph traversal in \mysec\ref{sec:programmingguidelines}.
+\emph{gracefully} leave the computation.
+%We give examples of these
+%for work stealing and graph traversal in \mysec\ref{sec:programmingguidelines}.
 
 Similar to the OpenCL workgroup $\mathsf{barrier}$ primitive,
 $\offerkill$, is a workgroup-level function---it must be encountered
@@ -702,8 +703,9 @@ If the workgroup has the highest largest id of all active workgroups then it can
 or $M=1$ then $\offerkill$ is a no-op.  If instead $M > 1$ and $m =
 M-1$, the scheduler can choose to ignore the offer, so that $\offerkill$
 executes as a no-op, or accept the offer, so that execution of the workgroup ceases and
-the number of active workgroups $M$ is atomically decremented by one.  In the second case, the scheduler can assign some other task to
-the compute unit on which the workgroup was executing.
+the number of active workgroups $M$ is atomically decremented by one.  
+%In the second case, the scheduler can assign some other task to
+%the compute unit on which the workgroup was executing.
 
 
 \paragraph{Semantics for $\offerfork$}
