@@ -1048,12 +1048,12 @@ values of all relevant $\transmit$-annotated variables.
 
 \paragraph{Simplifying assumptions}
 
-For ease of implementation, our current prototype supports
+For ease of implementation, our prototype supports
 multitasking a single cooperative kernel with a single non-cooperative
 kernel (though the non-cooperative kernel can be invoked many times).
-Rather than adding language support for $\transmit$ annotations, we
-assume that all variables declared at the root lexical scope of a
-cooperative kernel are $\transmit$-annotated; this allows our
+We
+assume all variables declared at the root lexical scope of a
+cooperative kernel are implicitly $\transmit$-annotated; this allows our
 implementation to piggy-back on top of Clang (see below) without
 requiring front-end changes.  Finally, we require that $\offerkill$,
 $\offerfork$ and $\resizingglobalbarrier$ are called from the entry
@@ -1213,7 +1213,7 @@ We discuss our experience porting irregular algorithms to cooperative kernels an
 
 \subsection{Applications and GPUs}\label{sec:portingalgorithms}
 
-\begin{table}
+\begin{table}[t]
 \small
 \centering
 \begin{tabular}{ l r r r r r r}
@@ -1242,22 +1242,35 @@ game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 \label{tab:applications}
 \end{table}
 
+\begin{table}[h]
+\footnotesize
+\centering
+\begin{tabular}{ l l l l }
+Chip & HD520 & HD5500 & Iris\\
+\hline
+\# CU  & 24 & 24 & 47 \\
+Driver   & 20.19.15.4501 & 10.18.15.4281 & 20.19.15.4463 \\
+Host CPU & i3-6100U & i7-5600U & i3-5157U \\
+\end{tabular}
+\caption{The Intel GPU platforms used in our evaluation}
+\label{tab:chipstested}
+\end{table}
+
 \mytablong\ref{tab:applications} gives an overview of the 8 irregular
 algorithms that we ported to cooperative kernels. Among them, 6 are
-graph algorithms, based on Pannotia~\cite{Pannotia} and
+graph algorithms, based on the Pannotia~\cite{Pannotia} and
 Lonestar~\cite{BNP12} GPU application suites, using global barriers.  We
 indicate how many of the original number of barriers are changed to
 resizing barriers, and how many variables need to be transmitted.  In
 all cases all barriers were converted, except for bc which contains
 barriers deeper in the call stack, a case not supported by our
-prototype. Still, these barriers could in principle also be
+prototype although these barriers could in principle be
 converted. The remaining 2 algorithms are workstealing applications:
 each required the addition of $\offerfork$ and $\offerkill$ at the start
 of the main loop, and no variables needed to be transmitted.  For all
 these examples the porting to cooperative kernels was similarly
 straightforward to the porting illustrated in
-\mysec\ref{sec:programmingguidelines} for our running examples, and did
-not require reshaping of the original algorithm. Most graph come with 2
+\mysec\ref{sec:programmingguidelines} for our running examples. Most graph come with 2
 different data sets as input, leading to 13 application/input pairs in
 total.
 
@@ -1290,19 +1303,6 @@ which we plan to discuss with engineers at AMD.
 
 We thus present experimental results for the Intel GPUs, whose characteristics are summarised in \mytab\ref{tab:chipstested}.
 
-\begin{table}
-\footnotesize
-\centering
-\begin{tabular}{ l l l l }
-Chip & HD520 & HD5500 & Iris\\
-\hline
-\# CU  & 24 & 24 & 47 \\
-Driver   & 20.19.15.4501 & 10.18.15.4281 & 20.19.15.4463 \\
-Host CPU & i3-6100U & i7-5600U & i3-5157U \\
-\end{tabular}
-\caption{The Intel GPU platforms used in our evaluation}
-\label{tab:chipstested}
-\end{table}
 
 \subsection{Sizing Non-Cooperative Kernels}\label{sec:sizingnoncoop}
 
