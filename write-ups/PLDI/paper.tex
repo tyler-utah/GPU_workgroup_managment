@@ -752,7 +752,7 @@ portion of its local state to the threads of the forked workgroups.
 %annotations rather than transmitting the entire thread state.
 
 Notice that $k=0$ is always a valid choice for the number of
-workgroups to be spawned by $\offerfork$, and is guarateed if $M$
+workgroups to be spawned by $\offerfork$, and is guaranteed if $M$
 is equal to the workgroup limit $N$.
 
 \vspace{-1mm}
@@ -1030,7 +1030,7 @@ developed a prototype that mocks up the required runtime support via a
 \emph{megakernel}, and exploits the occupancy-bound execution model
 that these GPUs provide to ensure fair scheduling between workgroups.
 We emphasise that an aim of cooperative kernels is to \emph{avoid}
-depending on the occupancy-bound model.  Our protoytpe exploits this
+depending on the occupancy-bound model.  Our prototype exploits this
 model simply to allow us to experiment with current GPUs whose
 proprietary drivers we cannot change.  We describe the megakernel approach (\mysec\ref{sec:megakernel})
 and detail various aspects of the scheduler component of our implementation (\mysec\ref{sec:schedulerimpl}).
@@ -1069,7 +1069,7 @@ $\keyword{goto}$ and $\keyword{return}$ to direct threads into and out
 of the kernel.  With these restrictions we can experiment
 with interesting irregular algorithms (see
 \mysec\ref{sec:experiments}).  A non-mock implementation of
-coopeartive kernels would not use the megakernel approach, so we do not deem
+cooperative kernels would not use the megakernel approach, so we do not deem
 the engineering effort associated with lifting these restrictions to
 be worthwhile.
 
@@ -1181,7 +1181,7 @@ We consider barriers that use the master/slave model
 (e.g.\ \cite{XF10}): one workgroup (the master) collects signals
 from the other workgroups (the slaves) indicating that they have
 arrived at the barrier and are waiting for a reply indicating that
-they may leave the barrier. Once the master has recieved a signal from
+they may leave the barrier. Once the master has received a signal from
 all the slaves, it replies with a signal saying that the slaves may
 leave. 
 
@@ -1197,7 +1197,7 @@ slaves in waiting to be released. Finally, the master
 releases all the slaves: the original slaves and the new slaves that
 joined at $\offerfork$.
 
-This barrier implementation is suboptimal becuase workgroups only
+This barrier implementation is sub-optimal because workgroups only
 execute $\offerkill$ once per barrier call and, depending on
 order of arrival, it is possible
 that only one workgroup is killed per barrier call, preventing the scheduler from gathering workgroups quickly.
@@ -1280,7 +1280,7 @@ resizing barriers, and how many variables need to be transmitted.  In
 all cases all barriers were converted, except for bc which contains
 barriers deeper in the call stack, a case not supported by our
 prototype although these barriers could in principle be
-converted. The remaining 2 algorithms are workstealing applications:
+converted. The remaining 2 algorithms are work stealing applications:
 each required the addition of $\offerfork$ and $\offerkill$ at the start
 of the main loop, and no variables needed to be transmitted.  For all
 these examples the porting to cooperative kernels was similarly
@@ -1312,7 +1312,7 @@ with the latest driver, and simultaneously obtained alarming results on
 this platform when using SVM atomics: modifying a kernel to include a
 simple host/device handshake through SVM slowed down kernel execution by
 an order of magnitude in some cases.  This behaviour, combined with the
-defunt processes issue, lead us to suspect that the support we require
+defunct processes issue, lead us to suspect that the support we require
 for cooperative kernels is not yet mature enough within AMD's drivers,
 which we plan to discuss with engineers at AMD.
 
@@ -1327,7 +1327,7 @@ We devised the following
 procedure to determine non-cooperative OpenCL workloads that simulate
 the computational intensity of various graphics rendering workloads.
 %
-We designed a synthetic kernel that occupies all workgrouops of a
+We designed a synthetic kernel that occupies all workgroups of a
 GPU for a parameterised time period $t$, invoked in an infinite loop by a host application.  We then
 searched for a maximum value for $t$ that allowed the
 synthetic kernel to execute without having an observable impact on
@@ -1370,7 +1370,7 @@ in a recent version of Firefox.
 Our results are the following: light workloads needs to run 3ms every
 70ms, medium ones 3ms every 40ms, and heavy ones 10ms every 40ms. For
 the medium and heavy workloads, the 40ms period corresponds to graphics
-rendering occuring 25 times per second, which coincides with the human
+rendering occurring 25 times per second, which coincides with the human
 persistence of vision. The 3ms execution duration of both light and
 medium configurations indicates that, as expected, GPU computation is
 cheaper for basic display rendering compared with rendering that uses
@@ -1519,7 +1519,7 @@ cooperative kernel. For each scheduling of the non-cooperative kernel
 during the run, we also record the \emph{gather time} needed by the
 scheduler to collect enough workgroups to launch the non-cooperative
 kernel, and the non-cooperative kernel execution time. We sanity-check
-whether all kernels perform their computations corretly by comparing
+whether all kernels perform their computations correctly by comparing
 their computed result with expected reference results.
 
 To work around compiler crash and compiler hang bugs in Intel's current
@@ -1601,7 +1601,7 @@ number of workgroups that needs to be collected.
 
 \paragraph{Performance} 
 \myfiglong\ref{fig:performance} reports, for the Iris GPU, the overhead brought by the scheduling of
-non-cooperative kernels over the cooperative kernel execution time.  This is the slowdown associated with running the cooperative kernel in the presence of multitasking, vs.\ running the cooperative kenrel in isolation (geometric mean over all applications and inputs).  We also show the period at which non-cooperative kernels can be scheduled (aritmetic mean over all applications
+non-cooperative kernels over the cooperative kernel execution time.  This is the slowdown associated with running the cooperative kernel in the presence of multitasking, vs.\ running the cooperative kernel in isolation (geometric mean over all applications and inputs).  We also show the period at which non-cooperative kernels can be scheduled (arithmetic mean over all applications
 and inputs).
 The results for the other GPUs are similar.
  We show
@@ -1628,10 +1628,10 @@ the execution time of the cooperative kernel.
 Still, the heavy
 workloads meet their period (by allocating all-but-one workgroup for
 non-cooperative kernels), incurring a slow down of less than 1.4$\times$ on average. Light
-and medium workloads meet their period with only a negligable overhead
+and medium workloads meet their period with only a negligible overhead
 of the cooperative kernel (less than a 1.03$\times$ slowdown on average).
 
-Overall we are very encouraged by these experimental findings, especially since they provide a lower bound on potential performance of our coperative kernels model. Implementing the model natively, with device-specific runtime support, could only improve performance and responsiveness compared with that of our megakernel-based prototype.
+Overall we are very encouraged by these experimental findings, especially since they provide a lower bound on potential performance of our cooperative kernels model. Implementing the model natively, with device-specific runtime support, could only improve performance and responsiveness compared with that of our megakernel-based prototype.
 
 \section{Related Work}\label{sec:relatedwork}
 
@@ -1709,7 +1709,7 @@ Cooperative multitasking was offered in older operating systems
 operating systems, such as RISC
 OS~\cite{risc-os-multitasking}.
 Many programming languages offer cooperative multitasking via
-variations of coroutines, e.g. coroutine objects in
+variations of co-routines, e.g. co-routine objects in
 Python
 %\footnote{\url{https://docs.python.org/3/reference/datamodel.html\#coroutine-objects}}
 and Lua,
@@ -1767,7 +1767,7 @@ GPUs~\cite{DBLP:conf/ppopp/WangDPWRO16,DBLP:conf/oopsla/PaiP16}.
 
 In \mysec\ref{sec:semantics} we presented the semantics of cooperative
 kernels relatively informally, using English, to provide the intuition
-behind our programmming model.  We now back this up with a more formal
+behind our programming model.  We now back this up with a more formal
 presentation as an operational semantics for an abstract GPU
 programming model.
 
@@ -1826,7 +1826,7 @@ introduced by our programming model.
 
 GPUs are known to have relaxed memory models~\cite{ABDGKPSW-2015}.  To abstractly
 account for this, we assume that the shared state component $\sigma$
-is not simplyl a mapping from locations to values, but instead
+is not simply a mapping from locations to values, but instead
 captures all the intricacies of GPU memory that can lead to this
 relaxed behaviour.  We also assume a function $\sync$ which, given a
 kernel state $\kappa$, returns a set of kernel states.  The idea is
@@ -1954,9 +1954,9 @@ Rule $\textsc{Kill-No-Op}$ reflects the fact that when a workgroup
 reaches $\offerkill$, this can always be treated as a no-op.  Whether
 a scheduler implementation accepts $\offerkill$ calls or not depends
 on competing workloads and how the scheduler has been designed to meet
-the non-functinoal requirements discussed in
+the non-functional requirements discussed in
 \mysec\ref{sec:nonfunctional}, but in general the programmer should
-always be prepared for the possiblity that a workgroup survives after
+always be prepared for the possibility that a workgroup survives after
 calling $\offerkill$.
 
 The case where a workgroup's offer to be killed is accepted by the
@@ -1974,7 +1974,7 @@ $\textsc{Kill-No-Op}$ and $\textsc{Kill}$ that every thread is ready
 to execute $\offerkill$ followed by an identical statement $\myss$.
 Neither rule applies until all threads in a workgroup reach
 $\offerfork$, and the workgroup gets stuck if multiple threads in a
-workgroiup reach $\offerfork$ with different subsequent statements.
+workgroup reach $\offerfork$ with different subsequent statements.
 
 The $\textsc{Fork}$ rule similarly requires all threads in a workgroup
 to reach $\offerfork$ with identical following statements.  A
@@ -2003,7 +2003,7 @@ statement.  This reflects that fact that $\globalbarrier()$ is a
 kernel-level function.  Each thread then skips over the
 $\globalbarrier()$ call, and the $\sync$ function is applied to yield
 a set of kernel states that can arise due to memory synchronization
-taking place.  An arbitary member of this set is selected as the next
+taking place.  An arbitrary member of this set is selected as the next
 kernel state.
 
 Despite its apparent complexity, the $\textsc{Resizing-Barrier}$ rule simply implements the rewriting of $\resizingglobalbarrier$ in terms of $\globalbarrier$, $\offerkill$ and $\offerfork$ discussed in \mysec\ref{sec:semantics}.
@@ -2031,9 +2031,9 @@ returns a contiguous range of thread ids.
 A disadvantage of this decision is that it may provide sub-optimal
 responsiveness from the point of view of the scheduler.  Suppose the
 scheduler requires an additional compute unit, but the active thread
-with the larget id is processing some computationally intensive work
+with the largest id is processing some computationally intensive work
 and will take a while to reach $\offerkill$.  Our semantics means that
-the scheuduler cannot take advantage of the fact that another active
+the scheduler cannot take advantage of the fact that another active
 workgroup may invoke $\offerkill$ sooner.
 
 Cooperative kernels that do not require contiguous thread ids might me
@@ -2046,7 +2046,7 @@ guaranteed to be contiguous.
 Our semantics dictate that the workgroup with id 0 will not be killed
 if it invokes $\offerkill$.  This avoids the possibility of the
 cooperative kernel terminating early due to the programmer
-inadvertantly allowing all workgroups to be killed, and the decision
+inadvertently allowing all workgroups to be killed, and the decision
 to keep workgroup 0 alive fits well with our choice to kill workgroups
 in descending order of id.
 
@@ -2074,7 +2074,7 @@ $i$ in the forking workgroup provide the valuation for thread $i$ in
 each spawned workgroup, rather than having thread 0 transmit the
 valuation to all new threads.
 
-We opted for transmitting only selected varibles based on the
+We opted for transmitting only selected variables based on the
 observation that many of a thread's private variables are dead at the
 point of issuing $\offerfork$ or $\resizingglobalbarrier$, thus it
 would be wasteful to transmit them.  A live variable analysis could
