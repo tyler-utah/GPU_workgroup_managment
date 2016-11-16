@@ -1216,9 +1216,9 @@ query greatly reduces the gather time in practice.
 
 \section{Applications and Experiments}\label{sec:experiments}
 
-We discuss our experience porting irregular algorithms to cooperative kernels (\mysec\ref{sec:portingalgorithms}) and discuss the GPUs on which we evaluate these applications (\mysec\ref{sec:gpus}).  For these GPUs, we report on experiments to determine non-cooperative workloads that model the requirements of various graphics rendering tasks (\mysec\ref{sec:sizingnoncoop}).  We then examine the overhead associated with moving to cooperative kernels when multitasking is \emph{not} required (\mysec\ref{sec:overhead}), as well as the responsiveness and throughput observed when a cooperative kernel is multi-tasked with non-cooperative workloads (\mysec\ref{sec:responsiveness}).
+We discuss our experience porting irregular algorithms to cooperative kernels and describe the GPUs on which we evaluate these applications (\mysec\ref{sec:portingalgorithms}).  For these GPUs, we report on experiments to determine non-cooperative workloads that model the requirements of various graphics rendering tasks (\mysec\ref{sec:sizingnoncoop}).  We then examine the overhead associated with moving to cooperative kernels when multitasking is \emph{not} required (\mysec\ref{sec:overhead}), as well as the responsiveness and throughput observed when a cooperative kernel is multi-tasked with non-cooperative workloads (\mysec\ref{sec:responsiveness}).
 
-\subsection{Porting Irregular GPU Algorithms}\label{sec:portingalgorithms}
+\subsection{Applications and GPUs}\label{sec:portingalgorithms}
 
 \begin{table}
 \small
@@ -1271,14 +1271,6 @@ total.
 From the Lonestar suite we omit two applications that use global barriers:
 dmr has been shown to be unstable across GPU vendors~\cite{DBLP:conf/iwocl/SorensenD16}, and mst is trivially short-running so that it is not
 interesting for our multitasking approach.
-%
-These exceptions aside, we have handled all the available OpenCL
-implemenatinos of irregular algorithms that we are aware of, plus two
-easy-to-adapt CUDA algorithms (the workstealing examples).
-
-
-
-\subsection{The GPUs we Tested}\label{sec:gpus}
 
 Our prototype implementation (\mysec\ref{sec:implementation}) requires
 two optional features of OpenCL 2.0: SVM fine-grained buffers and SVM
@@ -2093,7 +2085,7 @@ thread-by-thread basis.  We have not yet encountered a real-world
 example where our current semantics would not suffice.
 
 
-\section{Graphs for Multitasking Experiments}\label{appendix:extragraphhs}
+\section{Graphs for Multitasking Experiments}\label{appendix:extragraphs}
 
 We present the full set of graphs exemplified by the examples in
 \myfig\ref{fig:fine-grained-timing}; for completeness we reproduce those graphs here too.
