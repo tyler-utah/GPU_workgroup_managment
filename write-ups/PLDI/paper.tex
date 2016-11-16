@@ -971,16 +971,15 @@ to meet the following non-functional requirements.
 
 %\paragraph{Sufficient $\offerkill$ calls}
 
-The purpose of $\offerkill$ is to provide the scheduler with an
-opportunity to destroy a workgroup in order to schedule
-higher-priority tasks.  The scheduler relies on the cooperative kernel
-to execute $\offerkill$ sufficiently frequently that soft real-time
-constraints of other workloads can be met.
+The purpose of $\offerkill$ is to let the scheduler destroy a workgroup
+in order to schedule higher-priority tasks.  The scheduler relies on the
+cooperative kernel to execute $\offerkill$ sufficiently frequently that
+soft real-time constraints of other workloads can be met.
 %
 Using our work stealing example: a workgroup offers itself to
 the scheduler after processing each task.  If tasks are sufficiently
-fast to process then the scheduler will have ample opportunities to
-de-schedule workgroups.  But if tasks can be very time-consuming to
+fast to process then the scheduler have ample opportunities to
+de-schedule workgroups.  But if tasks are very time-consuming to
 process then it might be necessary to rewrite the algorithm so that
 tasks are shorter and more numerous, to achieve a higher rate of calls
 to $\offerkill$.
@@ -1126,8 +1125,8 @@ number of workgroups that should execute the kernel, and a flag indicating wheth
 is cooperative. In our implementation, this host-device communication channel is built using fine-grained SVM atomics.
 
 On receiving a data packet
-describing a kernel launch $K$, the GPU scheduler must make decisions
-about how to schedule $K$. Suppose $K$ requests
+describing a kernel launch $K$, the GPU scheduler must decide
+ how to schedule $K$. Suppose $K$ requests
 $N$ workgroups. The scheduler queries the scheduler context.  If
 there are at least $N$ available workgroups, $K$ can be scheduled
 immediately. Suppose instead that there are only $N_a < N$ available workgroups, but a cooperative kernel $K_c$ is
@@ -1180,13 +1179,12 @@ of a series of calls to other primitives.  It is possible, however to implement 
 only one call to a global barrier with $\offerfork$ and $\offerkill$
 baked into the implementation. 
 
-We consider barriers that use the master/slave model
-(e.g.\ \cite{XF10}): one workgroup (the master) collects signals
-from the other workgroups (the slaves) indicating that they have
-arrived at the barrier and are waiting for a reply indicating that
-they may leave the barrier. Once the master has received a signal from
-all the slaves, it replies with a signal saying that the slaves may
-leave. 
+We consider barriers that use the master/slave model~\cite{XF10}: one
+workgroup (master) collects signals from the other workgroups (slaves)
+indicating that they have arrived at the barrier and are waiting for a
+reply indicating that they may leave the barrier. Once the master has
+received a signal from all slaves, it replies with a signal saying that
+they may leave.
 
 A first-attempt at incorporating $\offerfork$ and $\offerkill$ into
 such a barrier is straight forward. Upon entering the barrier, the
@@ -1223,7 +1221,26 @@ query greatly reduces the gather time in practice.
 
 \section{Applications and Experiments}\label{sec:experiments}
 
-We discuss our experience porting irregular algorithms to cooperative kernels and describe the GPUs on which we evaluate these applications (\mysec\ref{sec:portingalgorithms}).  For these GPUs, we report on experiments to determine non-cooperative workloads that model the requirements of various graphics rendering tasks (\mysec\ref{sec:sizingnoncoop}).  We then examine the overhead associated with moving to cooperative kernels when multitasking is \emph{not} required (\mysec\ref{sec:overhead}), as well as the responsiveness and throughput observed when a cooperative kernel is multi-tasked with non-cooperative workloads (\mysec\ref{sec:responsiveness}).
+We discuss our experience porting irregular algorithms to cooperative
+kernels and describe the GPUs on which we evaluate these applications
+(\mysec\ref{sec:portingalgorithms}).  For these GPUs, we report on
+experiments to determine non-cooperative workloads that model the
+requirements of various graphics rendering tasks
+(\mysec\ref{sec:sizingnoncoop}).  We then examine the overhead
+associated with moving to cooperative kernels when multitasking is
+\emph{not} required (\mysec\ref{sec:overhead}), as well as the
+responsiveness and throughput observed when a cooperative kernel is
+multi-tasked with non-cooperative workloads
+(\mysec\ref{sec:responsiveness}).
+
+To our knowledge, there are no competing methods against which to
+meaningfully compare our approach.  We are not aware of any existing
+platform that supports multitasking between long-running, fully-occupant
+OpenCL kernels.  Very recent \nvidia{} GPUs, to which we do not yet have
+access, support preemption for graphics
+applications~\cite{PascalWhitepaper}, but our understanding is that this
+cannot yet be leveraged from CUDA, and certainly not from OpenCL.
+
 
 \subsection{Applications and GPUs}\label{sec:portingalgorithms}
 
@@ -1467,17 +1484,16 @@ We assess this overhead by measuring the
  slowdown in execution time between the original and cooperative versions of a kernel, forcing the scheduler to never modify the number of
 active workgroups in the cooperative case.
 
-Recall that our mega kernel-based implementation merges the code for a
-cooperative kernel with that of the non-cooperative task to be
-co-scheduled.  This blow-up in code size can have a negative impact on
-compilation, e.g.\ due to higher register pressure, reducing the
-occupancy for the merged kernel---the maximum number of workgroups
-that the GPU driver will schedule.  This is an artifact of our
-proof-of-concept implementation strategy, and would not be a problem
-if our cooperative scheduling approach was implemented inside the GPU
-driver.  We thus launch both the original and cooperative versions of
-a kernel with the reduced occupancy bound in order to meaningfully
-compare execution times.
+Recall that our mega kernel-based implementation merges the code of a
+cooperative and a non-cooperative kernel to be co-scheduled.  This
+blow-up in code size can have a negative impact on compilation, e.g.\
+due to higher register pressure, reducing the occupancy for the merged
+kernel---the maximum number of workgroups that the GPU driver will
+schedule.  This is an artifact of our proof-of-concept implementation
+strategy, and would not be a problem if our cooperative scheduling
+approach was implemented inside the GPU driver.  We thus launch both the
+original and cooperative versions of a kernel with the reduced occupancy
+bound in order to meaningfully compare execution times.
 
 \paragraph{Results}
 For each GPU, \mytab\ref{tab:overhead} shows the geometric mean and
@@ -1499,18 +1515,17 @@ short, non-cooperative kernel launches, and the performance impact of multitaski
 % duration.
 
 \paragraph{Experimental setup}
-For a given cooperative kernel and its data set, we launch the kernel
-asynchronously and then repeatedly schedule a non-cooperative kernel
-that aims to simulate the intensity of a graphics rendering workload,
-according to the three classes of workload discussed in \mysec\ref{sec:sizingnoncoop}. In
-practice, we use a matrix multiplication kernel as the non-cooperative
-workload, with matrix dimensions tailored for each GPU to reach the
-appropriate execution duration.  We conduct separate runs where we vary
-the number of workgroups requested by the non-cooperative kernel,
-considering the cases where one, a quarter, a half, and all-but-one, of
-the total number of workgroup slots is requested.  Moreover, for the
-graph algorithms we try both the regular and query barrier
-implementations.
+For a given cooperative kernel and its input, we launch the kernel and
+then repeatedly schedule a non-cooperative kernel that aims to simulate
+the intensity of one of the three classes of graphics rendering workload
+discussed in \mysec\ref{sec:sizingnoncoop}. In practice, we use a matrix
+multiplication kernel as the non-cooperative workload, with matrix
+dimensions tailored for each GPU to reach the appropriate execution
+duration.  We conduct separate runs where we vary the number of
+workgroups requested by the non-cooperative kernel, considering the
+cases where one, a quarter, a half, and all-but-one, of the total number
+of workgroup slots is requested.  Moreover, for the graph algorithms we
+try both regular and query barrier implementations.
 
 Our experiments span 13 pairs of cooperative kernels and inputs, 3
 classes of non-cooperative kernel workloads, 4 quantities of workgroups
@@ -1553,18 +1568,20 @@ kernel w.r.t. the quantity of workgroups allocated to it.
 A logarithmic
 scale is used for time since gather times tend to be much smaller than
 execution times. The horizontal grey lines indicates the desired period
-for non-cooperative kernels.  These graphs show a representative sample of our results; the full set of graphs for all configurations is provided in Appendix~\ref{appendix:extragraphs} (supplementary material).
+for non-cooperative kernels.  These graphs show a representative sample
+of our results; the full set of graphs for all configurations is
+provided in Appendix~\ref{appendix:extragraphs} (supplementary material).
 
 Let us first focus on the left graph, which illustrates a work stealing
-example executing on the Iris GPU.  When the non-cooperative kernel is given only one workgroup, its
-execution is so long that it cannot complete within the period required for a screen refresh. The gather time is very good though, since the scheduler
-only needs to collect one workgroup. As more workgroups are allocated to
-the non-cooperative kernel, its execution time benefits from more computational
-resources: here the non-cooperative
-kernel becomes fast enough with a quarter (resp.\ half) of available
-workgroups for light (resp.\ heavy) graphics workload. Inversely, the
-gather time increases since the scheduler must collect more and more
-workgroups.
+example on the Iris GPU.  When the non-cooperative kernel is given only
+one workgroup, its execution is so long that it cannot complete within
+the period required for a screen refresh. The gather time is very good
+though, since the scheduler needs to collect only one workgroup.  The
+more workgroups are allocated to the non-cooperative kernels, the faster
+it can compute: here the non-cooperative kernel becomes fast enough with
+a quarter (resp.\ half) of available workgroups for light (resp.\ heavy)
+graphics workload. Inversely, the gather time increases since the
+scheduler must collect more and more workgroups.
 
 The middle and right graphs show results for graph algorithms on the
 other two GPUs.  These
@@ -1574,7 +1591,7 @@ execution time decreases and the gather time increases.\footnote{The right
 figure has only 3 points per line: recall that for bfs there are no runs
 with ``all-but-one'' non-cooperative workgroups.}
 %
-The gather time is higher on the right figure: the rmat22 input graph is
+the gather time is higher on the right figure: the rmat22 input graph is
 rather wide than deep, so the graph algorithm reaches resizing barriers
 less often than for the ecology input of the middle figure for
 instance. The scheduler thus has fewer opportunities to collect
@@ -1597,7 +1614,7 @@ number of workgroups that needs to be collected.
 \begin{figure}
 \includegraphics[width=\columnwidth]{heavy.pdf} 
 \vspace{-2mm}
-\caption{Performance impact of multitasking cooperative and non-cooperative workloads, and the period with which non-cooperative tasks execute}\label{fig:performance}
+\caption{Performance impact of multitasking cooperative and non-cooperative workloads, and the period with which non-cooperative kernels execute}\label{fig:performance}
 \vspace{-2mm}
 \end{figure}
 
@@ -1628,11 +1645,11 @@ allocated to the non-cooperative kernel, the heavy workload averages $\sim$10\% 
 Yet, as expected, allocating more non-cooperative workgroups increases
 the execution time of the cooperative kernel.
 
-Still, the heavy
-workloads meet their period (by allocating all-but-one workgroup for
-non-cooperative kernels), incurring a slow down of less than 1.4$\times$ on average. Light
-and medium workloads meet their period with only a negligible overhead
-of the cooperative kernel (less than a 1.03$\times$ slowdown on average).
+Still, heavy workloads meet their period by allocating all-but-one
+non-cooperative workgroups, incurring a slow down of less than
+1.4$\times$ on average. Light and medium workloads meet their period
+with only a negligible overhead of the cooperative kernel (less than a
+1.03$\times$ slowdown on average).
 
 Overall we are very encouraged by these experimental findings, especially since they provide a lower bound on potential performance of our cooperative kernels model. Implementing the model natively, with device-specific runtime support, could only improve performance and responsiveness compared with that of our megakernel-based prototype.
 
@@ -1650,8 +1667,9 @@ other tasks, and assuming fair scheduling between occupant workgroups,
 which is unlikely to be guaranteed on future GPU platforms.
 %
 As our experiments demonstrate, our cooperative kernels model allows blocking algorithms
-to be upgraded to run under a fair scheduler in a manner that, with
-appropriate care, facilitates responsive multitasking.
+to be upgraded to run in a manner that facilitates responsive multitasking.
+
+\vspace{-1mm}
 
 \paragraph{Preemptive multitasking on GPUs}
 
@@ -1662,10 +1680,10 @@ unit using our terminology) are allowed to complete until the SM becomes free fo
 other tasks~\cite{DBLP:conf/isca/TanasicGCRNV14}.  SM draining is limited the presence of blocking constructs, since it may not be possible to drain a blocked workgroup.
 %
 A follow-up work adds the notion of SM \emph{flushing},
-where a workgroup can be cancelled and re-scheduled
+where a workgroup can be re-scheduled
 from scratch if it has not yet committed side-effects~\cite{DBLP:conf/asplos/ParkPM15}.  Both approaches have been evaluated
-using simulators, over sets of regular GPU kernels.  Very recent \nvidia GPUs targeting data centers now support
-preemption, though it is not clear whether they guarantee fair scheduling~\cite{PascalWhitepaper}.
+using simulators, over sets of regular GPU kernels.  Very recent \nvidia GPUs support
+preemption, though it is not clear whether they guarantee fairness~\cite{PascalWhitepaper}.
 
 The advantages of preemption are that it does not require programmer
 effort, and guards against a rogue long-running kernel making the GPU
@@ -1676,12 +1694,11 @@ If implemented natively, our solution does not impact performance on regular ker
 Furthermore, careful placement of
 our new primitives can exploit problem structure, enabling more efficient multitasking than
 application-oblivious preemption.  There is scope for combining the approaches: if a
-cooperative kernel is insufficiently cooperative, i.e.\ it does not
-invoke $\offerkill$ enough, then hardware support for preemption could
+cooperative kernel is insufficiently cooperative, hardware support for preemption could
 be invoked to prevent the kernel from denying other tasks access to
 the GPU indefinitely.
 
-
+\vspace{-1mm}
 
 
 \paragraph{Optimizing GPU scheduling}
@@ -1702,7 +1719,7 @@ GPU-based scheduler, by having an initial scheduler kernel repeatedly
 spawn further kernels as required, according to some scheduling
 policy~\cite{DBLP:conf/ppopp/Muyan-OzcelikO16}.  However, kernels
 that uses dynamic parallelism are still prone to unfair scheduling of workgroups, so this feature
-does not help solve the problem of safely deploying blocking
+does not help in deploying blocking
 algorithms on GPUs.
 
 \paragraph{Cooperative multitasking}
@@ -1727,6 +1744,7 @@ to complete execution within a reasonable time budget~\cite{adriaens2012case,CPE
 %
 This is in contrast to our cooperative kernels, which specifically aim to support the needs of long-running GPU tasks.
 
+\vspace{-1mm}
 
 \section{Conclusions and Future Work}\label{sec:conclusion}
 
@@ -1755,6 +1773,9 @@ GPUs~\cite{DBLP:conf/ppopp/WangDPWRO16,DBLP:conf/oopsla/PaiP16}.
 
 \bibliographystyle{abbrvnat}
 \bibliography{tyler}
+
+\iffalse
+
 
 \clearpage
 
@@ -2144,5 +2165,5 @@ those graphs here too.
 \includegraphics[width=.7\columnwidth]{images/ws/iris_connect_four_NA.pdf} \\
 \includegraphics[width=.7\columnwidth]{images/ws/hd520_octree_NA.pdf} \\
 
-
+\fi
 \end{document}
