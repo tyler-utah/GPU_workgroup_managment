@@ -1077,7 +1077,7 @@ for OpenCL 2.0~\cite{ClangOpenCL20}.
 \subsection{Scheduler design}\label{sec:resizingbarrier}\label{sec:schedulerimpl}
 
 To enable multitasking through cooperative kernels, the runtime (in
-our case, the mega-kernel) must track the state of all
+our case, the megakernel) must track the state of all
 workgroups, i.e.\ whether a workgroup is waiting or computing a kernel,
 maintain consistent context states for each kernel, e.g.\ tracking the number
 of active workgroups, and provide a
@@ -1306,21 +1306,19 @@ We thus present experimental results for the Intel GPUs, whose characteristics a
 
 \subsection{Sizing Non-Cooperative Kernels}\label{sec:sizingnoncoop}
 
-Enabling rendering of smooth graphics in parallel with execution of irregular algorithms is an important use case for our approach.  Because our prototype implementation is based on a mega-kernel that takes over the entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this use case directly.
+Enabling rendering of smooth graphics in parallel with execution of irregular algorithms is an important use case for our approach.  Because our prototype implementation is based on a megakernel that takes over the entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this use case directly.
 
-As a proxy for genuine graphics rendering, we devised the following
+We devised the following
 procedure to determine non-cooperative OpenCL workloads that simulate
 the computational intensity of various graphics rendering workloads.
 %
 We designed a synthetic kernel that occupies all workgrouops of a
-given GPU for a parameterised length of time $t$.  We wrote a host
-program to repeatedly launch this kernel in an infinite loop.  We then
-searched for a maximum value for the parameter $t$ that allowed the
+GPU for a parameterised time period $t$, invoked in an infinite loop by a host application.  We then
+searched for a maximum value for $t$ that allowed the
 synthetic kernel to execute without having an observable impact on
-graphics rendering, where ``observable'' was decided manually by one
-of the paper authors.  Having found the appropriate value for $t$, we
+graphics rendering.  Using the computed value, we
 ran the host application for $X$ seconds, measuring the time $Y < X$
-dedicated to GPU execution during this period, as well as the number
+dedicated to GPU execution during this period and the number
 of kernel launches $n$ that were issued.  We used $X \geq 10$ in all
 experiments.  The values $(X-Y)/n$ and $X/n$ estimate the average time
 spent using the GPU to render the display between kernel calls and the
