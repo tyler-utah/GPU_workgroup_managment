@@ -486,7 +486,7 @@ threads.
 \end{lstlisting}
 \vspace{-2mm}
 \caption{An excerpt of a work stealing algorithm in OpenCL}\label{fig:workstealing}
-\vspace{-2mm}
+\vspace{-6mm}
 \end{figure}
 
 \begin{figure}
@@ -775,8 +775,7 @@ The $\resizingglobalbarrier$ primitive is also a kernel-level
 function.  It is identical to $\globalbarrier$, except that it caters
 for cooperation with the scheduler: by issuing a
 $\resizingglobalbarrier$ the programmer indicates that the cooperative
-kernel is prepared to proceed after the barrier with fewer workgroups,
-or with additional workgroups joining the computation.
+kernel is prepared to proceed after the barrier with more or fewer workgroups.
 
 When all threads have reached $\resizingglobalbarrier$,
 the number of active workgroups, $M$, is atomically set to a new value, $M'$ say, with $0 < M' \leq N$.
