@@ -1593,19 +1593,19 @@ period graph correspond to the period goals of the workloads: the higher
 (resp. lower) line corresponds to a period of 70ms (resp. 40ms) for the
 light (resp. medium and heavy) workload.
 
-Co-scheduling non-cooperative kernels that compute their workload using a single workgroup leads to almost no overhead, but the period is far too high to meet the needs
-of any of our three workloads. For example, a heavy workload averages a
+Co-scheduling non-cooperative kernels that request a single workgroup leads to almost no overhead, but the period is far too high to meet the needs
+of any of our three workloads; e.g.\ a heavy workload averages a
 period of 939 ms. As more workgroups are dedicated to non-cooperative
 kernels, they execute quickly enough to be scheduled at the expected
-period. More concretely, for the light and medium workloads, a quarter
+period. For the light and medium workloads, a quarter
 of the workgroups executing the non-cooperative kernel are able to meet
 their goal period (70 and 40 ms resp.). However, a quarter of the
 workgroups are not sufficient to meet the goal for the heavy workload
-(giving a mean period of 88 ms). Finally, if half of the workgroups are
-allocated to the non-cooperative kernel, the heavy workload averages \~10\% over its goal period (mean of 44 ms). If asking for all-but-one, the heavy workload can reach its goal period.
+(giving a mean period of 88 ms). If half of the workgroups are
+allocated to the non-cooperative kernel, the heavy workload averages $\sim$10\% over its goal period (mean of 44 ms). If all-but-one are allocated, the heavy workload reaches its goal period.
 %
 Yet, as expected, allocating more non-cooperative workgroups increases
-the execution time overhead of the cooperative kernel.
+the execution time of the cooperative kernel.
 
 Still, the heavy
 workloads meet their period (by allocating all-but-one workgroup for
