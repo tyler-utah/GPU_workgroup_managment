@@ -1085,15 +1085,15 @@ We describe how the scheduler would handle arbitrary
 combinations of kernels, though as noted above our current
 implementation is restricted to the case of two kernels.
 
-\paragraph{Kernel and scheduler contexts}
+\paragraph{Scheduler contexts}
 
-When a workgroup executes a kernel (cooperative or otherwise), it must
-be able to query a consistent context to obtain a workgroup id value
-and the
-number of workgroups executing the kernel. For multi-kernel
-kernel execution, we emulate the $\getnumgroups$ and $\getgroupid$ 
-primitives via a per kernel \emph{context}, which records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
-id valid for the kernel.
+%When a workgroup executes a kernel (cooperative or otherwise), it must
+%be able to query a consistent context to obtain a workgroup id value
+%and the
+%number of workgroups executing the kernel. For multi-kernel
+%kernel execution, we emulate the $\getnumgroups$ and $\getgroupid$ 
+%primitives via a per kernel \emph{context}, which records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
+%id valid for the kernel.
 
 To dynamically manage workgroups executing cooperative
 kernels, our framework must track the state of each workgroup and
@@ -1119,12 +1119,16 @@ $N$ workgroups. The scheduler queries the scheduler context.  If
 there are at least $N$ available workgroups, $K$ can be scheduled
 immediately. Suppose instead that there are only $N_a < N$ available workgroups, but a cooperative kernel $K_c$ is
 executing. The scheduler can use $K_c$'s channel in the scheduler context to command $K_c$ to provide $N - N_a$ workgroups via $\offerkill$.
-Once $N$ workgroups are available, the scheduler initialises a
-kernel context $\KC$ for $K$, setting the number of active workgroups
-to $N$ and mapping available workgroups (located in the scheduler
-context) to their new $\KC$ workgroup ids. The scheduler then sends $N$
-workgroups from the available workgroups to execute kernel $K$ with
-kernel context $\KC$.  (Note that if the new kernel $K$ is itself a cooperative kernel, the scheduler would be free to provide $K$ with fewer than $N$ active workgroups initially.)
+Once $N$ workgroups are available,
+% the scheduler initialises a
+%kernel context $\KC$ for $K$, setting the number of active workgroups
+%to $N$ and mapping available workgroups (located in the scheduler
+%context) to their new $\KC$ workgroup ids. 
+the scheduler then sends $N$
+workgroups from the available workgroups to execute kernel $K$
+% with
+%kernel context $\KC$.
+(If the new kernel $K$ is itself a cooperative kernel, the scheduler would be free to provide $K$ with fewer than $N$ active workgroups initially.)
 
 If a cooperative kernel $K_c$ is executing with fewer workgroups than it initially requested, the scheduler may decide make extra workgroups available
 to $K_c$, to be obtained next time $K_c$ calls $\offerfork$.  To do this, the scheduler asynchronously signals $K_c$ through $K_c$'s
