@@ -1468,8 +1468,7 @@ maxima computed over 10 runs per benchmark. For the maximum slowdowns,
 we indicate which application and input was responsible. The slowdown is
 below 2 even in the worst case, and closer to 1 on average. We consider
 these results as encouraging, especially since the performance of our
-prototype could clearly be improved upon if cooperative scheduling was
-implemented directly in the GPU driver.
+prototype could clearly be improved upon in a native implementation.
 
 \subsection{Multitasking via Cooperative Scheduling}\label{sec:responsiveness}
 
@@ -1602,8 +1601,7 @@ of the workgroups executing the non-cooperative kernel are able to meet
 their goal period (70 and 40 ms resp.). However, a quarter of the
 workgroups are not sufficient to meet the goal for the heavy workload
 (giving a mean period of 88 ms). Finally, if half of the workgroups are
-allocated to the non-cooperative kernel, the heavy workload gets
-averages \~10\% over its goal period (mean of 44 ms). If asking for all-but-one, the heavy workload can reach its goal period.
+allocated to the non-cooperative kernel, the heavy workload averages \~10\% over its goal period (mean of 44 ms). If asking for all-but-one, the heavy workload can reach its goal period.
 %
 Yet, as expected, allocating more non-cooperative workgroups increases
 the execution time overhead of the cooperative kernel.
