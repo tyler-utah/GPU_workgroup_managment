@@ -21,6 +21,8 @@
 \usepackage[colorlinks=true,allcolors=blue,breaklinks,draft=false]{hyperref}   % hyperlinks, including DOIs and URLs in bibliography
 % known bug: http://tex.stackexchange.com/questions/1522/pdfendlink-ended-up-in-different-nesting-level-than-pdfstartlink
 
+\usepackage[shortcuts]{extdash} % hyphenation, see http://stackoverflow.com/questions/2193307/how-do-i-get-latex-to-hyphenate-a-word-that-contains-a-dash#8649145
+
 \usepackage[normalem]{ulem}
 \usepackage{amsmath}
 \usepackage{calc}
@@ -361,10 +363,10 @@ properties:
 %, as can graphics shading routines written using APIs such as
 %OpenGL, Vulkan and DirectX.
 
-\item The model is backwards-compatible: if $\offerkill$/$\offerfork$ are ignored, a cooperative kernel will behave
+\item The model is backwards-compatible: if $\offerkill$ and $\offerfork$ are ignored, a cooperative kernel will behave
   exactly as a regular kernel does on current GPUs.
 
-\item Cooperative kernels can be implemented over the occupancy-bound
+\item Cooperative kernels can be implemented over the occupancy\-/bound
   execution model that current GPUs provide: our prototype implementation requires
   no additional hardware or driver support.  Thus the model should be easy for vendors to implement directly.
 
@@ -530,7 +532,7 @@ queue. Previous work covers work stealing feasibility and efficiency on GPUs~\ci
 stealing kernel. Each thread receives a pointer to the
 task queues, in global memory, initialized by the
 host to contain the initial tasks. Each thread identifies
-its workgroup via $\getgroupid()$
+its workgroup via $\getgroupid$
 (line~\ref{line:wksteal:getgroupid}), which is used as a queue id to access the relevant task queue. The
 $\mathsf{pop\_or\_steal}$ function (line~\ref{line:wksteal:poporsteal})
 is called by all threads of a workgroup.  Inside
@@ -568,7 +570,7 @@ the nodes to be processed are evenly distributed between
 threads through \emph{stride} based processing. 
 %
 In this case, the stride is the total number of threads, obtained via 
-$\getglobalsize()$.  Each thread processes nodes with the following sequence of indices:
+$\getglobalsize$.  Each thread processes nodes with the following sequence of indices:
 \code{$\keyword{tid}$+$\keyword{stride}$*0},
 \code{$\keyword{tid}$+$\keyword{stride}$*1},
 \code{$\keyword{tid}$+$\keyword{stride}$*2}, etc., where $\keyword{tid}$ is a thread's global id.
@@ -670,8 +672,8 @@ if necessary the scheduler must postpone the kernel until
 some compute unit becomes available.  
 
 When executed by a cooperative
-kernel, $\getnumgroups()$ returns $M$, the \emph{current} number of
-active workgroups.  This is in contrast to $\getnumgroups()$ for
+kernel, $\getnumgroups$ returns $M$, the \emph{current} number of
+active workgroups.  This is in contrast to $\getnumgroups$ for
 regular kernels, which returns the fixed number of workgroups that
 were requested at kernel launch time (see \mysec\ref{sec:opencl}).
 
@@ -765,7 +767,7 @@ and $\resizingglobalbarrier$.
 Our $\globalbarrier$ primitive is a kernel-level function: if it
 appears in conditional code then it must be reached by \emph{all}
 threads executing the cooperative kernel.  On reaching a
-$\globalbarrier()$, a thread waits until all threads have arrived at
+$\globalbarrier$, a thread waits until all threads have arrived at
 the barrier.  Once all threads have arrived, the threads may proceed
 past the barrier with the guarantee that all global memory accesses
 issued before the barrier have completed.  The $\globalbarrier$
@@ -820,9 +822,9 @@ implemented significantly more efficiently through direct interaction with the s
 %cooperative kernels.
 
 \paragraph{A changing workgroup count}  Unlike in regular OpenCL,
-the value returned by $\getnumgroups()$ is not fixed during the
+the value returned by $\getnumgroups$ is not fixed during the
 lifetime of a cooperative kernel: it corresponds to the active group count $M$, which changes as workgroups execute
-$\offerkill$, $\offerfork$ and $\resizingglobalbarrier$.  The value returned by $\getglobalsize()$
+$\offerkill$, $\offerfork$ and $\resizingglobalbarrier$.  The value returned by $\getglobalsize$
 is similarly subject to change.
 A cooperative kernel must thus be written in a manner that is
 robust to changes in the values returned by these functions.
@@ -836,7 +838,7 @@ pair of resizing barrier calls, which we call a \emph{resizing barrier
   interval} (considering the kernel entry and exit points
 conceptually to be special cases of resizing barriers).  The active workgroup count is constant within each resizing
 barrier interval, so that 
-$\getnumgroups()$ and $\getglobalsize()$ return stable values during such intervals.
+$\getnumgroups$ and $\getglobalsize$ return stable values during such intervals.
 %
 As we illustrate below for graph traversal, this can be exploited by algorithms that perform strided
 data processing.
@@ -900,7 +902,7 @@ barrier call by recomputing the thread id and stride
 \ref{line:cgraph:rechunking2}). This example exploits the fact that
 the cooperative kernel does not issue $\offerkill$ nor $\offerfork$
 directly: the value of $\keyword{stride}$ obtained from
-$\getglobalsize()$ at line~\ref{line:cgraph:rechunking2} is stable
+$\getglobalsize$ at line~\ref{line:cgraph:rechunking2} is stable
 until the next resizing barrier at line~\ref{line:cgraph:resizing1},
 and in particular can be safely used inside the $\keyword{for}$ loop.
 
@@ -1202,7 +1204,7 @@ execute $\offerkill$ once per barrier call and, depending on
 order of arrival, it is possible
 that only one workgroup is killed per barrier call, preventing the scheduler from gathering workgroups quickly.
 
-We can greatly reduce the gather time by providing a new $\keyword{query}()$
+We can greatly reduce the gather time by providing a new $\keyword{query}$
 function for a workgroup executing a cooperative kernel, which returns the number of workgroups that the scheduler needs to obtained
 from the cooperative kernel.  
 %
@@ -1998,10 +2000,10 @@ the local state to be transmitted (modelling $\transmit$-annotated
 variables), and the rest of the local state.
 
 The $\textsc{Barrier}$ rule requires that \emph{every} thread
-executing the kernel reaches $\globalbarrier()$ an identical following
-statement.  This reflects that fact that $\globalbarrier()$ is a
+executing the kernel reaches $\globalbarrier$ an identical following
+statement.  This reflects that fact that $\globalbarrier$ is a
 kernel-level function.  Each thread then skips over the
-$\globalbarrier()$ call, and the $\sync$ function is applied to yield
+$\globalbarrier$ call, and the $\sync$ function is applied to yield
 a set of kernel states that can arise due to memory synchronization
 taking place.  An arbitary member of this set is selected as the next
 kernel state.
@@ -2024,8 +2026,8 @@ highest id can be killed.  This has an appealing property: it means
 that the ids of active workgroups are contiguous, which is important
 for processing of contiguous data.  The cooperative graph traversal
 algorithm of \myfig\ref{fig:cgraphsearch} illustrates this: the
-algorithm is prepared for $\getglobalsize()$ to change after each
-resizing barrier call, but depends on the fact that $\getglobalid()$
+algorithm is prepared for $\getglobalsize$ to change after each
+resizing barrier call, but depends on the fact that $\getglobalid$
 returns a contiguous range of thread ids.
 
 A disadvantage of this decision is that it may provide sub-optimal
