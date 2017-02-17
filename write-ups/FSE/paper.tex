@@ -3,7 +3,7 @@
 %
 % Requires temporary version of sigplanconf style file provided on
 % PLDI'16 web site.
-% 
+%
 
 \documentclass[parskip=half,sigconf,review, anonymous=true, acmcopyrightmode=none]{acmart}
 \acmConference[ESEC/FSE 2017]{11th Joint Meeting of the European Software Engineering Conference and the ACM SIGSOFT Symposium on the Foundations of Software Engineering}{4--8 September, 2017}{Paderborn, Germany}
@@ -48,7 +48,7 @@
 \usepackage{booktabs}
 \usepackage{subfig}
 %\usepackage[T1]{fontenc}
-%\usepackage[ngerman]{babel} 
+%\usepackage[ngerman]{babel}
 %\usepackage[latin9]{inputenc}
 %\usepackage{blindtext}
 
@@ -226,7 +226,7 @@ can be implemented in practice.
 
 \newcommand{\myparagraph}[1]{\paragraph{#1}}
 %{\noindent{\bf\emph{#1}}\hspace{1em}}
-    
+
 \section{Introduction}\label{sec:intro}
 
 \myparagraph{The needs of irregular data-parallel algorithms}
@@ -445,11 +445,11 @@ its workgroup and the id of the workgroup.
 %\footnote{For simplicity we assume 1D kernels, which captures all the
 %irregular algorithms we know of, and write
 %e.g.\ $\getglobalid$ for $\getglobalid(0)$.
-%}  
+%}
 %
 The number
 of threads per workgroup and number of workgroups are obtained via
-$\getlocalsize$ and $\getnumgroups$.  
+$\getlocalsize$ and $\getnumgroups$.
 %A thread's local and global
 %id are related by $\getglobalid = \getgroupid \times
 %\getlocalsize + \getlocalid$.  The total number of threads executing the
@@ -481,10 +481,10 @@ operations on SVM.
 \myparagraph{Execution model}
 OpenCL specifically makes no guarantees about fair scheduling between
 workgroups executing the same kernel, stating~\cite[p.\ 31]{opencl2Spec}: \emph{``A
-  conforming implementation may choose to serialize the workgroups 
+  conforming implementation may choose to serialize the workgroups
 %so
 %  a correct algorithm cannot assume that workgroups will execute in
-%  parallel.  
+%  parallel.
 \dots There is no safe and portable way to synchronize across
   the independent execution of workgroups since once in the work-pool,
   they can execute in any order.''}  CUDA similarly provides no guarantees~\cite{cuda-75}.
@@ -520,7 +520,7 @@ threads.
 \begin{figure}
 
 \begin{lstlisting}
-kernel graph_app(global graph * g, 
+kernel graph_app(global graph * g,
                  global nodes * n0, global nodes * n1) {
   int level = 0;
   global nodes * in_nodes = n0;
@@ -583,7 +583,7 @@ on a fair scheduler, which is not guaranteed by current GPU programming models.
 
 \myparagraph{Graph traversal example} \myfiglong\ref{fig:graphsearch} shows the
 skeleton of a frontier-based graph traversal algorithm; such algorithms have
-been shown to execute efficiently on GPUs~\cite{BNP12,DBLP:conf/oopsla/PaiP16}. 
+been shown to execute efficiently on GPUs~\cite{BNP12,DBLP:conf/oopsla/PaiP16}.
 The kernel is
 given three arguments in global memory: a graph structure, and two
 arrays of graph nodes. Initially, $\keyword{n0}$ contains the
@@ -594,9 +594,9 @@ distinct node arrays recording the nodes to be processed during the current and 
 The application iterates as long as the current frontier contains
 nodes to process (line~\ref{line:graph:iterate}). At each frontier,
 the nodes to be processed are evenly distributed between
-threads through \emph{stride} based processing. 
+threads through \emph{stride} based processing.
 %
-In this case, the stride is the total number of threads, obtained via 
+In this case, the stride is the total number of threads, obtained via
 $\getglobalsize$.  Each thread processes nodes with the following sequence of indices:
 \code{$\keyword{tid}$+$\keyword{stride}$*0},
 \code{$\keyword{tid}$+$\keyword{stride}$*1},
@@ -663,7 +663,7 @@ number of workgroups, each consisting of a specified number of
 threads.  Unlike in a regular kernel, the parameters to a cooperative kernel are immutable (though pointer
 parameters can refer to mutable data).
 
-Cooperative kernels are written using the following 
+Cooperative kernels are written using the following
 extensions: $\transmit$, a qualifier on the variables of a
 thread; $\offerkill$ and $\offerfork$, the key functions that enable
 cooperative scheduling; and $\globalbarrier$ and $\mathsf{resizing\_global\_}$ $\mathsf{barrier}$
@@ -697,7 +697,7 @@ kernel---is denoted $M$.  Active workgroups
 have consecutive ids in the range $[0, M-1]$.
 Initially, at least one workgroup is active;
 if necessary the scheduler must postpone the kernel until
-some compute unit becomes available.  
+some compute unit becomes available.
 
 When executed by a cooperative
 kernel, $\getnumgroups$ returns $M$, the \emph{current} number of
@@ -733,12 +733,12 @@ $\offerkill$, is a workgroup-level function---it must be encountered
 uniformly by all threads in a workgroup (see
 \mysec\ref{sec:opencl}).
 
-Suppose a workgroup with id $m$ executes $\offerkill$.  
+Suppose a workgroup with id $m$ executes $\offerkill$.
 If the workgroup has the highest largest id of all active workgroups then it can be killed by the scheduler, except that workgroup 0 can never be killed (to ensure that the kernel computation does not terminate early).  More formally, if $m < M-1$
 or $M=1$ then $\offerkill$ is a no-op.  If instead $M > 1$ and $m =
 M-1$, the scheduler can choose to ignore the offer, so that $\offerkill$
 executes as a no-op, or accept the offer, so that execution of the workgroup ceases and
-the number of active workgroups $M$ is atomically decremented by one.  
+the number of active workgroups $M$ is atomically decremented by one.
 %In the second case, the scheduler can assign some other task to
 %the compute unit on which the workgroup was executing.
 
@@ -823,8 +823,8 @@ surrounded, and seperated by calls to a $\globalbarrier$.
 %
 %\lstset{basicstyle=\small\tt,numbers=none}
 %\begin{lstlisting}
-%  $\globalbarrier()$;  $\offerfork$(); 
-%  $\globalbarrier()$; $\offerkill()$; 
+%  $\globalbarrier()$;  $\offerfork$();
+%  $\globalbarrier()$; $\offerkill()$;
 %  $\globalbarrier()$;
 %\end{lstlisting}
 %\lstset{basicstyle=\scriptsize\tt,numbers=left}
@@ -908,7 +908,7 @@ queue and not the one of the forking workgroup.
 %   $\offerkill$}\label{fig:workstealing-cooperative}
 % \end{figure}
 
-\myparagraph{Adapting graph traversal} 
+\myparagraph{Adapting graph traversal}
 \myfiglong\ref{fig:cgraphsearch} shows a cooperative version of the
 graph traversal kernel of \myfig\ref{fig:graphsearch} from
 \mysec\ref{sec:openclexamples}.  On lines~\ref{line:cgraph:resizing1}
@@ -936,7 +936,7 @@ until the next resizing barrier at line~\ref{line:cgraph:resizing1}.
 \begin{figure}
 
 \begin{lstlisting}
-kernel graph_app(global graph *g, 
+kernel graph_app(global graph *g,
                  global nodes *n0, global nodes *n1) {
 (*@\label{line:cgraph:transmit1}@*)  transmit int level = 0;
 (*@\label{line:cgraph:transmit2}@*)  transmit global nodes *in_nodes = n0;
@@ -982,7 +982,7 @@ facilitates.  Some level-specific state must be transmitted to new workgroups.
 
 \subsection{Non-Functional Requirements}\label{sec:nonfunctional}
 
-The semantics presented in \mysec\ref{sec:semantics} describe the 
+The semantics presented in \mysec\ref{sec:semantics} describe the
 behaviours that a developer of a cooperative kernel should be prepared
 for.
 %
@@ -1021,7 +1021,7 @@ a smooth frame rate.
 Recall that, on launch, the cooperative kernel requests $N$ workgroups.
 The scheduler should thus aim to provide $N$ workgroups if other constraints allow it,
 by accepting an $\offerkill$ only if a compute unit is required for another
-task, and responding positively to $\offerfork$ calls if compute units are available.  
+task, and responding positively to $\offerfork$ calls if compute units are available.
 
 %Our
 %implementation (\mysec\ref{sec:implementation}) is as
@@ -1096,7 +1096,7 @@ assume all variables declared at the root lexical scope of a
 cooperative kernel are implicitly $\transmit$-annotated.
 %this allows our
 %implementation to piggy-back on top of Clang (see below) without
-%requiring front-end changes.  
+%requiring front-end changes.
 Finally, we require that $\offerkill$,
 $\offerfork$ and $\resizingglobalbarrier$ are called from the entry
 function of a cooperative kernel.  This allows us to use
@@ -1135,7 +1135,7 @@ implementation is restricted to the case of two kernels.
 %be able to query a consistent context to obtain a workgroup id value
 %and the
 %number of workgroups executing the kernel. For multi-kernel
-%kernel execution, we emulate the $\getnumgroups$ and $\getgroupid$ 
+%kernel execution, we emulate the $\getnumgroups$ and $\getgroupid$
 %primitives via a per kernel \emph{context}, which records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
 %id valid for the kernel.
 %
@@ -1144,7 +1144,7 @@ kernels, our framework must track the state of each workgroup and
 provide a channel of communication from the scheduler workgroup to
 workgroups executing $\offerfork$ and $\offerkill$. To achieve this,
 we use a \emph{scheduler context} structure, mapping a primitive workgroup id the workgroup's status, which is either \emph{available} or the id of the kernel that the workgroup is currently executing.  The scheduler can then send cooperative
-kernels a \emph{resource message}, commanding workgroups to exit at $\offerkill$, or 
+kernels a \emph{resource message}, commanding workgroups to exit at $\offerkill$, or
 spawn additional workgroups at $\offerfork$. Thus, the
 scheduler context needs a communication channel for each cooperative
 kernel. We implement the communication channels using atomic variables in global memory.
@@ -1168,7 +1168,7 @@ Once $N$ workgroups are available,
 % the scheduler initialises a
 %kernel context $\KC$ for $K$, setting the number of active workgroups
 %to $N$ and mapping available workgroups (located in the scheduler
-%context) to their new $\KC$ workgroup ids. 
+%context) to their new $\KC$ workgroup ids.
 the scheduler then sends $N$
 workgroups from the available workgroups to execute kernel $K$
 % with
@@ -1187,7 +1187,7 @@ Concurrent calls to $\offerfork$ must be protected by a mutex to avoid
 racing on the available workgroups. The same conflict over available
 workgroups can occur when launching a new kernel between the scheduler
 and a workgroup calling $\offerfork$. Thus, $\offerfork$ is protected
-by a mutex, called the \emph{assignment mutex}. 
+by a mutex, called the \emph{assignment mutex}.
 %provided in the scheduler context.
 
 The assignment mutex additionally protects concurrent calls to
@@ -1355,10 +1355,10 @@ two optional features of OpenCL 2.0: SVM fine-grained buffers and SVM
 atomics. This rules out evaluation on \nvidia and ARM Mali GPUs at
 present, since these vendors do not yet support OpenCL $2.0$,
 equivalent functionality is not provided by \nvidia's CUDA. Intel
-drivers meet our requirements on Windows, but not on Linux. 
+drivers meet our requirements on Windows, but not on Linux.
 %(we
 %confirmed this by trying the upstream driver that requires a patched
-%Linux kernel). 
+%Linux kernel).
 AMD support SVM atomics only their Kaveri family of
 chips and only on Linux.%, requiring to compile the latest driver.
 
@@ -1445,53 +1445,53 @@ responsiveness of cooperative scheduling in
 
 % The
 % \emph{Duration} and \emph{Rate} columns report values corresponding to
-% $(X-Y)/n$ and $X/n$ in the above discussion, respectively.  
+% $(X-Y)/n$ and $X/n$ in the above discussion, respectively.
 
 % \mytablong\ref{tab:noncooperativeworkload} illustrates the data
-% computed for the three types of workloads across our GPUs.  
+% computed for the three types of workloads across our GPUs.
 
 \subsection{The Overhead of Cooperative Kernels}\label{sec:overhead}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % chip: hd520
-% overall - 
+% overall -
 % geomean: 1.19835906125
 % max ('color', 'ecology', 1.749620120141443)
-% ----- 
-% barrier 
+% -----
+% barrier
 % max - ('color', 'ecology', 1.749620120141443)
 % geomean: 1.18027192048
-% ----- 
+% -----
 % workstealing
 % max - ('octree', 'NA', 1.4165788173996423)
 % geomean: 1.4165788174
-% ----- 
+% -----
 % chip: iris
-% overall - 
+% overall -
 % geomean: 1.07926294253
 % max ('sssp', 'usa_ny', 1.3661910830147503)
-% ----- 
-% barrier 
+% -----
+% barrier
 % max - ('sssp', 'usa_ny', 1.3661910830147503)
 % geomean: 1.07122874447
-% ----- 
+% -----
 % workstealing
 % max - ('octree', 'NA', 1.2333896396396398)
 % geomean: 1.11616906144
-% ----- 
+% -----
 % chip: hd5500
-% overall - 
+% overall -
 % geomean: 1.15074583378
 % max ('bc', '1k_128k', 1.4466039296624815)
-% ----- 
-% barrier 
+% -----
+% barrier
 % max - ('bc', '1k_128k', 1.4466039296624815)
 % geomean: 1.16116637952
-% ----- 
+% -----
 % workstealing
 % max - ('octree', 'NA', 1.1814511945151949)
 % geomean: 1.1049985913
-% ----- 
+% -----
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %\begin{table}
@@ -1541,7 +1541,7 @@ original and cooperative versions of a kernel with the reduced occupancy
 bound in order to meaningfully compare execution times.
 
 \begin{figure*}
-\includegraphics[width=.67\columnwidth]{iris_octree_NA.pdf} 
+\includegraphics[width=.67\columnwidth]{iris_octree_NA.pdf}
 \includegraphics[width=.67\columnwidth]{hd520_mis_ecology.pdf}
 \includegraphics[width=.67\columnwidth]{hd5500_bfs_rmat22.pdf}
 %\vspace{-2mm}
@@ -1614,7 +1614,7 @@ performance numbers. For each run, we record the execution time of the
 cooperative kernel. For each scheduling of the non-cooperative kernel
 during the run, we also record the \emph{gather time} needed by the
 scheduler to collect enough workgroups to launch the non-cooperative
-kernel, and the non-cooperative kernel execution time. 
+kernel, and the non-cooperative kernel execution time.
 %
 %We sanity-check
 %whether all kernels perform their computations correctly by comparing
@@ -1688,7 +1688,7 @@ needs to be collected.
 
 
 \begin{figure}
-\includegraphics[width=\columnwidth]{heavy.pdf} 
+\includegraphics[width=\columnwidth]{heavy.pdf}
 %\vspace{-2mm}
 \caption{Performance impact of multitasking cooperative and non-cooperative workloads, and the period with which non-cooperative kernels execute}\label{fig:performance}
 \vspace{-5mm}
@@ -1809,7 +1809,7 @@ GPUs.
 %
 Cooperative multitasking was offered in older operating systems
 (e.g. pre 1995 Windows) and is still used by some operating systems,
-such as RISC OS~\cite{risc-os-multitasking}.  
+such as RISC OS~\cite{risc-os-multitasking}.
 
 %Many programming
 %languages offer cooperative multitasking via variations of
@@ -1834,7 +1834,7 @@ This is in contrast to our cooperative kernels, which specifically aim to suppor
 We have proposed \emph{cooperative kernels}, a small set of GPU
 programming extensions that allow long-running, blocking kernels to be
 fairly scheduled and to share GPU resources with other workloads.
-Experimental results using our megakernel-based prototype \cutthree{over three Intel GPUs} 
+Experimental results using our megakernel-based prototype \cutthree{over three Intel GPUs}
 shows that the model is a good fit for the needs of current
 GPU-accelerated irregular algorithms.  The
 performance that could be gained through a native implementation with
