@@ -562,16 +562,20 @@ host to contain the initial tasks. Each thread identifies
 its workgroup via $\getgroupid$
 (line~\ref{line:wksteal:getgroupid}), which is used as a queue id to access the relevant task queue. The
 $\mathsf{pop\_or\_steal}$ function (line~\ref{line:wksteal:poporsteal})
-is called by all threads of a workgroup.  Inside
-$\mathsf{pop\_or\_steal}$ only the thread with a local id equal to $0$,
-the \emph{master thread}, tries to pop a
-task from the workgroup's queue, or to steal a task from a different
-queue. The master thread uses local memory inside
-$\mathsf{pop\_or\_steal}$ to ensure that the returned value is valid for
-all threads of its workgroup. If a task was obtained, then all the
-workgroup threads participate in the task processing (line~\ref{line:wksteal:processtask}).
-This may lead to the creation of further tasks, which
-the master thread pushes to the workgroup's queue.
+pops a task from the workgroup's queue or, if the queue is empty,
+tries to steal a task from other queues.
+
+% is called by all threads of a workgroup.  Inside
+% $\mathsf{pop\_or\_steal}$ only the thread with a local id equal to $0$,
+% the \emph{master thread}, tries to pop a
+% task from the workgroup's queue, or to steal a task from a different
+% queue. The master thread uses local memory inside
+% $\mathsf{pop\_or\_steal}$ to ensure that the returned value is valid for
+% all threads of its workgroup.
+
+If a task was obtained, then the workgroup processes it
+(line~\ref{line:wksteal:processtask}): during this operation, new tasks
+may be created and pushed into the workgroup's queue.
 
 Although not depicted here, concurrent accesses to queues inside
 $\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
