@@ -624,7 +624,7 @@ barrier can be implemented~\cite{XF10,DBLP:conf/oopsla/SorensenDBGR16},
 based on CPU barrier designs~\cite[ch. 17]{HS08}.
  These barriers employ spinning to ensure threads wait at the barrier until all
 threads have arrived, which requires fair
-scheduling between workgroups for the barrier to operate correctly.
+scheduling between workgroups.% for the barrier to operate correctly.
 
 The mutexes and barriers used by these two examples appear to run
 reliably on current GPUs for kernels that are executed with no more
@@ -961,7 +961,7 @@ kernel graph_app(global graph *g,
 \end{lstlisting}
 %\vspace{-2mm}
 \caption{Cooperative version of the graph traversal kernel of \myfig\ref{fig:graphsearch}, using a resizing barrier and $\transmit$ annotations}\label{fig:cgraphsearch}
-%\vspace{-2mm}
+\vspace{-4mm}
 \end{figure}
 
 \myparagraph{Patterns for irregular algorithms}
@@ -1039,8 +1039,8 @@ task, and responding positively to $\offerfork$ calls if compute units are avail
 \subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
 
 Our new model has no effect on the manner in which traditional GPU
-workloads are programmed, such as graphics shaders in OpenGL, Vulkan
-and DirectX, and regular data-parallel computational kernels.
+workloads (e.g.\ graphics shaders and and regular
+data-parallel computational kernels) are programmed.
 %
 Furthermore, if our cooperative language extensions are
 ignored---$\offerkill$ and $\offerfork$ are treated as no-ops,
@@ -1048,20 +1048,21 @@ $\transmit$ annotations are ignored, and $\globalbarrier$ and
 $\resizingglobalbarrier$ calls are redirected to an existing global
 barrier implementation (so that no resizing occurs in the latter
 case)---then a cooperative kernel will behave just like its
-non-cooperative counterpart would behave.  A developer
-for whom today's occupancy-bound execution model suffices can upgrade
-their kernel to a cooperative form and retain backwards-compatibility
-with today's GPU platforms by pre-processing away our language
-extensions.
+non-cooperative counterpart would behave.
+%A developer
+%for whom today's occupancy-bound execution model suffices can upgrade
+%their kernel to a cooperative form and retain backwards-compatibility
+%with today's GPU platforms by pre-processing away our language
+%extensions.
 
 
 \section{Prototype Implementation}\label{sec:implementation}
 
 Our vision is that support for cooperative kernels will be integrated
 in the runtimes of future GPU implementations of OpenCL, with driver
-and compiler support for our new primitives.  To experiment with our
-ideas on current GPUs, we have developed a prototype that mocks up the
-required runtime support via a \emph{megakernel}, and exploits the
+support for our new primitives.  To experiment with our ideas on
+current GPUs, we have developed a prototype that mocks up the required
+runtime support via a \emph{megakernel}, and exploits the
 occupancy-bound execution model that these GPUs provide to ensure fair
 scheduling between workgroups.  We emphasise that an aim of
 cooperative kernels is to \emph{avoid} depending on the
@@ -1092,25 +1093,24 @@ values of all relevant $\transmit$-annotated variables.
 
 \myparagraph{Simplifying assumptions}
 %
-For ease of implementation, our prototype supports
-multitasking a single cooperative kernel with a single non-cooperative
-kernel (though the non-cooperative kernel can be invoked many times).
-We
-assume all variables declared at the root lexical scope of a
-cooperative kernel are implicitly $\transmit$-annotated.
+For ease of implementation, our prototype supports multitasking a
+single cooperative kernel with a single non-cooperative kernel (though
+the non-cooperative kernel can be invoked many times).
+%We assume all
+%variables declared at the root lexical scope of a cooperative kernel
+%are implicitly $\transmit$-annotated.
 %this allows our
 %implementation to piggy-back on top of Clang (see below) without
 %requiring front-end changes.
-Finally, we require that $\offerkill$,
-$\offerfork$ and $\resizingglobalbarrier$ are called from the entry
-function of a cooperative kernel.  This allows us to use
-$\keyword{goto}$ and $\keyword{return}$ to direct threads into and out
-of the kernel.  With these restrictions we can experiment
-with interesting irregular algorithms (see
-\mysec\ref{sec:experiments}).  A non-mock implementation of
-cooperative kernels would not use the megakernel approach, so we do not deem
-the engineering effort associated with lifting these restrictions to
-be worthwhile.
+We require that $\offerkill$, $\offerfork$ and
+$\resizingglobalbarrier$ are called from the entry function of a
+cooperative kernel.  This allows us to use $\keyword{goto}$ and
+$\keyword{return}$ to direct threads into and out of the kernel.  With
+these restrictions we can experiment with interesting irregular
+algorithms (see \mysec\ref{sec:experiments}).  A non-mock
+implementation of cooperative kernels would not use the megakernel
+approach, so we do not deem the engineering effort associated with
+lifting these restrictions to be worthwhile.
 
 %\myparagraph{Merging kernels}
 %
@@ -1143,47 +1143,60 @@ implementation is restricted to the case of two kernels.
 %primitives via a per kernel \emph{context}, which records: the number of active groups $M$ (irrelevant for a non-cooperative kernel), the number of requested groups $N$, and a mapping from the native workgroup id to a new workgroup
 %id valid for the kernel.
 %
-To dynamically manage workgroups executing cooperative
-kernels, our framework must track the state of each workgroup and
-provide a channel of communication from the scheduler workgroup to
-workgroups executing $\offerfork$ and $\offerkill$. To achieve this,
-we use a \emph{scheduler context} structure, mapping a primitive workgroup id the workgroup's status, which is either \emph{available} or the id of the kernel that the workgroup is currently executing.  The scheduler can then send cooperative
-kernels a \emph{resource message}, commanding workgroups to exit at $\offerkill$, or
-spawn additional workgroups at $\offerfork$. Thus, the
-scheduler context needs a communication channel for each cooperative
-kernel. We implement the communication channels using atomic variables in global memory.
+To dynamically manage workgroups executing cooperative kernels, our
+framework must track the state of each workgroup and provide a channel
+of communication from the scheduler workgroup to workgroups executing
+$\offerfork$ and $\offerkill$. To achieve this, we use a
+\emph{scheduler context} structure, mapping a primitive workgroup id
+the workgroup's status, which is either \emph{available} or the id of
+the kernel that the workgroup is currently executing.  The scheduler
+can then send cooperative kernels a \emph{resource message},
+commanding workgroups to exit at $\offerkill$, or spawn additional
+workgroups at $\offerfork$. Thus, the scheduler context needs a
+communication channel for each cooperative kernel. We implement the
+communication channels using atomic variables in global memory.
 
 \myparagraph{Launching kernels and managing workgroups}
 %
 To launch a kernel, the host sends a data packet to the GPU scheduler
-consisting of: a kernel to execute, the kernel inputs, and a
-flag indicating whether the kernel is cooperative. In our
-implementation, this host-device communication channel is built using
-fine-grained SVM atomics.
+consisting of: a kernel to execute, the kernel inputs, and a flag
+indicating whether the kernel is cooperative. In our implementation,
+this host-device communication channel is built using fine-grained SVM
+atomics.
 
-On receiving a data packet
-describing a kernel launch $K$, the GPU scheduler must decide
- how to schedule $K$. Suppose $K$ requests
-$N$ workgroups. The scheduler queries the scheduler context.  If
-there are at least $N$ available workgroups, $K$ can be scheduled
-immediately. Suppose instead that there are only $N_a < N$ available workgroups, but a cooperative kernel $K_c$ is
-executing. The scheduler can use $K_c$'s channel in the scheduler context to command $K_c$ to provide $N - N_a$ workgroups via $\offerkill$.
-Once $N$ workgroups are available,
-% the scheduler initialises a
-%kernel context $\KC$ for $K$, setting the number of active workgroups
-%to $N$ and mapping available workgroups (located in the scheduler
-%context) to their new $\KC$ workgroup ids.
-the scheduler then sends $N$
-workgroups from the available workgroups to execute kernel $K$
+On receiving a data packet describing a kernel launch $K$, the GPU
+scheduler must decide how to schedule $K$. Suppose $K$ requests $N$
+workgroups. The scheduler queries the scheduler context.  If there are
+at least $N$ available workgroups, $K$ can be scheduled
+immediately. Suppose instead that there are only $N_a < N$ available
+workgroups, but a cooperative kernel $K_c$ is executing. The scheduler
+can use $K_c$'s channel in the scheduler context to command $K_c$ to
+provide $N - N_a$ workgroups via $\offerkill$.  Once $N$ workgroups
+are available,
+% the scheduler initialises a kernel context $\KC$ for $K$, setting
+%the number of active workgroups to $N$ and mapping available
+%workgroups (located in the scheduler context) to their new $\KC$
+%workgroup ids.
+the scheduler then sends $N$ workgroups from the available workgroups
+to execute kernel $K$
 % with
 %kernel context $\KC$.
-(If the new kernel $K$ is itself a cooperative kernel, the scheduler would be free to provide $K$ with fewer than $N$ active workgroups initially.)
+(If the new kernel $K$ is itself a cooperative kernel, the scheduler
+would be free to provide $K$ with fewer than $N$ active workgroups
+initially.)
 
-If a cooperative kernel $K_c$ is executing with fewer workgroups than it initially requested, the scheduler may decide make extra workgroups available
-to $K_c$, to be obtained next time $K_c$ calls $\offerfork$.  To do this, the scheduler asynchronously signals $K_c$ through $K_c$'s
-channel to indicate the number of
-workgroups that should join at the next $\offerfork$ command.
-When a workgroup $w$ of $K_c$ subsequently executes $\offerfork$, thread 0 of $w$ updates the kernel and scheduler contexts so that the given number of new workgroups are directed to the program point after the $\offerfork$ call.  This involves selecting workgroups whose status is \emph{available}, as well as copying the values of $\transmit$-annotated variables to the new workgroups.
+If a cooperative kernel $K_c$ is executing with fewer workgroups than
+it initially requested, the scheduler may decide make extra workgroups
+available to $K_c$, to be obtained next time $K_c$ calls $\offerfork$.
+To do this, the scheduler asynchronously signals $K_c$ through $K_c$'s
+channel to indicate the number of workgroups that should join at the
+next $\offerfork$ command.  When a workgroup $w$ of $K_c$ subsequently
+executes $\offerfork$, thread 0 of $w$ updates the kernel and
+scheduler contexts so that the given number of new workgroups are
+directed to the program point after the $\offerfork$ call.  This
+involves selecting workgroups whose status is \emph{available}, as
+well as copying the values of $\transmit$-annotated variables to the
+new workgroups.
 
 \myparagraph{Accounting for concurrency}
 %
@@ -1256,7 +1269,8 @@ $\keyword{query}$, obtaining a value $W$; (4) the master releases the
 slaves, broadcasting the value $W$ to them; (5) workgroups with ids
 larger than $M-W$ spin, calling $\offerkill$ repeatedly until the
 scheduler claims them---we know from $\keyword{query}$ that the
-scheduler will eventually do so.  We show in
+scheduler will eventually do so.
+We show in
 \mysec\ref{sec:responsiveness} that the barrier using $\keyword{query}$ greatly
 reduces the gather time in practice.
 
@@ -1624,13 +1638,13 @@ kernel, and the non-cooperative kernel execution time.
 %whether all kernels perform their computations correctly by comparing
 %their result with reference results.
 
-To work around compiler crash and compiler hang bugs in Intel's
-current OpenCL drivers, we had to apply some semantics-preserving
-changes to some applications.  Driver bugs also meant that we could
-not obtain results for some configurations where the non-cooperative
-kernel asks for all-but-one workgroups (namely bc, bfs, l-sssp, and
-color).  These configurations led to severe failures such as machine
-freezes and blue screens.
+%To work around compiler crash and compiler hang bugs in Intel's
+%current OpenCL drivers, we had to apply some semantics-preserving
+%changes to some applications.  Driver bugs also meant that we could
+%not obtain results for some configurations where the non-cooperative
+%kernel asks for all-but-one workgroups (namely bc, bfs, l-sssp, and
+%color).  These configurations led to severe failures such as machine
+%freezes and blue screens.
 
 % Whenever a cooperative or non-cooperative kernel terminates, we verify
 % that it has really performed its computation by comparing its results
@@ -1675,9 +1689,9 @@ types of barrier.  We show separately the average gather time
 associated with each type of barrier.  The graphs show a similar trend
 to the left-most graph: as the number of non-cooperative workgroups
 grows, the execution time decreases and the gather time
-increases.\footnote{The right figure has only 3 points per line:
-  recall that for bfs there are no runs with ``all-but-one''
-  non-cooperative workgroups.}
+increases.%\footnote{The right figure has only 3 points per line:
+  %recall that for bfs there are no runs with ``all-but-one''
+  %non-cooperative workgroups.}
 %
 the gather time is higher on the right figure: the rmat22 input graph
 is rather wide than deep, so the graph algorithm reaches resizing
