@@ -260,6 +260,7 @@ another workgroup to spin-wait forever for the mutex to be
 released.  Similarly, an unfair scheduler can cause a workgroup to spin-wait
 indefinitely at a global barrier so that other workgroups do not reach the barrier.
 \ADComment{Tyler: briefly state that this still occurs on Pascal, despite it having support for preemption.}
+\TSComment{I added this but actually think it fits better a little bit later (marked with a comment). See what you think}
 
 %\vspace{-1mm}
 \myparagraph{A degree of fairness: occupancy-bound execution} GPU
@@ -338,6 +339,22 @@ scheduling due to the runtime cost of preempting workgroups in a fair
 manner.  Vendors instead wish to retain the essence of the simple
 occupancy-bound model, supporting preemption only in key special
 cases.
+%
+\TSComment{added note about Pascal experiment here. I wonder if there's
+a better way to glue these paragraphs together? That is, above it provides
+two issues vendors have with forward progress and below, we show a concrete
+example of both issues in Nvidia's latest chips}
+%
+For example, Nvidia's latest architecture (Pascal) is documented to
+support instruction-level preemption~\cite{??}. Despite this, Nvidia's
+documentation still does not provide concrete forward progress
+properties (i.e. vendors will not yet commit to providing these
+properties). Furthermore, we were able to run some small experiments
+on a Pascal GPU (GTX Titan X) and observed that the GPU still adhered
+to the occupancy-bound execution model. That is, a kernel containing a
+global barrier executed successfully when run with 56 workgroups, but
+deadlocked when run with 57 workgroups. This is an example of a vendor
+supporting preemption, yet not providing full fairness properties.
 
 %\vspace{-1mm}
 \myparagraph{Our proposal: cooperative kernels}
@@ -1323,8 +1340,8 @@ App. & barriers & kill & fork & transmit & LoC & inputs\\
 color & 2 / 2 & 0 & 0 & 4 & 55 & 2\\
 \rowcolor{Gray1}
 mis & 3 / 3 & 0 & 0 & 0 & 71 & 2\\
-\rowcolor{Gray1}
-bc & 3 / 6 & 0 & 0 & 3 & 150 & 2\\
+%\rowcolor{Gray1}
+%bc & 3 / 6 & 0 & 0 & 3 & 150 & 2\\
 \rowcolor{Gray1}
 p-sssp & 3 / 3 & 0 & 0 & 0  & 42 & 1\\
 \rowcolor{Gray2}
@@ -1766,7 +1783,7 @@ model. Implementing the model natively, with device-specific runtime
 support, could only improve performance and responsiveness compared
 with that of our megakernel-based prototype.
 
-\subsection{Comparison with Preemption on NVIDIA GPUs}\label{sec:nvidiacomparison}
+\subsection{Preemption on NVIDIA Comparison}\label{sec:nvidiacomparison}
 
 \ADComment{Make the point that NVIDIA GPUs now support
   instruction-level preemption in hardware; allows arbitrary
@@ -1836,14 +1853,16 @@ the GPU indefinitely.
 \myparagraph{Optimizing GPU scheduling}
 %
 A number of works have considered how best to schedule dynamic
-workloads on GPUs~\cite{DBLP:journals/tog/SteinbergerKKHKS12,DBLP:conf/ics/WuCLSV15,DBLP:conf/usenix/KatoLRI11,DBLP:journals/tog/SteinbergerKBKDS14,DBLP:journals/rts/ElliottA12,DBLP:conf/sosp/RossbachCSRW11}.  Among these, the Whippletree approach employs a persistent
-megakernel to schedule multiple, dynamic tasks in a manner that aims
-to best utilise GPU
-resources~\cite{DBLP:journals/tog/SteinbergerKBKDS14}, and the TimeGraph
-approach similarly aims to optimise scheduling of competing workloads,
-in the context of OpenGL~\cite{DBLP:conf/usenix/KatoLRI11}.
-None of these approaches tackle
-the problem of \emph{fair} scheduling on GPUs, thus they do not aid in safe deployment of blocking irregular algorithms.
+workloads on
+GPUs~\cite{DBLP:journals/tog/SteinbergerKKHKS12,DBLP:conf/ics/WuCLSV15,DBLP:conf/usenix/KatoLRI11,DBLP:journals/tog/SteinbergerKBKDS14,DBLP:journals/rts/ElliottA12,DBLP:conf/sosp/RossbachCSRW11}.
+Among these, the Whippletree approach employs a persistent megakernel
+to schedule multiple, dynamic tasks in a manner that aims to best
+utilise GPU resources~\cite{DBLP:journals/tog/SteinbergerKBKDS14}, and
+the TimeGraph approach similarly aims to optimise scheduling of
+competing workloads, in the context of
+OpenGL~\cite{DBLP:conf/usenix/KatoLRI11}.  None of these approaches
+tackle the problem of \emph{fair} scheduling on GPUs, thus they do not
+aid in safe deployment of blocking irregular algorithms.
 
 CUDA and OpenCL provide the facility for a kernel to spawn further
 kernels~\cite{cuda-75}.  This \emph{dynamic parallelism}
