@@ -229,6 +229,10 @@ can be implemented in practice.
 
 \section{Introduction}\label{sec:intro}
 
+\ADComment{Update intro to be clearer that even with preemption our approach has merit, and that preemption does not imply fairness.}
+
+\ADComment{Use NVIDIA/Pascal as motivation for our approach.}
+
 \myparagraph{The needs of irregular data-parallel algorithms}
 %Acceleration of general-purpose computations on graphics processing
 %units (GPUs) has tended to focus on \emph{regular} data-parallel
@@ -255,6 +259,7 @@ example, if one workgroup holds a mutex, an unfair scheduler may cause
 another workgroup to spin-wait forever for the mutex to be
 released.  Similarly, an unfair scheduler can cause a workgroup to spin-wait
 indefinitely at a global barrier so that other workgroups do not reach the barrier.
+\ADComment{Tyler: briefly state that this still occurs on Pascal, despite it having support for preemption.}
 
 %\vspace{-1mm}
 \myparagraph{A degree of fairness: occupancy-bound execution} GPU
@@ -1761,6 +1766,23 @@ model. Implementing the model natively, with device-specific runtime
 support, could only improve performance and responsiveness compared
 with that of our megakernel-based prototype.
 
+\subsection{Comparison with Preemption on NVIDIA GPUs}\label{sec:nvidiacomparison}
+
+\ADComment{Make the point that NVIDIA GPUs now support
+  instruction-level preemption in hardware; allows arbitrary
+  preemption.}
+
+\ADComment{Note that they are doing coarse-grained, task-level
+  preemption, rather than running multiple tasks concurrently on the
+  GPU.}
+
+\ADComment{Direct comparison is not possible as we cannot implement
+  cooperative kernels on NVIDIA devices due to lack of mature OpenCL
+  2.0 support.}
+
+\ADComment{However, based on results reported by NVIDIA and a clock
+  speed calculation we can estimate...}
+
 \section{Related Work}\label{sec:relatedwork}
 
 \myparagraph{Irregular algorithms and persistent kernels}
@@ -1780,6 +1802,8 @@ to be upgraded to run in a manner that facilitates responsive multitasking.
 %\vspace{-1mm}
 
 \myparagraph{Preemptive multitasking on GPUs}
+%
+\ADComment{Tyler: please update or delete based on your recent readings and refer to Section~\ref{sec:nvidiacomparison}.}
 %
 Hardware support for preemption has been proposed for \nvidia GPUs,
 as well as \emph{SM-draining}
