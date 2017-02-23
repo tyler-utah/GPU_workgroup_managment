@@ -279,6 +279,14 @@ GPUs~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/oopsla/Pai
 It is evidently a simple model for device vendors to implement
 efficiently.
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{overview.pdf}
+\caption{Cooperative kernels can flexibly be resized in order to let
+other tasks (e.g. graphics) access GPU ressources}
+\label{fig:overview}
+\end{figure}
+
 The occupancy-bound execution model does not guarantee fair scheduling
 between workgroups: if all compute units are occupied then a
 not-yet-occupant workgroup will not be scheduled until some occupant
