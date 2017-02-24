@@ -224,14 +224,10 @@ can be implemented in practice.
 
 \maketitle
 
-\newcommand{\myparagraph}[1]{\paragraph{#1}}
+\newcommand{\myparagraph}[1]{\paragraph{#1.}}
 %{\noindent{\bf\emph{#1}}\hspace{1em}}
 
 \section{Introduction}\label{sec:intro}
-
-\ADComment{Update intro to be clearer that even with preemption our approach has merit, and that preemption does not imply fairness.}
-
-\ADComment{Use NVIDIA/Pascal as motivation for our approach.}
 
 \myparagraph{The needs of irregular data-parallel algorithms}
 %Acceleration of general-purpose computations on graphics processing
@@ -241,33 +237,27 @@ can be implemented in practice.
 Many interesting data-parallel algorithms are \emph{irregular}: the amount
 of work to be processed is unknown ahead of time and may be determined
 by the computation itself.  There is growing interest in accelerating
-such algorithms on GPUs, particularly the ones that
-traverse and manipulate linked data structures~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.
+such algorithms on GPUs~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.
 
 Irregular algorithms usually require \emph{blocking synchronization}
-between workgroups, to balance load and communicate intermediate
-results.  For example, many graph algorithms employ a level-by-level
+between workgroups.  For example, many graph algorithms employ a level-by-level
 strategy, requiring a global barrier between each level, and work
 stealing algorithms require each workgroup to maintain a queue, which
 is typically protected by a mutex to enable stealing by other
 workgroups.
 
-To operate correctly, a blocking concurrent algorithm requires
-\emph{fair} scheduling of workgroups.  Without fairness, a
-workgroup may fail to make progress, leading to starvation.  For
+To avoid starvation, a blocking concurrent algorithm requires
+\emph{fair} scheduling of workgroups.  For
 example, if one workgroup holds a mutex, an unfair scheduler may cause
 another workgroup to spin-wait forever for the mutex to be
 released.  Similarly, an unfair scheduler can cause a workgroup to spin-wait
 indefinitely at a global barrier so that other workgroups do not reach the barrier.
-\ADComment{Tyler: briefly state that this still occurs on Pascal, despite it having support for preemption.}
-\TSComment{I added this but actually think it fits better a little bit later (marked with a comment). See what you think}
 
 %\vspace{-1mm}
-\myparagraph{A degree of fairness: occupancy-bound execution} GPU
-schedulers are \emph{not} fair. The current GPU programming
+\myparagraph{A degree of fairness: occupancy-bound execution} The current GPU programming
 models---OpenCL~\cite{opencl2Spec}, CUDA~\cite{cuda-75} and
 HSA~\cite{HSAprogramming11}---specify almost no guarantees regarding
-scheduling of workgroups, and current GPU scheduler are unfair in
+scheduling of workgroups, and current GPU schedulers are unfair in
 practice.  Roughly speaking, each workgroup executing a GPU kernel is
 mapped to a hardware \emph{compute unit}.\footnote{In practice,
   depending on the kernel, multiple workgroups might map to the same
@@ -279,11 +269,12 @@ execution
 model~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16} where,
 once a workgroup has commenced execution on a compute unit (it has
 become \emph{occupant}), the workgroup has exclusive access to the
-compute unit until it finishes execution.  Experiments suggest that
-the occupancy-bound execution model is widely implemented by today's
+compute unit until it finishes execution.  
+This is simple model is easy to implement
+efficiently, and experiments suggest that
+it is widely employed by today's
 GPUs~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/oopsla/PaiP16,BNP12}.
-It is evidently a simple model for device vendors to implement
-efficiently.
+
 
 \begin{figure}[t]
 \centering
@@ -301,9 +292,7 @@ provide fair scheduling between \emph{occupant} workgroups, which are
 bound to separate compute units that operate in parallel.  Current GPU
 implementations of blocking algorithms assume the occupancy-bound
 execution model, which they exploit by launching no more workgroups
-than there are available compute units~\cite{owens-persistent}. This
-works because \emph{today}'s GPUs seem to provide the occupancy-bound
-execution model.
+than there are available compute units~\cite{owens-persistent}.
 
 %\vspace{-1mm}
 \myparagraph{Resistance to occupancy-bound execution}
@@ -339,22 +328,15 @@ scheduling due to the runtime cost of preempting workgroups in a fair
 manner.  Vendors instead wish to retain the essence of the simple
 occupancy-bound model, supporting preemption only in key special
 cases.
-%
-\TSComment{added note about Pascal experiment here. I wonder if there's
-a better way to glue these paragraphs together? That is, above it provides
-two issues vendors have with forward progress and below, we show a concrete
-example of both issues in Nvidia's latest chips}
-%
+
 For example, Nvidia's latest architecture (Pascal) is documented to
 support instruction-level preemption~\cite{??}. Despite this, Nvidia's
-documentation still does not provide concrete forward progress
-properties (i.e. vendors will not yet commit to providing these
-properties). Furthermore, we were able to run some small experiments
-on a Pascal GPU (GTX Titan X) and observed that the GPU still adhered
-to the occupancy-bound execution model. That is, a kernel containing a
-global barrier executed successfully when run with 56 workgroups, but
-deadlocked when run with 57 workgroups. This is an example of a vendor
-supporting preemption, yet not providing full fairness properties.
+most recent compute capablity does not guarantee forward progress for
+CUDA programmers (evidence that vendors will not yet commit to providing such guarantees).
+Indeed, on a GTX Titan X (Pascal) we still observe starvation:
+we found that a global barrier can be executed successfully with 56 workgroups, but
+deadlocks with 57 workgroups.  This is an example of a vendor
+supporting preemption, yet not guaranteeing fair scheduling.
 
 %\vspace{-1mm}
 \myparagraph{Our proposal: cooperative kernels}
@@ -421,7 +403,9 @@ properties:
 
 \item Cooperative kernels can be implemented over the occupancy\-/bound
   execution model that current GPUs provide: our prototype implementation requires
-  no additional hardware or driver support.  Thus the model should be easy for vendors to implement directly.
+  no additional hardware or driver support.
+
+\item If hardware support for preemption is available it can be leveraged to implement cooperative kernels efficiently, and cooperative kenrnels can avoid the overhead of unnecessary preemptions by allowing the programmer to communicate ``smart'' preemption points.
 
 \item Our experiments with a range of applications \cutthree{using three GPUs} show that the model can enable efficient multitasking of cooperative and non-cooperative
   tasks.
@@ -1065,25 +1049,6 @@ task, and responding positively to $\offerfork$ calls if compute units are avail
 %and $\offerfork$ calls by predicting future high-priority workloads
 %based on past workloads.
 
-
-\subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
-
-Our new model has no effect on the manner in which traditional GPU
-workloads (e.g.\ graphics shaders and and regular
-data-parallel computational kernels) are programmed.
-%
-Furthermore, if our cooperative language extensions are
-ignored---$\offerkill$ and $\offerfork$ are treated as no-ops,
-$\transmit$ annotations are ignored, and $\globalbarrier$ and
-$\resizingglobalbarrier$ calls are redirected to an existing global
-barrier implementation (so that no resizing occurs in the latter
-case)---then a cooperative kernel will behave just like its
-non-cooperative counterpart would behave.
-%A developer
-%for whom today's occupancy-bound execution model suffices can upgrade
-%their kernel to a cooperative form and retain backwards-compatibility
-%with today's GPU platforms by pre-processing away our language
-%extensions.
 
 
 \section{Prototype Implementation}\label{sec:implementation}
@@ -1783,22 +1748,29 @@ model. Implementing the model natively, with device-specific runtime
 support, could only improve performance and responsiveness compared
 with that of our megakernel-based prototype.
 
-\subsection{Preemption on NVIDIA Comparison}\label{sec:nvidiacomparison}
+\subsection{Comparison with Task Level Preemption}\label{sec:nvidiacomparison}
 
-\ADComment{Make the point that NVIDIA GPUs now support
-  instruction-level preemption in hardware; allows arbitrary
-  preemption.}
+Some recent GPUs, including NVIDIA's Pascal architecture, provide
+hardware support for instruction-level preemption.  Few details of how
+this works are available, however from reading NVIDIA documentation
+and online material~\cite{ }, and running litmus tests on a Pascal
+platform, our understanding is that preemption of entire kernels, but
+not of individual workgroups running a kenrel is supported.
+Intel---the only vendor whose OpenCL implemenation is capable enough
+to implement cooperative kernels---do not provide this feature, thus
+we cannot make a direct comparison.  We present here a theoretical
+analysis of the overheads associated with sharing the GPU between
+graphics and compute tasks via kernel-level preemption.
 
-\ADComment{Note that they are doing coarse-grained, task-level
-  preemption, rather than running multiple tasks concurrently on the
-  GPU.}
+Let us assume that a graphics workload is required to be scheduled
+with period $P$ and duration $D$, and that a long-running compute
+kernel requires time $C$ to execute without interruption.  If we
+assume the cost of preemption is negligible (e.g.\ NVIDIA have
+reported preemption times of 0.1 ms for Pascal), then the overhead
+associated with switching between compute and graphics every $P$ time
+steps is $P/(P-D)$.
 
-\ADComment{Direct comparison is not possible as we cannot implement
-  cooperative kernels on NVIDIA devices due to lack of mature OpenCL
-  2.0 support.}
-
-\ADComment{However, based on results reported by NVIDIA and a clock
-  speed calculation we can estimate...}
+\ADComment{Tyler to complete.}
 
 \section{Related Work}\label{sec:relatedwork}
 
@@ -2319,3 +2291,27 @@ those graphs here too.
 
 \fi
 \end{document}
+
+
+
+
+
+
+\subsection{Backwards Compatibility}\label{sec:backwardscompatibility}
+
+Our new model has no effect on the manner in which traditional GPU
+workloads (e.g.\ graphics shaders and and regular
+data-parallel computational kernels) are programmed.
+%
+Furthermore, if our cooperative language extensions are
+ignored---$\offerkill$ and $\offerfork$ are treated as no-ops,
+$\transmit$ annotations are ignored, and $\globalbarrier$ and
+$\resizingglobalbarrier$ calls are redirected to an existing global
+barrier implementation (so that no resizing occurs in the latter
+case)---then a cooperative kernel will behave just like its
+non-cooperative counterpart would behave.
+%A developer
+%for whom today's occupancy-bound execution model suffices can upgrade
+%their kernel to a cooperative form and retain backwards-compatibility
+%with today's GPU platforms by pre-processing away our language
+%extensions.
