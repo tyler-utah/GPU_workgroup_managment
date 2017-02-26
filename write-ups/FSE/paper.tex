@@ -697,10 +697,11 @@ primitives for inter-workgroup synchronisation.
 %
 A variable declared in the root scope of the cooperative kernel can
 optionally be annotated with a new $\transmit$ qualifier.  Annotating
-a variable $v$ with $\transmit$ means that when a workgroup spawns new
-workgroups by calling $\offerfork$, the workgroup should transmit its
-current value for $v$ to the threads of the new workgroups, to serve
-as an initial value for $v$.  We detail the semantics for this when we
+a variable $v$ with $\transmit$ means that when a workgroup 
+uses $\offerfork$ to spawn new
+workgroups, the workgroup should transmit its
+current value for $v$ to the threads of the new workgroups.
+We detail the semantics for this when we
 describe $\offerfork$ below.
 
 %\vspace{-1mm}
@@ -725,8 +726,7 @@ unit becomes available. For example, in \myfig{\ref{fig:overview}: at the
 When executed by a cooperative
 kernel, $\getnumgroups$ returns $M$, the \emph{current} number of
 active workgroups.  This is in contrast to $\getnumgroups$ for
-regular kernels, which returns the fixed number of workgroups that
-were requested at kernel launch time (see \mysec\ref{sec:opencl}).
+regular kernels, which returns the fixed number of workgroups that execute the kernel (see \mysec\ref{sec:opencl}).
 
 Fair scheduling \emph{is} guaranteed between active workgroups;
 i.e.\ if some thread in an active workgroup is enabled, then
@@ -757,10 +757,9 @@ uniformly by all threads in a workgroup (see
 \mysec\ref{sec:opencl}).
 
 Suppose a workgroup with id $m$ executes $\offerkill$.  If the
-workgroup has the highest largest id of all active workgroups then it
+workgroup has the largest id among active workgroups then it
 can be killed by the scheduler, except that workgroup 0 can never be
-killed (to ensure that the kernel computation does not terminate
-early).  More formally, if $m < M-1$ or $M=1$ then $\offerkill$ is a
+killed (to avoid early termination of the kernel).  More formally, if $m < M-1$ or $M=1$ then $\offerkill$ is a
 no-op.  If instead $M > 1$ and $m = M-1$, the scheduler can choose to
 ignore the offer, so that $\offerkill$ executes as a no-op, or accept
 the offer, so that execution of the workgroup ceases and the number of
@@ -1174,8 +1173,8 @@ communication channels using atomic variables in global memory.
 \myparagraph{Launching kernels and managing workgroups}
 %
 To launch a kernel, the host sends a data packet to the GPU scheduler
-consisting of: a kernel to execute, the kernel inputs, and a flag
-indicating whether the kernel is cooperative. In our implementation,
+consisting of a kernel to execute, kernel inputs, and a flag
+indicating whether the kernel is cooperative. In our prototype,
 this host-device communication channel is built using fine-grained SVM
 atomics.
 
@@ -1396,9 +1395,8 @@ Among the GPUs available to us, four met our requirements: Intel HD
 520, HD 5500 and Iris 6100, and AMD Radeon R7.  However, AMD's Linux
 drivers for OpenCL suffer from a known defect whereby long-running
 kernels lead to unkillable defunct
-processes~\cite{amd-defunct-process}. Because of this behaviour, we
-could not experiment on AMD platforms.
-
+processes~\cite{amd-defunct-process}.
+%
 %and simultaneously obtained alarming results on this platform when
 %using SVM atomics: modifying a kernel to include a simple host/device
 %handshake through SVM slowed down kernel execution by an order of
@@ -1406,7 +1404,7 @@ could not experiment on AMD platforms.
 %processes issue, lead us to suspect that the support we require for
 %cooperative kernels is not yet mature enough within AMD's drivers,
 %which we plan to discuss with engineers at AMD.
-
+%
 We thus ran our experimental campaign on the Intel GPUs. The results
 were similar across the GPUs, so for conciseness, we report only on
 the Iris 6100 GPU (driver 20.19.15.4463) with a host CPU i3-5157U. The
@@ -1826,7 +1824,7 @@ execution time.  Our poor performance for the heavy workload is
 because the graphics task requires all but one workgroup, which
 cripples the cooperative kernel enough that $\offerfork$ calls are not
 issued as frequently.
-
+%
 These results suggest that a hybrid preemption scheme may work the
 best for multi-tasking and graphics. That is, the cooperative approach
 works well for light and medium tasks, but heavy graphics tasks
