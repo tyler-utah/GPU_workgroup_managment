@@ -279,8 +279,8 @@ GPUs~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/oopsla/Pai
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{overview.pdf}
-\caption{Cooperative kernels can flexibly resize to let run other tasks
-(e.g. graphics) concurrently}
+\caption{Cooperative kernels can flexibly resize to let other tasks
+(e.g. graphics) run concurrently}
 \label{fig:overview}
 \end{figure}
 
@@ -380,7 +380,7 @@ respond to $\offerkill$ and $\offerfork$ calls in a manner that avoids
 under-utilisation of hardware resources by the cooperative kernel,
 e.g.\ the scheduler should not kill workgroups unless they are
 required for another purpose, and should facilitate forking of
-additional workgroups when possible. 
+additional workgroups when possible.
 
 \myfiglong{\ref{fig:overview}} shows an example execution of how the
 GPU compute units might be shared between a cooperative kernel and a
@@ -801,7 +801,7 @@ Suppose a workgroup with id $m\leq M$ executes $\offerfork$.  Then the
 following occurs: an integer $k \in [0, N-M]$ is chosen by the
 scheduler; $k$ new workgroups are spawned with consecutive ids in the
 range $[M, M+k-1]$; the active workgroup count $M$ is atomically
-incremented by $k$. 
+incremented by $k$.
 
 The $k$ new workgroups commence execution at the program point
 immediately following the $\offerfork$ call.  The variables that
@@ -1822,7 +1822,7 @@ reported preemption times of 0.1 ms for Pascal), then the overhead
 associated with switching between compute and graphics every $P$ time
 steps is $P/(P-D)$. We compare this task-level preemption overhead
 model with our experimental results per graphics workload in
-\mytab{\ref{tab:preemption}}. 
+\mytab{\ref{tab:preemption}}.
 
 We see that our approach provides lower overhead for low and medium
 graphics workloads. Recall for the heavy graphics workload, we are
