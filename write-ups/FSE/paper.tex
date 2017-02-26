@@ -224,7 +224,8 @@ can be implemented in practice.
 
 \maketitle
 
-\newcommand{\myparagraph}[1]{\paragraph{#1.}}
+%\newcommand{\myparagraph}[1]{\paragraph{#1.}}
+\newcommand{\myparagraph}[1]{\vspace{1mm}\noindent\emph{\textbf{#1.}}}
 %{\noindent{\bf\emph{#1}}\hspace{1em}}
 
 \section{Introduction}\label{sec:intro}
@@ -343,24 +344,27 @@ not guaranteeing fair scheduling.
 \myparagraph{Our proposal: cooperative kernels}
 %
 To summarise: blocking algorithms
-demand fair scheduling of workgroups, but for good reasons
+demand fair scheduling,
+% of workgroups,
+but for good reasons
 GPU vendors will not commit even to the guarantees of the
 occupancy-bound execution model.
-
+%
 We propose \emph{cooperative kernels}, an extension to the GPU
-programming model that aims to resolve this impasse.  A kernel
+programming model that aims to resolve this impasse.
+
+A kernel
 that requires fair scheduling is identified as \emph{cooperative}, and written using two additional
 language primitives, $\offerkill$ and $\offerfork$, placed by the programmer.
-
-At a point where the cooperative kernel could proceed with fewer
+%
+Where the cooperative kernel could proceed with fewer
 workgroups, a workgroup can execute $\offerkill$, offering to
 sacrifice itself to the scheduler.  This indicates that the workgroup
 would ideally continue executing, but that the
 scheduler may preempt the workgroup; the cooperative kernel
 must be prepared to deal with either scenario.
 %
-At a point where the cooperative kernel could benefit from having
-additional workgroups join the computation, a workgroup can execute
+Where the cooperative kernel could use additional resources, a workgroup can execute
 $\offerfork$ to indicates that the
 kernel is prepared to proceed with the existing set of workgroups, but
 is able to benefit from one or more additional workgroups
@@ -374,31 +378,25 @@ workgroups leaving and joining the computation in response to
 $\offerkill$ and $\offerfork$.  Non-functionally, a cooperative kernel
 must ensure that $\offerkill$ is executed frequently enough such that
 the scheduler can accommodate soft-real time constraints,
-e.g.\ allowing a smooth frame-rate for graphics, or allowing compute
-units to be powered down quickly when required.  The scheduler should
-respond to $\offerkill$ and $\offerfork$ calls in a manner that avoids
-under-utilisation of hardware resources by the cooperative kernel,
-e.g.\ the scheduler should not kill workgroups unless they are
-required for another purpose, and should facilitate forking of
-additional workgroups when possible.
+e.g.\ allowing a smooth frame-rate for graphics.
+%, or allowing compute
+%units to be powered down quickly when required.
+In return, the scheduler should allow the cooperative kernel to utilise
+hardware resources where possible, killing workgroups only when demanded by other tasks, and forking additional workgroups when possible.
 
-\myfiglong{\ref{fig:overview}} shows an example execution of how the
-GPU compute units might be shared between a cooperative kernel and a
-graphics task. Notice that workgroups executing the cooperative kernel
-are killed at a $\offerkill$ command to make room for a graphics
-task. After the graphics task, the previously killed workgroups are
-restored to executing the cooperative kernel when a workgroup
-executing the cooperative kernel calls $\offerfork$. The order in
+\myfiglong{\ref{fig:overview}} illustrates sharing of GPU compute units between a cooperative kernel and a
+graphics task. Workgroups 2 and 3 of the cooperative kernel
+are killed at an $\offerkill$ to make room for a graphics
+task. The workgroups are subsequently restored to the cooperative kernel when workgroup 0 calls $\offerfork$. The order in
 which workgroups are killed is important and discussed in
 \mysec{\ref{sec:semantics}}. The \emph{gather time} is the time
-between when resources are requested and when the application has
-surrendered the resources via $\offerkill$. To satisfy soft-real time
+between resources being requested and the application surrendering them via $\offerkill$. To satisfy soft-real time
 constraints, this time should be low; our experimental study
 (\mysec{\ref{sec:responsiveness}}) shows that in practice, the
 gather-time for our applications is acceptable for a range of graphics
 workloads.
 
-The cooperative kernels programming model has several appealing
+The cooperative kernels model has several appealing
 properties:
 
 %\vspace{-1mm}
@@ -409,8 +407,7 @@ properties:
   data-parallel algorithms.
 
 \item The model has no impact on the development of regular
-  (non-cooperative) compute and graphics kernels: these can be programmed exactly as they
-  are now.
+  (non-cooperative) compute and graphics kernels.
 %, as can graphics shading routines written using APIs such as
 %OpenGL, Vulkan and DirectX.
 
@@ -418,25 +415,20 @@ properties:
   exactly as a regular kernel does on current GPUs.
 
 \item Cooperative kernels can be implemented over the occupancy\-/bound
-  execution model that current GPUs provide: our prototype implementation requires
-  no additional hardware or driver support.
+  execution model provided by current GPUs: our prototype implementation uses no special hardware/driver support.
 
-\item If hardware support for preemption is available it can be leveraged to implement cooperative kernels efficiently, and cooperative kenrnels can avoid the overhead of unnecessary preemptions by allowing the programmer to communicate ``smart'' preemption points.
-
-\item Our experiments with a range of applications \cutthree{using three GPUs} show that the model can enable efficient multitasking of cooperative and non-cooperative
-  tasks.
+\item If hardware support for preemption \emph{is} available, it can be leveraged to implement cooperative kernels efficiently, and cooperative kernels can avoid unnecessary preemptions by allowing the programmer to communicate ``smart'' preemption points.
 
 \end{enumerate}
 %\vspace{-1mm}
 
-Placing the new primitives requires manual effort, but our experience porting a representative set of
-GPU-accelerated irregular algorithms to use cooperative kernels
-(\mysec\ref{sec:portingalgorithms}) suggests that this is straightforward in practice.
+Placing the new primitives requires manual effort, but is straightforward for the representative set of
+GPU-accelerated irregular algorithms that we have ported to use cooperative kernels.  Our experiments show that the model can enable efficient multitasking of cooperative and non-cooperative tasks.
 
 In summary, our main contributions are:
 \emph{cooperative kernels}, an extended GPU programming model that supports the scheduling requirements of blocking algorithms (\mysec\ref{sec:cooperativekernels}); a \emph{prototype implementation} of cooperative
   kernels on top OpenCL 2.0
-  (\mysec\ref{sec:implementation}); and \emph{experiments} assessing the overhead and responsiveness of the cooperative kernels approach over a set of irregular algorithms \cutthree{across three GPUs} (\mysec\ref{sec:experiments}).
+  (\mysec\ref{sec:implementation}); and \emph{experiments} assessing the overhead and responsiveness of the cooperative kernels approach over a set of irregular algorithms \cutthree{across three GPUs} (\mysec\ref{sec:experiments}), including a best-effort comparison with the efficiency afforded by hardware-supported preemption available on Nvidia GPUs.
 
 We begin by providing background on OpenCL via two motivating examples (\mysec\ref{sec:background}).  At the end we discuss related work (\mysec\ref{sec:relatedwork}) and avenues for future work (\mysec\ref{sec:conclusion}).
 
