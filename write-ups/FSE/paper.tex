@@ -1570,10 +1570,10 @@ bound in order to meaningfully compare execution times.
 
 \begin{figure*}
 \includegraphics[width=.67\columnwidth]{iris_octree_NA.pdf}
-\includegraphics[width=.67\columnwidth]{hd520_mis_ecology.pdf}
-\includegraphics[width=.67\columnwidth]{hd5500_bfs_rmat22.pdf}
+\includegraphics[width=.67\columnwidth]{iris_bfs_usa.pdf}
+\includegraphics[width=.67\columnwidth]{iris_color_G3_circuit.pdf}
 %\vspace{-2mm}
-\caption{Example gather time and non-cooperative timing results \TSComment{need to get updated numbers}}\label{fig:fine-grained-timing}
+\caption{Example gather time and non-cooperative timing results}\label{fig:fine-grained-timing}
 \vspace{-3mm}
 \end{figure*}
 
@@ -1585,13 +1585,13 @@ bound in order to meaningfully compare execution times.
 \multicolumn{2}{c|}{overall} & \multicolumn{2}{c|}{barrier} & \multicolumn{2}{c}{wk.steal.} \\
 mean & max & mean & max & mean & max \\
 \hline
-$1.09$ & $1.23^{\ddagger}$ & $1.09$ & $1.21^{\diamond}$ & $1.11$ & $1.23^{\ddagger}$ \\
+$1.07$ & $1.23^{\ddagger}$ & $1.06$ & $1.20^{\diamond}$ & $1.12$ & $1.23^{\ddagger}$ \\
 \end{tabular}\\
 {\small
- $^{\ddagger}$octree, $^{\diamond}$sssp usa\_ny
+ $^{\ddagger}$octree, $^{\diamond}$color G3\_circuit
 }
 %\vspace{-2mm}
-\caption{Cooperative kernel slowdown w/o multitasking \TSComment{need to get updated numbers}}
+\caption{Cooperative kernel slowdown w/o multitasking}
 \label{tab:overhead}
 \vspace{-8mm}
 \end{table}
@@ -1603,7 +1603,7 @@ $1.09$ & $1.23^{\ddagger}$ & $1.09$ & $1.21^{\diamond}$ & $1.11$ & $1.23^{\ddagg
 maximum slowdown across all applications and inputs, with averages and
 maxima computed over 10 runs per benchmark. For the maximum slowdowns,
 we indicate which application and input was responsible. The slowdown is
-below 1.5 even in the worst case, and closer to 1 on average. We consider
+below 1.25 even in the worst case, and closer to 1 on average. We consider
 these results encouraging, especially since the performance of our
 prototype could clearly be improved upon in a native implementation.
 
@@ -1633,10 +1633,10 @@ quarter, a half, and all-but-one, of the total number of workgroups
 are requested. For the graph algorithms we try both
 regular and query barrier implementations.
 
-Our experiments span 13 pairs of cooperative kernels and inputs, 3
+Our experiments span 11 pairs of cooperative kernels and inputs, 3
 classes of non-cooperative kernel workloads, 4 quantities of
 workgroups claimed for the non-cooperative kernel and 2 variations of
-resizing barriers for graph algorithms, leading to 288 configurations.
+resizing barriers for graph algorithms, leading to 240 configurations.
 We run each configuration 10 times, in order to report averaged
 performance numbers. For each run, we record the execution time of the
 cooperative kernel. For each scheduling of the non-cooperative kernel
@@ -1703,11 +1703,11 @@ increases.%\footnote{The right figure has only 3 points per line:
   %recall that for bfs there are no runs with ``all-but-one''
   %non-cooperative workgroups.}
 %
-the gather time is higher on the right figure: the rmat22 input graph
-is rather wide than deep, so the graph algorithm reaches resizing
-barriers less often than for the ecology input of the middle figure
-for instance. The scheduler thus has fewer opportunities to collect
-workgroups and gather time increases. Nonetheless, scheduling
+the gather time is higher on the right figure: the G3 circuit input
+graph is rather wide than deep, so the graph algorithm reaches
+resizing barriers less often than for the usa road input of the middle
+figure for instance. The scheduler thus has fewer opportunities to
+collect workgroups and gather time increases. Nonetheless, scheduling
 responsiveness can benefit from the query barrier: when used, this
 barrier lets the scheduler collect all needed workgroups as soon as
 they hit a resizing barrier. As we can see, the gather time of the
@@ -1718,7 +1718,7 @@ needs to be collected.
 \begin{figure}
 \includegraphics[width=\columnwidth]{heavy.pdf}
 %\vspace{-2mm}
-\caption{Performance impact of multitasking cooperative and non-cooperative workloads, and the period with which non-cooperative kernels execute \TSComment{need to get updated numbers}}\label{fig:performance}
+\caption{Performance impact of multitasking cooperative and non-cooperative workloads, and the period with which non-cooperative kernels execute}\label{fig:performance}
 \vspace{-5mm}
 \end{figure}
 
@@ -1727,10 +1727,20 @@ needs to be collected.
 overhead brought by the scheduling of non-cooperative kernels over the
 cooperative kernel execution time.  This is the slowdown associated
 with running the cooperative kernel in the presence of multitasking,
-vs.\ running the cooperative kernel in isolation (geometric mean over
-all applications and inputs).  We also show the period at which
-non-cooperative kernels can be scheduled (arithmetic mean over all
-applications and inputs).
+vs.\ running the cooperative kernel in isolation (median over all
+applications and inputs).  We also show the period at which
+non-cooperative kernels can be scheduled (median over all applications
+and inputs). We use the median as our data included some drastic
+outliers; these outliers appear to happen with applications/inputs in
+which the resizing barrier are not called very frequently and the
+graphics task asks for half or more resources. For example, a medium
+graphics workload for bfs on the rmat input has over an 8$\times$
+overhead, while the same application on the usa input has an overhead
+of 1.11$\times$. As \myfiglong\ref{fig:performance} shows, most of our
+applications/inputs are much better behaved than this. Future work
+includes examining these problem applications/inputs in more detail,
+possibly to insert more calls to $\offerfork$ and $\offerkill$.
+
 We show results for the three workloads listed in
 \mysec~\ref{sec:sizingnoncoop}. The two gray horizontal lines in the
 period graph correspond to the period goals of the workloads: the
@@ -1746,19 +1756,18 @@ at the expected period. For the light and medium workloads, a quarter
 of the workgroups executing the non-cooperative kernel are able to
 meet their goal period (70 and 40 ms resp.). However, a quarter of the
 workgroups are not sufficient to meet the goal for the heavy workload
-(giving a mean period of 88 ms). If half of the workgroups are
-allocated to the non-cooperative kernel, the heavy workload averages
-$\sim$10\% over its goal period (mean of 44 ms). If all-but-one are
-allocated, the heavy workload reaches its goal period.
+(giving a median period of 104 ms). If half of the workgroups are
+allocated to the non-cooperative kernel, the heavy workload achieves
+its goal period (median of 40 ms). 
 %
 Yet, as expected, allocating more non-cooperative workgroups increases
 the execution time of the cooperative kernel.
 
-Still, heavy workloads meet their period by allocating all-but-one
+Still, heavy workloads meet their period by allocating half
 non-cooperative workgroups, incurring a slow down of less than
-1.4$\times$ on average. Light and medium workloads meet their period
-with only a negligible overhead of the cooperative kernel (less than a
-1.03$\times$ slowdown on average).
+1.5$\times$ (median). Light and medium workloads meet their period
+with only a small overhead of the cooperative kernel; 
+1.04$\times$ and 1.08$\times$ median slowdown respectively.
 
 We consider these results encouraging, since they provide a lower
 bound on potential performance of our cooperative kernels
@@ -1771,17 +1780,17 @@ with that of our megakernel-based prototype.
 \begin{table}[t]
 \normalsize
 \centering
-\begin{tabular}{ l r r}
-g. workload &  kernel-level  & cooperative (resources) \\
+\begin{tabular}{ l r r r}
+g. workload &  kernel-level  & cooperative & resources \\
 \hline
-light & 1.04 & 1.XX($N/4$)\\
-medium & 1.08 & 1.XX($N/4$)\\
-heavy & 1.33 & 1.XX($N-1$)\\
+light & 1.04 & 1.04 & $N/4$\\
+medium & 1.08 & 1.08 & $N/4$\\
+heavy & 1.33 & 1.47 & $N/2$\\
 \end{tabular} \\
 %\vspace{.2cm}
 
 \caption{Overhead of kernel level preemption vs cooperative kernels for three
-graphics workloads \TSComment{need to get updated numbers}}
+graphics workloads}
 \label{tab:preemption}
 \vspace{-8mm}
 \end{table}
@@ -1802,32 +1811,30 @@ Let us assume that a graphics workload is required to be scheduled
 with period $P$ and duration $D$, and that a long-running compute
 kernel requires time $C$ to execute without interruption.  If we
 assume the cost of preemption is negligible (e.g.\ Nvidia have
-reported preemption times of 0.1 ms for Pascal~\cite{TODO}), then the overhead
-associated with switching between compute and graphics every $P$ time
-steps is $P/(P-D)$.
+reported preemption times of 0.1 ms for Pascal~\cite{anandtech}), then
+the overhead associated with switching between compute and graphics
+every $P$ time steps is $P/(P-D)$.
 
-We compare this task-level preemption overhead
-model with our experimental results per graphics workload in
-\mytab{\ref{tab:preemption}}.
+We compare this task-level preemption overhead model with our
+experimental results per graphics workload in
+\mytab{\ref{tab:preemption}}. We report the overhead of the
+configuration that allowed us to meet to deadline of the graphics
+task.
 %
-Based on the above assumptions, our approach provides lower overhead for low and medium
-graphics workloads. Recall for the heavy graphics workload, we are
-within $10\%$ of the required deadline ($40$ ms) by using half the
-workgroups with an overhead of $1.XX$, which is less than the
-kernel-level preemption overhead of $1.33$. \TSComment{need to get
-  updated numbers} \ADComment{I don't quite understand the wording; sounds a bit like we still win with the heavy workload.}
+Based on the above assumptions, our approach provides similar overhead
+for low and medium graphics workloads; however, for the high workload,
+our approach has a higher overhead.
 
-The low overhead of cooperative kernels for low and medium graphics
-workloads is due to sub-linear scalability of the irregular algorithms that they implement: some resources can
-be taken away during computation without proportionally reducing
-execution time.  Our poor performance for the heavy workload is
-because the graphics task requires all but one workgroup, which
-cripples the cooperative kernel enough that $\offerfork$ calls are not
-issued as frequently.
+Our poor performance for the heavy workload is because the graphics
+task requires half of the workgroups, which cripples the cooperative
+kernel enough that $\offerfork$ calls are not issued as frequently.
+Future work may examine how to insert more resizing calls in these
+applications to decrease this overhead.
 %
 These results suggest that a hybrid preemption scheme may work the
-best for multi-tasking and graphics. That is, the cooperative approach
-works well for light and medium tasks, but heavy graphics tasks
+well for multi-tasking and graphics. That is, the cooperative approach
+works well for light and medium tasks and requires no special hardware
+or preemption state saving; on the other hand, heavy graphics tasks
 benefit from the coarser grained, kernel-level preemption strategy.
 
 \section{Related Work}\label{sec:relatedwork}
