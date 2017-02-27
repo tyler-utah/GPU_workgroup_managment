@@ -1796,13 +1796,13 @@ hardware support for instruction-level preemption.  Few details of how
 this works are available, but from reading Nvidia documentation and
 online material~\cite{PascalWhitepaper,anandtech}, our understanding
 is that preemption of entire kernels, but not of individual workgroups
-is supported.  Intel GPUs do not provide this feature, and out OpenCL
+is supported.  Intel GPUs do not provide this feature, and our OpenCL
 2.0 prototype of cooperative kernels cannot run on Nvidia GPUs, making
 a direct comparison impossible.  We present here a theoretical
 analysis of the overheads associated with sharing the GPU between
 graphics and compute tasks via kernel-level preemption.
 
-Given a graphics workload that is required to be scheduled with period
+Suppose a graphics workload is required to be scheduled with period
 $P$ and duration $D$, and that a compute kernel requires time $C$ to
 execute without interruption.  If we assume the cost of preemption is
 negligible (e.g.\ Nvidia have reported preemption times of 0.1 ms for
