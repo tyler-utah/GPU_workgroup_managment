@@ -333,7 +333,7 @@ cases.
 
 For example, Nvidia's latest architecture (Pascal) is documented to
 support instruction-level preemption~\cite{PascalWhitepaper}. Despite
-this, Nvidia's most recent compute capablity does not guarantee
+this, Nvidia's most recent compute capability does not guarantee
 forward progress for CUDA programmers (evidence that vendors will not
 yet commit to providing such guarantees).  Indeed, on a GTX Titan X
 (Pascal) we still observe starvation: we found that a global barrier
@@ -853,7 +853,7 @@ $\transmit$-annotated local state of thread 0 in workgroup 0 is
 transmitted to the threads of the new workgroups.
 
 The semantics of $\resizingglobalbarrier$ can be modelled via calling $\offerfork$ and $\offerkill$
-surrounded, and seperated by calls to a $\globalbarrier$.
+surrounded, and separated by calls to a $\globalbarrier$.
 %
 %\lstset{basicstyle=\small\tt,numbers=none}
 %\begin{lstlisting}
@@ -1701,7 +1701,7 @@ increases.%\footnote{The right figure has only 3 points per line:
 %
 the gather time is higher on the right figure: the G3 circuit input
 graph is rather wide than deep, so the graph algorithm reaches
-resizing barriers less often than for the usa road input of the middle
+resizing barriers less often than for the USA road input of the middle
 figure for instance. The scheduler thus has fewer opportunities to
 collect workgroups and gather time increases. Nonetheless, scheduling
 responsiveness can benefit from the query barrier: when used, this
@@ -1866,7 +1866,7 @@ workgroup can be re-scheduled from scratch if it has not yet committed
 side-effects~\cite{DBLP:conf/asplos/ParkPM15}.  Both approaches have
 been evaluated using simulators, over sets of regular GPU kernels.
 Very recent \nvidia GPUs (i.e. the Pascal architecture) support
-preemption, though, as discussted in \mysec{\ref{sec:intro}} and
+preemption, though, as discussed in \mysec{\ref{sec:intro}} and
 \mysec{\ref{sec:nvidiacomparison}}, it is not clear whether they guarantee
 fairness or allow tasks to share GPU resources at the workgroup
 level~\cite{PascalWhitepaper}.
