@@ -1297,15 +1297,17 @@ associated with moving to cooperative kernels when multitasking is
 \emph{not} required (\mysec\ref{sec:overhead}), as well as the
 responsiveness and throughput observed when a cooperative kernel is
 multi-tasked with non-cooperative workloads
-(\mysec\ref{sec:responsiveness}).
+(\mysec\ref{sec:responsiveness}). Finally, we compare
+against a performance model of \emph{kernel-level} preemption, which
+we understand to be what current Nvidia GPUs provide (\mysec\ref{sec:nvidiacomparison}).
 
-To our knowledge, there are no competing methods against which to
-meaningfully compare our approach.  We are not aware of any existing
-platform that supports multitasking between long-running, fully-occupant
-OpenCL kernels.  Very recent \nvidia{} GPUs, to which we do not yet have
-access, support preemption for graphics
-applications~\cite{PascalWhitepaper}, but our understanding is that this
-cannot yet be leveraged from CUDA, and certainly not from OpenCL.
+%To our knowledge, there are no competing methods against which to
+%meaningfully compare our approach.  We are not aware of any existing
+%platform that supports multitasking between long-running, fully-occupant
+%OpenCL kernels.  Very recent \nvidia{} GPUs, to which we do not yet have
+%access, support preemption for graphics
+%applications~\cite{PascalWhitepaper}, but our understanding is that this
+%cannot yet be leveraged from CUDA, and certainly not from OpenCL.
 
 
 \subsection{Applications and GPUs}\label{sec:portingalgorithms}
@@ -1412,22 +1414,22 @@ are available in supplementary material.
 
 Enabling rendering of smooth graphics in parallel with execution of irregular algorithms is an important use case for our approach.  Because our prototype implementation is based on a megakernel that takes over the entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this use case directly.
 
-We devised the following
-procedure to determine non-cooperative OpenCL workloads that simulate
-the computational intensity of various graphics rendering workloads.
+We devised the following procedure to determine non-cooperative OpenCL
+workloads that simulate the computational intensity of various
+graphics rendering workloads.
 %
-We designed a synthetic kernel that occupies all workgroups of a
-GPU for a parameterised time period $t$, invoked in an infinite loop by a host application.  We then
-searched for a maximum value for $t$ that allowed the
-synthetic kernel to execute without having an observable impact on
-graphics rendering.  Using the computed value, we
-ran the host application for $X$ seconds, measuring the time $Y < X$
-dedicated to GPU execution during this period and the number
-of kernel launches $n$ that were issued.  We used $X \geq 10$ in all
-experiments.  The values $(X-Y)/n$ and $X/n$ estimate the average time
-spent using the GPU to render the display between kernel calls and the
-period at which the OS requires the GPU for display rendering,
-respectively.
+We designed a synthetic kernel that occupies all workgroups of a GPU
+for a parameterised time period $t$, invoked in an infinite loop by a
+host application.  We then searched for a maximum value for $t$ that
+allowed the synthetic kernel to execute without having an observable
+impact on graphics rendering.  Using the computed value, we ran the
+host application for $X$ seconds, measuring the time $Y < X$ dedicated
+to GPU execution during this period and the number of kernel launches
+$n$ that were issued.  We used $X \geq 10$ in all experiments.  The
+values $(X-Y)/n$ and $X/n$ estimate the average time spent using the
+GPU to render the display between kernel calls (call this $E$) and the
+period at which the OS requires the GPU for display rendering (call
+this $P$), respectively.
 
 We used this approach to measure the GPU availability required for three
 types of rendering: \emph{light}, whereby desktop icons are smoothly
@@ -1456,16 +1458,14 @@ in a recent version of Firefox.
 % \label{tab:noncooperativeworkload}
 % \end{table}
 
-Our results are the following: light workloads needs to run 3ms every
-70ms, medium ones 3ms every 40ms, and heavy ones 10ms every 40ms. For
-the medium and heavy workloads, the 40ms period corresponds to graphics
-rendering occurring 25 times per second, which coincides with the human
-persistence of vision. The 3ms execution duration of both light and
-medium configurations indicates that, as expected, GPU computation is
-cheaper for basic display rendering compared with rendering that uses
-complex shaders. We use these results to guide our evaluation of the
-responsiveness of cooperative scheduling in
-\mysec\ref{sec:responsiveness}.
+Our results are the following: $P=70ms$ and $E=3ms$ for light;
+$P=40ms$, $E=3ms$ for medium; and $P=40ms$, $E=10ms$ for heavy. For
+medium and heavy, the 40ms period coincides with the human persistence
+of vision. The 3ms execution duration of both light and medium
+configurations indicates that GPU computation is cheaper for basic
+display rendering compared with more complex rendering that uses
+shaders. These results guide our evaluation of cooperative scheduling
+(\mysec\ref{sec:responsiveness}).
 
 % The
 % \emph{Duration} and \emph{Rate} columns report values corresponding to
@@ -1637,8 +1637,8 @@ We run each configuration 10 times, in order to report averaged
 performance numbers. For each run, we record the execution time of the
 cooperative kernel. For each scheduling of the non-cooperative kernel
 during the run, we also record the \emph{gather time} needed by the
-scheduler to collect enough workgroups to launch the non-cooperative
-kernel, and the non-cooperative kernel execution time.
+scheduler to collect workgroups to launch the non-cooperative kernel,
+and the non-cooperative kernel execution time.
 %
 %We sanity-check
 %whether all kernels perform their computations correctly by comparing
@@ -1726,16 +1726,16 @@ with running the cooperative kernel in the presence of multitasking,
 vs.\ running the cooperative kernel in isolation (median over all
 applications and inputs).  We also show the period at which
 non-cooperative kernels can be scheduled (median over all applications
-and inputs). We use the median as our data included some drastic
-outliers; these outliers appear to happen with applications/inputs in
-which the resizing barrier are not called very frequently and the
-graphics task asks for half or more of the resources. For example, a
-medium graphics workload for bfs on the rmat input has over an
-8$\times$ overhead when asking for all but one of the workgroups for
-graphics. As \myfiglong\ref{fig:performance} shows, most of our
-applications/inputs are much better behaved than this. Future work
-includes examining these problem applications/inputs in more detail,
-possibly to insert more calls to $\offerfork$ and $\offerkill$.
+and inputs). We use the median as our data included some outliers;
+these outliers happen with applications/inputs in which the resizing
+barrier are not called very frequently and the graphics task requires
+half or more workgroups. For example, a medium graphics workload for
+bfs on the rmat input has over an 8$\times$ overhead when asking for
+all but one of the workgroups. As \myfiglong\ref{fig:performance}
+shows, most of our applications/inputs are much better behaved than
+this. Future work will examine these problem applications/inputs in
+more detail, possibly inserting more calls to $\offerfork$ and
+$\offerkill$.
 
 We show results for the three workloads listed in
 \mysec~\ref{sec:sizingnoncoop}. The two gray horizontal lines in the
@@ -1758,7 +1758,7 @@ its goal period (median of 40 ms).
 %
 Yet, as expected, allocating more non-cooperative workgroups increases
 the execution time of the cooperative kernel.
-
+%
 Still, heavy workloads meet their period by allocating half
 non-cooperative workgroups, incurring a slow down of less than
 1.5$\times$ (median). Light and medium workloads meet their period
@@ -1771,7 +1771,7 @@ model. Implementing the model natively, with device-specific runtime
 support, could only improve performance and responsiveness compared
 with that of our megakernel-based prototype.
 
-\subsection{Comparison with Task Level Preemption}\label{sec:nvidiacomparison}
+\subsection{Comparison with Kernel-Level Preemption}\label{sec:nvidiacomparison}
 
 \begin{table}[t]
 \normalsize
@@ -1793,15 +1793,14 @@ graphics workloads}
 
 Some recent GPUs, including Nvidia's Pascal architecture, provide
 hardware support for instruction-level preemption.  Few details of how
-this works are available, but from reading Nvidia documentation
-and online material~\cite{PascalWhitepaper,anandtech}, and running
-litmus tests on a Pascal platform, our understanding is that
-preemption of entire kernels, but not of individual workgroups running
-a kernel is supported.  Intel GPUs do
-not provide this feature, and out OpenCL 2.0 prototype of cooperative kernels cannot run on Nvidia GPUs, making a direct comparison impossible.
-We present here a theoretical analysis of the overheads associated with
-sharing the GPU between graphics and compute tasks via kernel-level
-preemption.
+this works are available, but from reading Nvidia documentation and
+online material~\cite{PascalWhitepaper,anandtech}, our understanding
+is that preemption of entire kernels, but not of individual workgroups
+is supported.  Intel GPUs do not provide this feature, and out OpenCL
+2.0 prototype of cooperative kernels cannot run on Nvidia GPUs, making
+a direct comparison impossible.  We present here a theoretical
+analysis of the overheads associated with sharing the GPU between
+graphics and compute tasks via kernel-level preemption.
 
 Given a graphics workload that is required to be scheduled with period
 $P$ and duration $D$, and that a compute kernel requires time $C$ to
@@ -1943,18 +1942,16 @@ This is in contrast to our cooperative kernels, which specifically aim to suppor
 We have proposed \emph{cooperative kernels}, a small set of GPU
 programming extensions that allow long-running, blocking kernels to be
 fairly scheduled and to share GPU resources with other workloads.
-Experimental results using our megakernel-based prototype \cutthree{over three Intel GPUs}
-shows that the model is a good fit for the needs of current
-GPU-accelerated irregular algorithms.  The
-performance that could be gained through a native implementation with
-dedicated driver support would be even better.
+Experimental results using our megakernel-based prototype shows that
+the model is a good fit for current GPU-accelerated irregular
+algorithms.  The performance that could be gained through a native
+implementation with driver support would be even better.
 %
-Avenues for future work include seeking
-additional classes of irregular algorithms to which the model might
-(be extended to) apply (to), investigating implementing native support
-in open source drivers, and integrating
-cooperative kernels into template- and compiler-based programming
-models for graph algorithms on
+Avenues for future work include seeking additional classes of
+irregular algorithms to which the model might (be extended to) apply
+(to), investigating implementing native support in open source
+drivers, and integrating cooperative kernels into template- and
+compiler-based programming models for graph algorithms on
 GPUs~\cite{DBLP:conf/ppopp/WangDPWRO16,DBLP:conf/oopsla/PaiP16}.
 %  As more vendors
 %adopt the advanced features of OpenCL that our approach requires, we
