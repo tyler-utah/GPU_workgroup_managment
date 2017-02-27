@@ -283,6 +283,7 @@ GPUs~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/oopsla/Pai
 \caption{Cooperative kernels can flexibly resize to let other tasks
 (e.g. graphics) run concurrently}
 \label{fig:overview}
+\vspace{-2mm}
 \end{figure}
 
 The occupancy-bound execution model does not guarantee fair scheduling
@@ -387,9 +388,7 @@ hardware resources where possible, killing workgroups only when demanded by othe
 \myfiglong{\ref{fig:overview}} illustrates sharing of GPU compute units between a cooperative kernel and a
 graphics task. Workgroups 2 and 3 of the cooperative kernel
 are killed at an $\offerkill$ to make room for a graphics
-task. The workgroups are subsequently restored to the cooperative kernel when workgroup 0 calls $\offerfork$. The order in
-which workgroups are killed is important and discussed in
-\mysec{\ref{sec:semantics}}. The \emph{gather time} is the time
+task. The workgroups are subsequently restored to the cooperative kernel when workgroup 0 calls $\offerfork$. The \emph{gather time} is the time
 between resources being requested and the application surrendering them via $\offerkill$. To satisfy soft-real time
 constraints, this time should be low; our experimental study
 (\mysec{\ref{sec:responsiveness}}) shows that in practice, the
@@ -531,9 +530,8 @@ threads.
 (*@\label{line:wksteal:getgroupid}@*)  int queue_id = get_group_id();
 (*@\label{line:wksteal:mainloop}@*)  while (more_work(queues)) {
 (*@\label{line:wksteal:poporsteal}@*)    Task * t = pop_or_steal(queues, queue_id);
-    if (t) {
+    if (t)
 (*@\label{line:wksteal:processtask}@*)      process_task(t, queues, queue_id);
-    }
   }
 }
 \end{lstlisting}
@@ -594,9 +592,8 @@ kernel graph_app(global graph * g,
   int tid = get_global_id();
   int stride = get_global_size();
 (*@\label{line:graph:iterate}@*)  while(in_nodes.size > 0) {
-    for (int i = tid; i < nodes.size; i += stride) {
+    for (int i = tid; i < nodes.size; i += stride)
       process_node(g, in_nodes[i], out_nodes, level);
-    }
 (*@\label{line:graph:swap}@*)    swap(&in_nodes, &out_nodes);
 (*@\label{line:graph:gb1}@*)    global_barrier();
 (*@\label{line:graph:reset}@*)    reset(out_nodes);
@@ -981,9 +978,8 @@ kernel graph_app(global graph *g,
   while(in_nodes.size > 0) {
 (*@\label{line:cgraph:rechunking1}@*)    int tid = get_global_id();
 (*@\label{line:cgraph:rechunking2}@*)    int stride = get_global_size();
-    for (int i = tid; i < nodes.size; i += stride) {
+    for (int i = tid; i < nodes.size; i += stride)
       process_node(g, in_nodes[i], out_nodes, level);
-    }
     swap(&in_nodes, &out_nodes);
 (*@\label{line:cgraph:resizing1}@*)    resizing_global_barrier();
     reset(out_nodes);
@@ -1197,7 +1193,7 @@ to execute kernel $K$
 %kernel context $\KC$.
 (If the new kernel $K$ is itself a cooperative kernel, the scheduler
 would be free to provide $K$ with fewer than $N$ active workgroups
-initially.)
+initially).
 
 If a cooperative kernel $K_c$ is executing with fewer workgroups than
 it initially requested, the scheduler may decide make extra workgroups
@@ -1341,7 +1337,7 @@ game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 \crule[Gray1]{.2cm}{.2cm} Pannotia \hspace{.4cm} \crule[Gray2]{.2cm}{.2cm} Lonestar GPU  \hspace{.4cm}  \crule[Gray3]{.2cm}{.2cm} work stealing
 \caption{Blocking GPU applications investigated}
 \label{tab:applications}
-\vspace{-8mm}
+\vspace{-10mm}
 \end{table}
 
 %\begin{table}[t]
@@ -1405,11 +1401,11 @@ processes~\cite{amd-defunct-process}.
 %cooperative kernels is not yet mature enough within AMD's drivers,
 %which we plan to discuss with engineers at AMD.
 %
-We thus ran our experimental campaign on the Intel GPUs. The results
+We thus ran our experiments on the Intel GPUs. The results
 were similar across the GPUs, so for conciseness, we report only on
 the Iris 6100 GPU (driver 20.19.15.4463) with a host CPU i3-5157U. The
-Iris has a reported 47 compute units. Results for the two other Intel
-GPUs are available in supplementary material.
+Iris has a reported 47 compute units. Results for the other Intel GPUs
+are available in supplementary material.
 
 
 \subsection{Sizing Non-Cooperative Kernels}\label{sec:sizingnoncoop}
@@ -1733,10 +1729,10 @@ non-cooperative kernels can be scheduled (median over all applications
 and inputs). We use the median as our data included some drastic
 outliers; these outliers appear to happen with applications/inputs in
 which the resizing barrier are not called very frequently and the
-graphics task asks for half or more resources. For example, a medium
-graphics workload for bfs on the rmat input has over an 8$\times$
-overhead, while the same application on the usa input has an overhead
-of 1.11$\times$. As \myfiglong\ref{fig:performance} shows, most of our
+graphics task asks for half or more of the resources. For example, a
+medium graphics workload for bfs on the rmat input has over an
+8$\times$ overhead when asking for all but one of the workgroups for
+graphics. As \myfiglong\ref{fig:performance} shows, most of our
 applications/inputs are much better behaved than this. Future work
 includes examining these problem applications/inputs in more detail,
 possibly to insert more calls to $\offerfork$ and $\offerkill$.
@@ -1807,13 +1803,12 @@ We present here a theoretical analysis of the overheads associated with
 sharing the GPU between graphics and compute tasks via kernel-level
 preemption.
 
-Let us assume that a graphics workload is required to be scheduled
-with period $P$ and duration $D$, and that a long-running compute
-kernel requires time $C$ to execute without interruption.  If we
-assume the cost of preemption is negligible (e.g.\ Nvidia have
-reported preemption times of 0.1 ms for Pascal~\cite{anandtech}), then
-the overhead associated with switching between compute and graphics
-every $P$ time steps is $P/(P-D)$.
+Given a graphics workload that is required to be scheduled with period
+$P$ and duration $D$, and that a compute kernel requires time $C$ to
+execute without interruption.  If we assume the cost of preemption is
+negligible (e.g.\ Nvidia have reported preemption times of 0.1 ms for
+Pascal~\cite{anandtech}), then the overhead associated with switching
+between compute and graphics every $P$ time steps is $P/(P-D)$.
 
 We compare this task-level preemption overhead model with our
 experimental results per graphics workload in
@@ -1822,8 +1817,8 @@ configuration that allowed us to meet to deadline of the graphics
 task.
 %
 Based on the above assumptions, our approach provides similar overhead
-for low and medium graphics workloads; however, for the high workload,
-our approach has a higher overhead.
+for low and medium graphics workloads, however, has a higher overhead for
+the high workload.
 
 Our poor performance for the heavy workload is because the graphics
 task requires half of the workgroups, which cripples the cooperative
@@ -1872,8 +1867,8 @@ workgroup can be re-scheduled from scratch if it has not yet committed
 side-effects~\cite{DBLP:conf/asplos/ParkPM15}.  Both approaches have
 been evaluated using simulators, over sets of regular GPU kernels.
 Very recent \nvidia GPUs (i.e. the Pascal architecture) support
-preemption, though, as discussted in \mysec{sec:intro} and
-\mysec{sec:nvidiacomparison}, it is not clear whether they guarantee
+preemption, though, as discussted in \mysec{\ref{sec:intro}} and
+\mysec{\ref{sec:nvidiacomparison}}, it is not clear whether they guarantee
 fairness or allow tasks to share GPU resources at the workgroup
 level~\cite{PascalWhitepaper}.
 
