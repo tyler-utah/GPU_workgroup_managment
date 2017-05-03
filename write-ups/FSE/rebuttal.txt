@@ -1,0 +1,76 @@
+R1: Choice of primitives (our semantics vs. yield semantics)
+
+In the case of a global barrier, adopting yield() semantics would
+force the cooperative kernel to block *completely* in the case where a
+single workgroup executes yield(), stalling the kernel until the given
+workgroup resumes.  Instead, our offer_kill allows a kernel to make
+progress with a smaller number of workgroups, with workgroups
+potentially joining again later via request_fork.  Thus our semantic
+deviation is by design, with specific benefits that we will explain
+better.
+
+R1: Explain why GPU vendors would prefer to burden programmers with
+the management of cooperative multitasking, rather than offering
+preemptive multitasking.
+
+* Tyler, can you have a stab at this?  Perhaps pull in "The possiblity
+  of more mature hardware preemption in the future"
+
+R1: Scientific novelty
+
+There is scientific novelty in applying the general idea of
+cooperative multitasking in the specific and emerging domain of GPU
+programming, and showing that in this context (which differs in many
+respects from previous applications of cooperative multitasking) it is
+possible to achieve promising performance results for a range of
+benchmarks.
+
+R1: Engineering novely
+
+There is engineering novelty in the design of our scheduler, the
+design of our smart resizing global barrier, and in the adaptation of
+a set of benchmarks to work with our programming model.  While our
+scheduler is a mock-up, the same design could be used for an
+implementation inside a GPU driver, by separating out the various
+components of the mega-kernel.  It is clear that a GPU driver
+implementation would only perform *better* than our mock-up, hence our
+experiments via the mock-up demonstrate that our approach is viable
+performance-wise.
+
+R1: The possibility of more mature hardware preemption in the future
+
+We argue in the paper (and can emphasise more strongly) that
+cooperative kernels can *complement* the scenario where there is
+hardware support for preemption: the programmer can use domain
+knowledge to suggest optimal points for preemption for high
+performance, but the GPU driver can exploit arbitrary hardware
+preemption to improve responsiveness if needed.
+
+R2: Thank you for your supportive remarks.  It could indeed be
+interesting to investigate the impact of imposing a minimum number of
+workgroups.
+
+R3: What type of applications would benefit from this model?
+
+* Graph algorithms, machine learning.  Tyler, can you do this one?
+  The reviewer wrote:
+
+"I wonder exactly what specific type of applications would benefit
+from this model.  The paper discusses some concrete examples, but
+mainly the examples I could figure out are graph processing
+applications.  The "job stealing" case seems to be a general way to
+run parallel computations, but does not convince as a specific
+application.  So, even though the paper points to a very long list of
+references, I could not appreciate the importance of the problem
+itself."
+
+R3: Choice of device-based scheduling
+
+Our paper presents the scheduling mechanism in a manner that is
+agnostic to whether it is implemented on host or device (section 4.2);
+the semantics of cooperative kernels are also agnostic to this. Our
+prototype implements the logic on the device to minimize host-device
+communication.  We have found this to be more expensive than
+device-to-device communication on our Intel platform, and anticipate
+the same on other platforms (e.g. the Nvidia PTX manual states that
+host-device fences have higher latency than device-device fences).
