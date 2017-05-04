@@ -13,8 +13,22 @@ R1: Explain why GPU vendors would prefer to burden programmers with
 the management of cooperative multitasking, rather than offering
 preemptive multitasking.
 
-* Tyler, can you have a stab at this?  Perhaps pull in "The possiblity
-  of more mature hardware preemption in the future"
+Preemptive multitasking for GPU workgroups is expensive as it requires
+managing the state of all the threads in the workgroup (256 for Intel
+HD5500) as well as the workgroup local memory (65 KB for Intel
+HD5500). Our cooperative kernel primitives are simple: in most
+applications they reside in a barrier primitive. Additionally, there
+is a active push for DSLs which generate OpenCL code for applications
+with irregular parallelism (see [22] from the paper). In these cases,
+the DSL compiler would be responsible for inserting the primitives,
+removing the burden from the programmer.
+
+We also emphasize that our approach does not compete with hardware
+preemption, but compliments it. A device supporting hardware
+preemption could still benefit from cooperative kernels, e.g. the
+device might attempt cheap preemption at cooperative kernel
+primitives, resorting to expensive hardware preemption only in dire
+situations.
 
 R1: Scientific novelty
 
@@ -52,17 +66,13 @@ workgroups.
 
 R3: What type of applications would benefit from this model?
 
-* Graph algorithms, machine learning.  Tyler, can you do this one?
-  The reviewer wrote:
-
-"I wonder exactly what specific type of applications would benefit
-from this model.  The paper discusses some concrete examples, but
-mainly the examples I could figure out are graph processing
-applications.  The "job stealing" case seems to be a general way to
-run parallel computations, but does not convince as a specific
-application.  So, even though the paper points to a very long list of
-references, I could not appreciate the importance of the problem
-itself."
+Applications which contain irregular parallelism (i.e. the amount of
+parallelism changes during application runtime) would benefit from
+this approach. The specific algorithms shown in the paper are largely
+graph processing. Examples of commercial applications that use these
+algorithms are: speech decoding (graph traversal), GPS routing (graph
+traversal), and mesh rendering (octree partitioning). We will add
+references for these applications.
 
 R3: Choice of device-based scheduling
 
