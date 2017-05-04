@@ -17,7 +17,7 @@ managing the state of all the threads in the workgroup (256 for Intel
 HD5500) as well as the workgroup local memory (65 KB for Intel
 HD5500). Our cooperative kernel primitives are simple: in most
 applications, they reside in a barrier primitive. Additionally, our
-method would complement, not compete with, future devices which may
+method would complement, not compete with, future devices that may
 support hardware preemption (see next point).
 
 R1: The possibility of more mature hardware preemption in the future
@@ -38,7 +38,7 @@ respects from previous applications of cooperative multitasking) it is
 possible to achieve promising performance results for a range of
 benchmarks.
 
-R1: Engineering novely
+R1: Engineering novelty
 
 There is engineering novelty in the design of our scheduler, the
 design of our smart resizing global barrier, and in the adaptation of
@@ -56,7 +56,7 @@ workgroups.
 
 R3: What type of applications would benefit from this model?
 
-Applications which contain irregular parallelism would benefit from
+Applications that contain irregular parallelism would benefit from
 this approach. Examples of day-to-day applications that use these, or
 similar, algorithms are speech decoding (graph traversal), GPS
 routeing (graph traversal), and mesh rendering (octree
