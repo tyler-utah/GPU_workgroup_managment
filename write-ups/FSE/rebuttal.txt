@@ -9,26 +9,25 @@ potentially joining again later via request_fork.  Thus our semantic
 deviation is by design, with specific benefits that we will explain
 better.
 
-R1: Explain why GPU vendors would prefer to burden programmers with
-the management of cooperative multitasking, rather than offering
-preemptive multitasking.
+R1: Explain why GPU vendors would burden programmers with
+cooperative multitasking, rather than offering preemptive multitasking.
 
 Preemptive multitasking for GPU workgroups is expensive as it requires
 managing the state of all the threads in the workgroup (256 for Intel
 HD5500) as well as the workgroup local memory (65 KB for Intel
 HD5500). Our cooperative kernel primitives are simple: in most
-applications they reside in a barrier primitive. Additionally, there
-is a active push for DSLs which generate OpenCL code for applications
-with irregular parallelism (see [22] from the paper). In these cases,
-the DSL compiler would be responsible for inserting the primitives,
-removing the burden from the programmer.
+applications, they reside in a barrier primitive. Additionally, our
+method would complement, not compete with, future devices which may
+support hardware preemption (see next point).
 
-We also emphasize that our approach does not compete with hardware
-preemption, but compliments it. A device supporting hardware
-preemption could still benefit from cooperative kernels, e.g. the
-device might attempt cheap preemption at cooperative kernel
-primitives, resorting to expensive hardware preemption only in dire
-situations.
+R1: The possibility of more mature hardware preemption in the future
+
+We argue in the paper (and can emphasise more strongly) that
+cooperative kernels can *complement* the scenario where there is
+hardware support for preemption: the programmer can use domain
+knowledge to suggest optimal points for preemption, but the GPU driver
+can exploit arbitrary hardware preemption to improve responsiveness if
+needed.
 
 R1: Scientific novelty
 
@@ -51,36 +50,21 @@ implementation would only perform *better* than our mock-up, hence our
 experiments via the mock-up demonstrate that our approach is viable
 performance-wise.
 
-R1: The possibility of more mature hardware preemption in the future
-
-We argue in the paper (and can emphasise more strongly) that
-cooperative kernels can *complement* the scenario where there is
-hardware support for preemption: the programmer can use domain
-knowledge to suggest optimal points for preemption for high
-performance, but the GPU driver can exploit arbitrary hardware
-preemption to improve responsiveness if needed.
-
 R2: Thank you for your supportive remarks.  It could indeed be
 interesting to investigate the impact of imposing a minimum number of
 workgroups.
 
 R3: What type of applications would benefit from this model?
 
-Applications which contain irregular parallelism (i.e. the amount of
-parallelism changes during application runtime) would benefit from
-this approach. The specific algorithms shown in the paper are largely
-graph processing. Examples of commercial applications that use these
-algorithms are: speech decoding (graph traversal), GPS routing (graph
-traversal), and mesh rendering (octree partitioning). We will add
-references for these applications.
+Applications which contain irregular parallelism would benefit from
+this approach. Examples of day-to-day applications that use these, or
+similar, algorithms are speech decoding (graph traversal), GPS
+routeing (graph traversal), and mesh rendering (octree
+partitioning). We will add references for these applications.
 
 R3: Choice of device-based scheduling
 
-Our paper presents the scheduling mechanism in a manner that is
-agnostic to whether it is implemented on host or device (section 4.2);
-the semantics of cooperative kernels are also agnostic to this. Our
-prototype implements the logic on the device to minimize host-device
-communication.  We have found this to be more expensive than
-device-to-device communication on our Intel platform, and anticipate
-the same on other platforms (e.g. the Nvidia PTX manual states that
-host-device fences have higher latency than device-device fences).
+We present the scheduling mechanism and semantics of cooperative
+kernels in a manner that is agnostic to whether it is implemented on
+host or device (section 4.2); Our prototype implements the logic on
+the device to minimize expensive host-device communication.
