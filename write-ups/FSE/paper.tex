@@ -5,8 +5,25 @@
 % PLDI'16 web site.
 %
 
-\documentclass[parskip=half,sigconf,review, anonymous=true, acmcopyrightmode=none]{acmart}
-\acmConference[ESEC/FSE 2017]{11th Joint Meeting of the European Software Engineering Conference and the ACM SIGSOFT Symposium on the Foundations of Software Engineering}{4--8 September, 2017}{Paderborn, Germany}
+\documentclass[sigconf]{acmart}
+
+%%% The following is specific to ESEC/FSE'17 and the paper
+%%% 'Cooperative Kernels: GPU Multitasking for Blocking Algorithms'
+%%% by Tyler Sorensen, Hugues Evrard, and Alastair F. Donaldson.
+%%%
+%%% If you see 'none' in the 'setcopyright' statement below,
+%%% please first submit your publishing-rights agreement with ACM (follow link on submission page),
+%%% and then visit the instructions page again (follow link in author-kit message)
+%%% in order to copy the correct 'setcopyright' statement.  Please contact us in case of questions.
+%%%
+\setcopyright{none}
+\acmDOI{10.1145/3106237.3106265}
+\acmISBN{978-1-4503-5105-8/17/09}
+\acmConference[ESEC/FSE'17]{2017 11th Joint Meeting of the European Software Engineering Conference and the ACM SIGSOFT Symposium on the Foundations of Software Engineering}{September 4-8, 2017}{Paderborn, Germany} 
+\acmYear{2017}
+\copyrightyear{2017}
+\acmPrice{15.00}
+
 
 %\documentclass[preprint,numbers,nocopyrightspace,10pt]{sigplanconf}
 % \documentclass[pldi-cameraready]{sigplanconf-pldi16}
@@ -123,7 +140,7 @@
   xleftmargin=2em,
   %commentstyle=\rmfamily\itshape,
   morekeywords={barrier,kernel,global,__device__,__syncthreads,__global__,bool,then,transmit},
-  escapeinside={(*@}{@*)},
+  escapeinside={//(*@}{@*)},
   numbers=left
 }
 
