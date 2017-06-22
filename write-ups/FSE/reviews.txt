@@ -1,0 +1,166 @@
+----------------------- REVIEW 1 ---------------------
+PAPER: 121
+TITLE: Cooperative Kernels: GPU Multitasking for Blocking Algorithms
+AUTHORS: Tyler Sorensen, Hugues Evrard and Alastair Donaldson
+
+
+----------- Summary -----------
+The paper describes the design and prototype implementation of a mechanism based on cooperative multitasking, which allows GPUs to execute more tasks than the number allowed by their resources.  This is achieved through primitives that signal when a task can be swapped out, when more tasks are required, and when tasks must be synchronized.  The design is validated by implementing sample algorithms and running them on the prototype implementation together with tasks that simulate the use of the GPU for everyday user interaction tasks.  The overhead and task switching time are found to be acceptable.
+
+----------- Detailed Evaluation -----------
+The authors propose a solution to a practical problem and test it in a scenario that mirrors the requirements of actual applications.  The paper is also well written, motivated, and structured.  However, it is difficult to claim scientific novelty or an important engineering contribution.  From the scientific side, as the authors acknowledge in the related work section, cooperative multitasking is a technique that has been known and used for decades.  (IBM's late 1960s CICS is a notable example.)  On the engineering side, although the authors' implementation is solid, it is only a mock-up prototype of functionality they propose others will incorporate in OpenCL implementations.  Sadly history is not on the authors' side.  What we have seen in the past with systems such as Mac OS classic, Microsoft Windows up to 3.1, early C thread implementations [1], and IBM TopView, is that hardware capabilities quickly evolve to allow preemptive multitasking, and at that point users switc!
+ h to it to benefit from its simplicity and versatility.
+
+The proposed primitives appear to be unusual.  Typically, rather than the proposed "offer_kill" primitive, programs in a preemptive multitasking environment call a "yield" function, which allows the system to take over the resources associated with the corresponding caller.  I suspect there are engineering reasons for proposing the particular primitives, but these should be better explained.
+
+Section 2.2 would benefit from a short introduction explaining how the proposed examples fail in current implementations.
+
+Given that the authors propose that the OpenCL (and other frameworks) be modified to incorporate their non-cooperative kernel implementation, they should explain why GPU vendors would prefer to adopt the authors' approach over a more functional preemptive multitasking one.  Are particular properties of GPU hardware or software stack (e.g. size of context) hindering the use of preemptive multitasking?  How is the effect of these properties minimized under the authors' proposed approach?
+
+Minor Issues
+- is not endorsed language standards -> is not endorsed by language standards
+- can be occupant concurrently -> can be occupied concurrently
+
+
+[1] Marc Tarpenning. Cooperative Multitasking in C++. Dr. Dobb's Journal, April 01, 1991/
+
+----------- Strengths and Weaknesses -----------
++ Provision of fair scheduling within workgroups
++ Model can coexist with non-coooperative compute and graphics kernels
++ Solid engineering and evaluation of the prototype implementation
+- Limited scientific and engineering contribution
+- History not on the authors' side
+- Unclear rational behind the work's design choices
+
+----------- Questions to the authors -----------
+- Please outline the rationale behind your choice of the particular primitives you propose.
+
+- Explain why GPU vendors would prefer to burden programmers with the management of cooperative multitasking, rather than offering preemptive multitasking.
+
+----------------------- REVIEW 2 ---------------------
+PAPER: 121
+TITLE: Cooperative Kernels: GPU Multitasking for Blocking Algorithms
+AUTHORS: Tyler Sorensen, Hugues Evrard and Alastair Donaldson
+
+
+----------- Summary -----------
+In this paper, the authors propose an extension to the current GPU programming model to enable multitasking on the GPU with help of cooperative kernels. The main idea is to provide long-running, blocking GPU kernels with the possibility to indicate to a scheduler when they reached a phase in their execution in which they could give up processing units or in which their execution could benefit from more processing units. The scheduler makes use of these signals to reassign processing units to kernels, which makes it possible to execute a long-running kernel on all available processing units as long as there is no other kernel to be executed and resize this kernel when needed to execute other kernels.
+  In order to facilitate this resizing, the authors describe a few additions to the OpenCL C programming language and how these additions can be used to convert implementations of irregular blocking algorithms into cooperative kernel implementations. The authors then evaluate their cooperative kernel approach using a mock up implementation simulating hardware and driver support for their extension. Based on this implementation, they conclude that their approach is a feasible way to enable multitasking of long-running kernels on the GPU and suggest that actual driver and hardware support would have a reasonable potential to improve the performance of their approach.
+
+----------- Detailed Evaluation -----------
+Significance and Relevance:
+  The contribution of this paper, the extension of the GPU programming model to allow cooperative scheduling of long-running kernels, is significant, since efficient GPU scheduling mechanisms are likely to be needed in the near future. One reason for this is the more wide spread use of GPUs to handle computation tasks, which deviate from the classical, short-running computer graphics workloads. Therefore, fair scheduling on the GPU is needed.
+  While, as the authors point out, there are other ways to achieve fair scheduling, such as kernel level preemption, their cooperative kernels approach appears to be an efficient way to do scheduling by handing the main responsibility for efficient kernel execution to the programmers rather than the hardware. In my opinion, the proposed approach constitutes a reasonable trade-off between changes to the GPU programming model and its implementation, and the benefits obtained by letting programmers influence the scheduling of their long-running GPU kernels.
+  The proposed cooperative kernels approach is therefore relevant to programmers, who develop end user applications using the general compute capabilities of GPUs to perform long-running computations.
+  
+  Soundness:
+  The proposed approach appears to be well thought out and does not seem have any obvious flaws or shortcomings. For instance, the mechanism for sharing the current state of a kernel execution with a newly added workgroup after a "request_fork" with help of immutable kernel parameters, "transmit" variables and modified OpenCL C functions, appears to be a reasonable way to integrate a new workgroup into the computation with minimal overhead.
+  Similarly to the proposed approach, the conducted evaluation appears to be sound, despite the use of a mock up implementation. The limitations of the mock up implementation are well explained and do not appear to threaten the validity of the obtained results for the proposed cooperative kernels approach. Also, the chosen algorithms and experiments seem suitable to evaluate the different aspects of the proposed solution, such as the general overhead introduced by adding the support for cooperative kernels, as well as the actual performance of the enabled multitasking.
+  Lastly, the conclusion drawn from the evaluation, that the proposed cooperative kernels approach is a viable possibility for fair scheduling on a GPU appears to follow logically from the obtained measurement results. Additionally, the claim that a driver and hardware implementation of the proposed approach would perform better than the evaluated mock up implementation seems reasonable as well.
+  
+  Clarity:
+  The paper is well structured and easy to follow. The explanations and examples given in the paper are easy to understand and help to communicate the general idea of the proposed cooperative kernels approach. Similarly, the provided figures and tables, while used sparingly, are well suited to explain the approach and illustrate the obtained results.
+  
+  Minor editing problems:
+    - nodes.size should probably be in_nodes.size in Figure 3 line 9 and Figure 4 line 9
+    - "This [is] simple model" (page 1 column 2 line number 21)
+    - "can execute request_fork to indicate[s]" (p. 2 col. 1 ln. 22)
+    - "of cooperative kernels on top [of] OpenCL 2.0" (p. 2 col. 2 ln. 16)
+    - "Active work[g]roups. If the host" (p. 4 col. 1 ln. 28)
+    - "takes the role of [the] scheduler" (p. 6 col. 1 ln.56)
+    - "mutual exclusion between [a] pairs" (p. 7 col. 1 ln. 36)
+    - "AMD support[s] SVM" (p. 8 col. 1 ln. 9)
+    - "SVM atomics only [in] their Kaveri" (p. 8 col. 1 ln. 10)
+    - "allowed us to meet [to][the] deadline" (p. 10 col. 1 ln. 44)
+    - "scheme may work [the well][best] for" (p. 10 col. 1 ln. 53)
+    - "megakernel-based prototype show[s] that" (p. 10 col. 2 ln. 48)
+
+----------- Strengths and Weaknesses -----------
+Strength:
+    - significant contribution by proposing a fair scheduling mechanism for the GPU based on cooperative scheduling
+    - well thought through solution
+    - sound evaluation of the proposed approach
+    - clearly structured paper with understandable explanations of the proposed approach and good figures and tables to illustrate the obtained results
+    
+  Weakness:
+    - few minor editing problems
+
+----------- Questions to the authors -----------
+In general, I believe the paper is very clear and understandable, so that I do not need any clarifications. However, I was wondering if you would consider it useful, if programmers were able to specify how many workgroups a kernel should at least occupy at any given time? For example, based on your approach, a programmer specifies the maximum number of used workgroups N when starting a kernel execution, but at the moment, the number of active workgroups can shrink to 1, which might not always be a viable alternative.
+
+----------------------- REVIEW 3 ---------------------
+PAPER: 121
+TITLE: Cooperative Kernels: GPU Multitasking for Blocking Algorithms
+AUTHORS: Tyler Sorensen, Hugues Evrard and Alastair Donaldson
+
+
+----------- Summary -----------
+The OpenCL and CUDA frameworks define a programming model for GPUs in
+which a data parallel task a "kernel" can be executed by a large
+number of threads.  A kernel is divided up into "workgroups" (or
+"blocks"), which contain a fixed number of threads, and are the only
+units of scheduling for the GPU.  This means that the GPU schedules
+entire workgroups, but does not guarantee any ordering between
+workgroups.  This in turn means that all the threads within a
+workgroups run (concurrently), but there is no guarantee on which
+workgroups will execute when, or even whether they will execute at all
+(in case other workgroups do not terminate).  Furthermore, while there
+are synchronization primitives within a workgroup, there are no such
+primitives at the global level between workgroups, and since there is
+no fair scheduling between workgroups, such synchronization primitives
+can not be reliably implemented using atomic operations on global
+memory.
+
+And yet some programs require or would benefit from a kind of flexible
+and fair scheduling of workgroups.  This paper proposes and
+demonstrates an extension to the OpenCL (and CUDA) programming model
+that supports such scheduling of workgroups from within kernels.
+
+The proposed extension include the basic primitives for forking and
+yielding (cooperative), and also some primitives for initializing
+internal variables for the newly forked workgroups, as well as a
+couple of types of global barriers.
+
+----------- Detailed Evaluation -----------
+Two questions come to mind when considering the proposed computational
+model.  I wonder exactly what specific type of applications would
+benefit from this model.  The paper discusses some concrete examples,
+but mainly the examples I could figure out are graph processing
+applications.  The "job stealing" case seems to be a general way to
+run parallel computations, but does not convince as a specific
+application.  So, even though the paper points to a very long list of
+references, I could not appreciate the importance of the problem
+itself.
+
+Another question that seems totally natural to me is on the main
+choice of architecture.  I wonder whether it would make more sense to
+do the scheduling on the host as opposed to the device.  So, at a
+basic level, it seems that one could implement the same (or similar)
+cooperative scheduling framework by putting the scheduler on the host.
+This should be doable by launching independent kernels, possibly in
+streams to improve overall throughput.  Of course, this idea does not
+invalidate the whole notion of the new programming model, but still,
+it might be a better solution in general.
+
+Along the same line, and more fundamentally thinking about the
+programming model, another question is whether a host-based scheduling
+mechanism wouldn't make things better in terms of efficiency, by
+avoiding or significantly reducing the gather times and again through
+streaming.  And it might even improve expressiveness or ease of
+development, since it could take advantage of additional
+synchronization and task break-down operations on the more flexible
+host system.
+
+----------- Strengths and Weaknesses -----------
+Strengths: interesting topic somewhere in between programming models
+and parallel programming; well developed ideas; solid evaluation; very
+well written paper.
+
+Weaknesses: possibly weak interest within the Software Engineering
+community.
+
+----------- Questions to the authors -----------
+Have you considered a host-based scheduler?  if so, what are the pros
+and cons?
+
+------------------------------------------------------
