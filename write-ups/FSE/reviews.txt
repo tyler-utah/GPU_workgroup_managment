@@ -60,6 +60,8 @@ Significance and Relevance:
   
   Clarity:
   The paper is well structured and easy to follow. The explanations and examples given in the paper are easy to understand and help to communicate the general idea of the proposed cooperative kernels approach. Similarly, the provided figures and tables, while used sparingly, are well suited to explain the approach and illustrate the obtained results.
+
+GOT HERE
   
   Minor editing problems:
     - nodes.size should probably be in_nodes.size in Figure 3 line 9 and Figure 4 line 9

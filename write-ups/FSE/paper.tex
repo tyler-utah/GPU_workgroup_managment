@@ -245,6 +245,14 @@ can be implemented in practice.
 \newcommand{\myparagraph}[1]{\vspace{1mm}\noindent\emph{\textbf{#1.}}}
 %{\noindent{\bf\emph{#1}}\hspace{1em}}
 
+\ADComment{Reviewer comment: Given that the authors propose that the OpenCL (and other frameworks) be modified to incorporate their non-cooperative kernel implementation, they should explain why GPU vendors would prefer to adopt the authors' approach over a more functional preemptive multitasking one.  Are particular properties of GPU hardware or software stack (e.g. size of context) hindering the use of preemptive multitasking?  How is the effect of these properties minimized under the authors' proposed approach?}
+
+\ADComment{Get something in on NVIDIA's recent developments.}
+
+\ADComment{Possibly cite: Marc Tarpenning. Cooperative Multitasking in C++. Dr. Dobb's Journal, April 01, 1991}
+
+\ADComment{Please outline the rationale behind your choice of the particular primitives you propose.}
+
 \section{Introduction}\label{sec:intro}
 
 \myparagraph{The needs of irregular data-parallel algorithms}
@@ -540,6 +548,8 @@ threads.
 
 \subsection{Motivating Examples}\label{sec:openclexamples}
 
+\ADComment{Reviewer comment: Section 2.2 would benefit from a short introduction explaining how the proposed examples fail in current implementations.}
+
 \begin{figure}[t]
 
 \begin{lstlisting}
@@ -667,7 +677,7 @@ workgroups than there are compute units.  This is due to the fairness
 of the occupancy-bound execution model that current GPUs have been
 shown, experimentally, to provide.  But, as discussed in
 \mysec\ref{sec:intro}, this model is not endorsed
-language standards or vendor implementations, and is unlikely to be respected in the future.
+by language standards or vendor implementations, and is unlikely to be respected in the future.
 %
 In \mysec\ref{sec:programmingguidelines} we show how the work stealing
 and graph traversal examples of \myfigs\ref{fig:workstealing} and~\ref{fig:graphsearch} can be
