@@ -45,7 +45,7 @@
 \usepackage[shortcuts]{extdash} % hyphenation, see http://stackoverflow.com/questions/2193307/how-do-i-get-latex-to-hyphenate-a-word-that-contains-a-dash#8649145
 
 \usepackage[normalem]{ulem}
-%\usepackage{amsmath}
+\usepackage{amsmath}
 \usepackage{calc}
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
@@ -2175,9 +2175,9 @@ workgroups nor the component of a thread state that determines which
 statements remain to be executed.
 
 \begin{figure*}
-\begin{center}
-
+\center
 \[
+$$
 \inferrule{
 w_i(j) = (l, \myss)
 \\
@@ -2189,11 +2189,13 @@ w_i' = w_i[j \mapsto (l', \myss')]
 (\sigma, (\dots, w_i, \dots)) \rightarrow (\sigma', (\dots, w_i', \dots))
 }
 (\textsc{Thread-Step})
+$$
 \]
 
 \medskip
 
 \[
+$$
 \inferrule{
 \forall j \;.\; w_i(j) = (l_j, \offerkill();\myss)
 \\
@@ -2203,11 +2205,13 @@ w_i' = ((l_0, \myss), \dots, (l_{d-1}, \myss))
 (\sigma, (\dots, w_i, \dots)) \rightarrow (\sigma, (\dots, w_i', \dots))
 }
 (\textsc{Kill-No-Op})
+$$
 \]
 
 \medskip
 
 \[
+$$
 \inferrule{
 \forall j \;.\; w_{M-1}(j) = (l_j, \offerkill();\myss)
 \\
@@ -2217,11 +2221,13 @@ M > 0
 (\sigma, (\dots, w_{M-2}, w_{M-1}, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_{M-2}, \bot, \bot, \dots, \bot))
 }
 (\textsc{Kill})
+$$
 \]
 
 \medskip
 
 \[
+$$
 \inferrule{
 \forall j \;.\; w_i(j) = (l_j, \offerfork();\myss)
 \\
@@ -2235,11 +2241,13 @@ k \in [0, N - M]
 (\sigma, (\dots, w_i, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow (\sigma, (\dots, w_i', \dots, w_{M-1}, w_{M}, \dots, w_{M+k-1}, \bot, \dots, \bot))
 }
 (\textsc{Fork})
+$$
 \]
 
 \medskip
 
 \[
+$$
 \inferrule{
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \globalbarrier();\myss)
 \\
@@ -2251,11 +2259,13 @@ k \in [0, N - M]
 (\sigma, (w_{0}, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow \kappa
 }
 (\textsc{Barrier})
+$$
 \]
 
 \medskip
 
 \[
+$$
 \inferrule{
 \forall i \;.\;\forall j\;.\;w_i(j) = (l_{i,j}, \resizingglobalbarrier();\myss)
 \\
@@ -2267,9 +2277,8 @@ k \in [0, N - M]
 (\sigma, (w_{0}, \dots, w_{M-1}, \bot, \dots, \bot)) \rightarrow (\sigma, (w_{0}', \dots, w_{M-1}', \bot, \dots, \bot))
 }
 (\textsc{Resizing-Barrier})
+$$
 \]
-
-\end{center}
 
 \caption{Abstract operational semantics for our cooperative kernels language extensions}\label{fig:semanticrules}
 
