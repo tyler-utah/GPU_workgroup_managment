@@ -197,6 +197,7 @@
 
 \newcommand{\NumAlgorithms}{8}
 
+\usepackage{flushend}
 \begin{document}
 
 \title{Cooperative Kernels: GPU Multitasking for Blocking Algorithms}
@@ -248,6 +249,32 @@ can be implemented in practice.
 
 \end{abstract}
 
+\begin{CCSXML}
+<ccs2012>
+<concept>
+<concept_id>10011007.10010940.10010941.10010949.10010957.10010959</concept_id>
+<concept_desc>Software and its engineering~Multiprocessing / multiprogramming / multitasking</concept_desc>
+<concept_significance>500</concept_significance>
+</concept>
+<concept>
+<concept_id>10011007.10011006.10011039.10011311</concept_id>
+<concept_desc>Software and its engineering~Semantics</concept_desc>
+<concept_significance>100</concept_significance>
+</concept>
+<concept>
+<concept_id>10010147.10010371.10010387.10010389</concept_id>
+<concept_desc>Computing methodologies~Graphics processors</concept_desc>
+<concept_significance>300</concept_significance>
+</concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Software and its engineering~Multiprocessing / multiprogramming / multitasking}
+\ccsdesc[100]{Software and its engineering~Semantics}
+\ccsdesc[300]{Computing methodologies~Graphics processors}
+
+\keywords{GPU, cooperative multitasking, irregular parallelism}
+
 
 %
 % any author declaration will be ignored  when using 'pldi' option (for double blind review)
@@ -275,19 +302,16 @@ can be implemented in practice.
 
 \section{Introduction}\label{sec:intro}
 
-\myparagraph{The needs of irregular data-parallel algorithms}
+\myparagraph{The Needs of Irregular Data-parallel Algorithms}
 %Acceleration of general-purpose computations on graphics processing
 %units (GPUs) has tended to focus on \emph{regular} data-parallel
 %algorithms, for which work to be processed can be evenly split between
 %the workgroups that execute a GPU kernel ahead of time.  However,
 Many interesting data-parallel algorithms are \emph{irregular}: the
 amount of work to be processed is unknown ahead of time and may be
-determined by the computation itself.  There is growing interest in
+determined during computation.  There is growing interest in
 accelerating such algorithms on
-GPUs~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}. \TSAdded{Such
-  algorithms include octree partitioning, which has applications in
-  particle simulations; and graph traversals, which have applications
-  in speech decoding.}
+GPUs~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}. 
 
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups.  For example, many graph algorithms employ a level-by-level
@@ -304,7 +328,7 @@ released.  Similarly, an unfair scheduler can cause a workgroup to spin-wait
 indefinitely at a global barrier so that other workgroups do not reach the barrier.
 
 %\vspace{-1mm}
-\myparagraph{A degree of fairness: occupancy-bound execution} The current GPU programming
+\myparagraph{A Degree of Fairness: Occupancy-bound Execution} The current GPU programming
 models---OpenCL~\cite{opencl2Spec}, CUDA~\cite{cuda-75} and
 HSA~\cite{HSAprogramming11}, specify almost no guarantees regarding
 scheduling of workgroups, and current GPU schedulers are unfair in
@@ -320,9 +344,8 @@ model~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16} where,
 once a workgroup has commenced execution on a compute unit (it has
 become \emph{occupant}), the workgroup has exclusive access to the
 compute unit until it finishes execution.
-This simple model is easy to implement
-efficiently, and experiments suggest that
-it is widely employed by today's
+Experiments suggest that this model
+is widely employed by today's
 GPUs~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/oopsla/PaiP16,BNP12}.
 
 
@@ -346,7 +369,7 @@ execution model, which they exploit by launching no more workgroups
 than there are available compute units~\cite{owens-persistent}.
 
 %\vspace{-1mm}
-\myparagraph{Resistance to occupancy-bound execution}
+\myparagraph{Resistance to Occupancy-bound Execution}
 Despite its practical prevalence, none of the current GPU programming
 models actually mandate occupancy-bound execution.  Further, there are
 reasons why this model is undesirable.
@@ -355,53 +378,53 @@ reasons why this model is undesirable.
 First, the execution model does not enable
 multitasking, because a workgroup effectively \emph{owns} a compute
 unit until the workgroup has completed execution.  The GPU cannot be used meanwhile for other
-tasks, such as graphics rendering.
+tasks (e.g.\ graphics rendering).
 %Precisely because
 %of this problem, operating systems employ a GPU \emph{watchdog} to
 %heuristically detect and kill long-running computations on the GPU
 %being used for display rendering~\cite{DBLP:conf/iwocl/SorensenD16}.
-Second, \emph{energy throttling} is
-an important concern for battery-powered devices~\cite{DBLP:journals/comsur/Vallina-RodriguezC13}.  In the future, it will be desirable for a mobile GPU driver to
-power down some compute units if the battery level is low.
-Implementing energy
-throttling would require being able to suspend the execution of a
-workgroup, powering down the compute unit to which the workgroup was
-bound, something that the occupancy-bound execution model does not allow.
+Second, \emph{energy throttling} is an important concern for
+battery-powered
+devices~\cite{DBLP:journals/comsur/Vallina-RodriguezC13}.  In the
+future, it will be desirable for a mobile GPU driver to power down
+some compute units, and hence suspend the execution of the occupant
+workgroup, if the battery level is low.
+%Implementing energy
+%throttling would require being able to suspend the execution of a
+%workgroup, powering down the compute unit to which the workgroup was
+%bound, something that the occupancy-bound execution model does not allow.
 
 Our assessment, informed by discussions with a number of industrial
 practitioners who have been involved in the OpenCL and/or HSA
 standardisation efforts
-(including~\cite{PersonalCommunicationRichards,PersonalCommunicationHowes}
-and various engineers from GPU vendors), is that GPU vendors (1) will
-not commit to the occupancy-bound execution model they currently
-implement, for the above reasons, yet (2) will not guarantee fair
-scheduling \TSAdded{using preemption. This is due to the high runtime
-  cost of preempting workgroups on GPUs, which requires managing
-  thread local state (e.g. registers, program location) for all
-  threads in a workgroup (up to 1024 on Nvidia GPUs), as well as
-  \emph{shared memory}, the workgroup local cache (up to 64 KB on
-  Nvidia GPUs)}.  Vendors instead wish to retain the essence of the
-  simple occupancy-bound model, supporting preemption only in key
-  special cases.
+(including~\cite{PersonalCommunicationRichards,PersonalCommunicationHowes}),
+is that GPU vendors (1) will not commit to the occupancy-bound
+execution model they currently implement, for the above reasons, yet
+(2) will not guarantee fair scheduling \TSAdded{using preemption. This
+  is due to the high runtime cost of preempting workgroups, which
+  requires managing thread local state (e.g. registers, program
+  location) for all workgroup threads (up to 1024 on Nvidia
+  GPUs), as well as \emph{shared memory}, the workgroup local cache
+  (up to 64 KB on Nvidia GPUs)}.  Vendors instead wish to retain the
+essence of the simple occupancy-bound model, supporting preemption
+only in key special cases.
 
-For example, Nvidia's latest architecture (Pascal) is documented to
-support instruction-level preemption~\cite{PascalWhitepaper}. Despite
-this, Nvidia's most recent compute capability does not guarantee
-forward progress for CUDA programmers (evidence that vendors will not
-yet commit to providing such guarantees).  Indeed, on a GTX Titan X
-(Pascal) we still observe starvation: we found that a global barrier
-can be executed successfully with 56 workgroups, but deadlocks with 57
-workgroups.  This is an example of a vendor supporting preemption, yet
-not guaranteeing fair scheduling.
+For example, Nvidia's Pascal architecture supports
+preemption~\cite{PascalWhitepaper}. Despite this, the device still
+does not guarantee forward progress. Indeed, on a GTX Titan X (Pascal)
+we still observe starvation: we found that a global barrier can be
+executed successfully with 56 workgroups, but deadlocks with 57
+workgroups.  Thus, although preemption is supported, there is not fair
+scheduling.
 
 %\vspace{-1mm}
-\myparagraph{Our proposal: cooperative kernels}
+\myparagraph{Our Proposal: Cooperative Kernels}
 %
 To summarise: blocking algorithms
 demand fair scheduling,
 % of workgroups,
 but for good reasons
-GPU vendors will not commit even to the guarantees of the
+GPU vendors will not commit to the guarantees of the
 occupancy-bound execution model.
 %
 We propose \emph{cooperative kernels}, an extension to the GPU
@@ -443,19 +466,17 @@ possible.
 \TSAdded{Cooperative kernels allow for \emph{cooperative multitasking}
   (see \mysec{\ref{sec:relatedwork}}), a multitasking approach used
   historically when preemption was not available or, in the case of
-  GPUs, too costly (see previous paragraph). Our approach avoids the
-  cost of preemptive multitasking as the state of a workgroup killed
-  via $\offerkill$ does not have to be saved. Previous cooperative
-  multitasking systems often provide \emph{yield} based semantics,
-  where a processing unit would temporarily give up its hardware
-  resource. We intentionally deviate from this design as in the case
-  of a global barrier (a common idiom in the applications we study),
-  adopting yield semantics would force the cooperative kernel to block
-  \emph{completely} in the case where a single workgroup yields,
-  stalling the kernel until the given workgroup resumes.  Instead, our
-  $\offerkill$ allows a kernel to make progress with a smaller number
-  of workgroups, with workgroups potentially joining again later via
-  $\offerfork$.}
+  GPUs, too costly. Our approach avoids the cost of arbitrary
+  preemption as the state of a workgroup killed via $\offerkill$ does
+  not have to be saved. Previous cooperative multitasking systems have
+  provided \emph{yield} semantics, where a processing unit would
+  temporarily give up its hardware resource. We deviate from this
+  design as, in the case of a global barrier, adopting yield would
+  force the cooperative kernel to block \emph{completely} in the case
+  where a single workgroup yields, stalling the kernel until the given
+  workgroup resumes.  Instead, our $\offerkill$ allows a kernel to
+  make progress with a smaller number of workgroups, with workgroups
+  potentially joining again later via $\offerfork$.}
 
 
 
@@ -484,7 +505,7 @@ properties:
 %, as can graphics shading routines written using APIs such as
 %OpenGL, Vulkan and DirectX.
 
-\item The model is backwards-compatible: if $\offerkill$ and $\offerfork$ are ignored, a cooperative kernel will behave
+\item The model is backwards-compatible: $\offerkill$ and $\offerfork$ may be ignored, and a cooperative kernel will behave
   exactly as a regular kernel does on current GPUs.
 
 \item Cooperative kernels can be implemented over the occupancy\-/bound
@@ -551,15 +572,17 @@ $\getlocalsize$ and $\getnumgroups$.
 %id are related by $\getglobalid = \getgroupid \times
 %\getlocalsize + \getlocalid$.  The total number of threads executing the
 %kernel is given by $\getglobalsize = \getlocalsize \times \getnumgroups$.
-
+%
 Execution of the threads in a workgroup can be synchronised via a
-workgroup barrier. This barrier is a \emph{workgroup-level} function:
-it can only appear in conditional code if all threads in a workgroup
-that reach the barrier agree on the guards of all enclosing
-conditional statements.  A \emph{global} barrier (synchronising all
+workgroup barrier. 
+%This barrier is a \emph{workgroup-level} function:
+%it can only appear in conditional code if all threads in a workgroup
+%that reach the barrier agree on the guards of all enclosing
+%conditional statements.  
+A \emph{global} barrier (synchronising all
 threads of a kernel) is \emph{not} provided as a primitive.
 
-\myparagraph{Memory spaces and memory model} A kernel has access to
+\myparagraph{Memory Spaces and Memory Model} A kernel has access to
 four memory spaces.  \emph{Shared virtual memory} (SVM) is accessible
 to all device threads and the host concurrently.  \emph{Global} memory is
 shared among all device threads.  Each workgroup has a
@@ -576,16 +599,17 @@ running, is enabled by a set of atomic data types and operations.  In
 particular, fine-grained host/device communication is via atomic
 operations on SVM.
 
-\myparagraph{Execution model}
-OpenCL specifically makes no guarantees about fair scheduling between
-workgroups executing the same kernel, stating~\cite[p.\ 31]{opencl2Spec}: \emph{``A
-  conforming implementation may choose to serialize the workgroups
+\myparagraph{Execution Model}
+OpenCL~\cite[p.\ 31]{opencl2Spec} and CUDA~\cite{cuda-75} specifically makes no guarantees about fair scheduling between
+workgroups executing the same kernel. 
+%stating~\cite[p.\ 31]{opencl2Spec}: \emph{``A
+%  conforming implementation may choose to serialize the workgroups
 %so
 %  a correct algorithm cannot assume that workgroups will execute in
 %  parallel.
-\dots There is no safe and portable way to synchronize across
-  the independent execution of workgroups since once in the work-pool,
-  they can execute in any order.''}  CUDA similarly provides no guarantees~\cite{cuda-75}.
+%\dots There is no safe and portable way to synchronize across
+%  the independent execution of workgroups since once in the work-pool,
+%  they can execute in any order.''}  CUDA similarly provides no guarantees~\cite{cuda-75}.
 %
 HSA provides limited, one-way guarantees,
 stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
@@ -620,7 +644,7 @@ threads.
 \end{figure}
 
 
-\myparagraph{Work stealing}
+\myparagraph{Work Stealing}
 %
 Work stealing enables dynamic balancing of tasks across
 processing units. It is useful when the number of tasks to be
@@ -647,7 +671,9 @@ If a task was obtained, then the workgroup processes it
 (line~\ref{line:wksteal:processtask}), which may lead to new tasks
 being created and pushed to the workgroup's queue. The kernel presents
 two opportunities for spin-waiting: spinning to obtain a mutex, and
-spinning in the main kernel loop to obtain a task.
+spinning in the main kernel loop to obtain a task. \TSAdded{Without fair
+scheduling, threads waiting for the mutex might spin indefinitely,
+causing the application to hang.}
 
 
 %
@@ -667,7 +693,7 @@ spinning in the main kernel loop to obtain a task.
 
 \begin{lstlisting}
 kernel graph_app(global graph * g,
-                 global nodes * n0, global nodes * n1) {
+       global nodes * n0, global nodes * n1) {
   int level = 0;
   global nodes * in_nodes = n0;
   global nodes * out_nodes = n1;
@@ -689,7 +715,7 @@ kernel graph_app(global graph * g,
 %\vspace{-2mm}
 \end{figure}
 
-\myparagraph{Graph traversal} \myfiglong\ref{fig:graphsearch} illustrates a frontier-based graph traversal algorithm; such algorithms have
+\myparagraph{Graph Traversal} \myfiglong\ref{fig:graphsearch} illustrates a frontier-based graph traversal algorithm; such algorithms have
 been shown to execute efficiently on GPUs~\cite{BNP12,DBLP:conf/oopsla/PaiP16}.
 The kernel is
 given three arguments in global memory: a graph structure, and two
@@ -703,10 +729,11 @@ the nodes to be processed are evenly distributed between
 threads through \emph{stride} based processing.
 %
 In this case, the stride is the total number of threads, obtained via
-$\getglobalsize$.  Each thread processes nodes with indices
-\code{$\keyword{tid}$+$\keyword{stride}$*0},
-\code{$\keyword{tid}$+$\keyword{stride}$*1},
-\code{$\keyword{tid}$+$\keyword{stride}$*2}, etc., where $\keyword{tid}$ is a thread's global id.
+$\getglobalsize$.  
+%Each thread processes nodes with indices
+%\code{$\keyword{tid}$+$\keyword{stride}$*0},
+%\code{$\keyword{tid}$+$\keyword{stride}$*1},
+%\code{$\keyword{tid}$+$\keyword{stride}$*2}, etc., where $\keyword{tid}$ is a thread's global id.
 A thread calls $\keyword{process\_node}$ to process a node given the current level, with nodes to be processed next frontier being pushed to $\keyword{out\_nodes}$. After processing the frontier, the threads swap their
 node array pointers (line~\ref{line:graph:swap}).
 
@@ -724,7 +751,9 @@ can be implemented~\cite{XF10,DBLP:conf/oopsla/SorensenDBGR16}, based
 on CPU barrier designs~\cite[ch. 17]{HS08}.  These barriers employ
 spinning to ensure threads wait at the barrier until all threads have
 arrived, which requires fair scheduling between workgroups for the
-barrier to operate correctly.
+barrier to operate correctly. \TSAdded{Without fair scheduling, the
+  barrier threads may wait indefinitely at the barrier, causing the
+  application to hang.}
 
 
 The mutexes and barriers used by these two examples appear to run
@@ -733,13 +762,8 @@ workgroups than there are compute units.  This is due to the fairness
 of the occupancy-bound execution model that current GPUs have been
 shown, experimentally, to provide.  But, as discussed in
 \mysec\ref{sec:intro}, this model is not endorsed by language
-standards or vendor implementations, and is unlikely to be respected
-in the future. \TSAdded{Without a fair schedule, the mutexes and
-  barriers, which use spin-waiting in their implementation, are not
-  guaranteed to be satisfied. For example, if a workgroup is not
-  fairly scheduled after obtaining a mutex, there is no guarantee that
-  the mutex will be released. Thus the kernel may hang while other
-  workgroups wait indefinitely to obtain the mutex. }
+standards or vendor implementations, and may not be respected
+in the future. 
 %
 
 In \mysec\ref{sec:programmingguidelines} we show how the work stealing
@@ -751,9 +775,11 @@ the scheduling issue.
 \section{Cooperative Kernels}\label{sec:cooperativekernels}
 
 We present our cooperative kernels programming model as an extension
-to OpenCL.  However, the cooperative kernels concept is more general,
-and could be applied to extend other GPU programming models, such as
-CUDA and HSA.  We describe the semantics of the model
+to OpenCL.  
+%However, the cooperative kernels concept is more general,
+%and could be applied to extend other GPU programming models, such as
+%CUDA and HSA.  
+We describe the semantics of the model
 (\mysec\ref{sec:semantics}), use our motivating examples to discuss
 programmability (\mysec\ref{sec:programmingguidelines}) and outline
 important nonfunctional properties that the model requires to work
@@ -765,12 +791,11 @@ successfully (\mysec\ref{sec:nonfunctional}).
 
 \subsection{Semantics of Cooperative Kernels}\label{sec:semantics}
 
-As with a regular OpenCL kernel (see \mysec\ref{sec:opencl}), a
-cooperative kernel is launched by the host application.  The host
-application passes parameters to the kernel and specifies a desired
-number of workgroups, each consisting of a specified number of
-threads.  Unlike in a regular kernel, the parameters to a cooperative kernel are immutable (though pointer
-parameters can refer to mutable data).
+As with a regular OpenCL kernel, a cooperative kernel is launched by
+the host application, passing parameters to the kernel and specifying
+a desired number of threads and workgroups. Unlike in a regular
+kernel, the parameters to a cooperative kernel are immutable (though
+pointer parameters can refer to mutable data).
 
 Cooperative kernels are written using the following
 extensions: $\transmit$, a qualifier on the variables of a
@@ -780,7 +805,7 @@ cooperative scheduling; and $\globalbarrier$ and $\mathsf{resizing\_global\_}$ $
 primitives for inter-workgroup synchronisation.
 
 %\vspace{-1mm}
-\myparagraph{Transmitted variables}
+\myparagraph{Transmitted Variables}
 %
 A variable declared in the root scope of the cooperative kernel can
 optionally be annotated with a new $\transmit$ qualifier.  Annotating
@@ -792,7 +817,7 @@ We detail the semantics for this when we
 describe $\offerfork$ below.
 
 %\vspace{-1mm}
-\myparagraph{Active workgroups}
+\myparagraph{Active Workgroups}
 %
 If the host application launches a cooperative kernel requesting $N$
 workgroups, this indicates that the kernel should be executed with a
@@ -840,8 +865,7 @@ may contain specific program points at which a workgroup could
 
 Similar to the OpenCL workgroup $\mathsf{barrier}$ primitive,
 $\offerkill$, is a workgroup-level function---it must be encountered
-uniformly by all threads in a workgroup (see
-\mysec\ref{sec:opencl}).
+uniformly by all threads in a workgroup.
 
 Suppose a workgroup with id $m$ executes $\offerkill$.  If the
 workgroup has the largest id among active workgroups then it
@@ -892,24 +916,24 @@ In effect, thread 0 of the forking workgroup \emph{transmits} the relevant
 portion of its local state to the threads of the forked workgroups.
 
 \myfiglong{\ref{fig:overview}} illustrates the behaviour of
-$\offerfork$. After the graphics task finishes executing, there is
-space for two workgroups to join the computation of the cooperative
-kernel. Workgroup $0$ calls $\offerfork$, spawning the two new
-workgroups with ids $2$ and $3$ and broadcasting the transmit
-variables to them. Workgroups $2$ and $3$ join the computation where
-workgroup $0$ called $\offerfork$.
-
+$\offerfork$. After the graphics task finishes executing, workgroup
+$0$ calls $\offerfork$, spawning the two new workgroups with ids $2$
+and $3$. Workgroups $2$ and $3$ join the computation where workgroup
+$0$ called $\offerfork$.
+%
 %We discuss in \mysec\ref{sec:semanticalternatives} the rationale for
 %having all new threads obtain this local state portion from thread 0,
 %as well as our reasons for selecting which variables to transmit via
 %annotations rather than transmitting the entire thread state.
+%
 
 Notice that $k=0$ is always a valid choice for the number of
 workgroups to be spawned by $\offerfork$, and is guaranteed if $M$ is
 equal to the workgroup limit $N$.
 
+
 %\vspace{-1mm}
-\myparagraph{Global barriers}
+\myparagraph{Global Barriers}
 %
 Because workgroups of a cooperative kernel are fairly scheduled, so a
 global barrier primitive can be provided, and we specify two variants: $\globalbarrier$
@@ -925,8 +949,9 @@ issued before the barrier have completed.  The $\globalbarrier$
 primitive can be implemented by adapting an inter-workgroup barrier
 design, e.g.~\cite{XF10}, to take account of a growing and shrinking number of workgroups, and the atomic operations provided by
 the OpenCL 2.0 memory model enable a memory-safe
-implementation~\cite{DBLP:conf/oopsla/SorensenDBGR16}.  However, implementing such a barrier is
-involved, hence why we include this function as a primitive.
+implementation~\cite{DBLP:conf/oopsla/SorensenDBGR16}.  
+%However, implementing such a barrier is
+%involved, hence why we include this function as a primitive.
 
 The $\resizingglobalbarrier$ primitive is also a kernel-level
 function.  It is identical to $\globalbarrier$, except that it caters
@@ -955,14 +980,18 @@ surrounded, and separated by calls to a $\globalbarrier$.
 %
 The enclosing $\globalbarrier$ calls ensure that the change in number
 of active workgroups from $M$ to $M'$ occurs entirely within the
-resizing barrier, so that from a programmer's perspective, $M$ changes atomically.  The middle $\globalbarrier$ ensures that forking occurs before killing, so that workgroups $[0, \textrm{min}(M, M') - 1]$ are left intact.
+resizing barrier, so that from a programmer's perspective, $M$ changes
+atomically.  The middle $\globalbarrier$ ensures that forking occurs
+before killing, so that workgroups $[0, \textrm{min}(M, M') - 1]$ are
+left intact.
 
-Because $\resizingglobalbarrier$ can be implemented as above, we do not regard it \emph{conceptually} as a primitive of our
-model.  However, in
-\mysec\ref{sec:resizingbarrier} we show how a resizing barrier can be
-implemented more efficiently through direct interaction with the scheduler.
+Because $\resizingglobalbarrier$ can be implemented as above, we do
+not regard it \emph{conceptually} as a primitive of our model.
+However, in \mysec\ref{sec:resizingbarrier} we show how a resizing
+barrier can be implemented more efficiently through direct interaction
+with the scheduler.
 
-\subsection{Programming With Cooperative Kernels}\label{sec:programmingguidelines}
+\subsection{Programming with Cooperative Kernels}\label{sec:programmingguidelines}
 
 %We discuss the main semantic change induced by our programming
 %model---that the number of workgroups executing a kernel varies
@@ -971,7 +1000,7 @@ implemented more efficiently through direct interaction with the scheduler.
 %traversal algorithms of \mysec\ref{sec:openclexamples} to use
 %cooperative kernels.
 
-\myparagraph{A changing workgroup count} Unlike in regular OpenCL, the
+\myparagraph{A Changing Workgroup Count} Unlike in regular OpenCL, the
 value returned by $\getnumgroups$ is not fixed during the lifetime of
 a cooperative kernel: it corresponds to the active group count $M$,
 which changes as workgroups execute $\offerkill$, and $\offerfork$.
@@ -995,7 +1024,7 @@ As we illustrate below for graph traversal, this can be exploited by algorithms 
 data processing.
 
 
-\myparagraph{Adapting work stealing}
+\myparagraph{Adapting Work Stealing}
 %
 In this example there is no state to transmit since a computation is
 entirely parameterised by a task, which is retrieved from a queue
@@ -1032,7 +1061,7 @@ queue and not the one of the forking workgroup.
 %   $\offerkill$}\label{fig:workstealing-cooperative}
 % \end{figure}
 
-\myparagraph{Adapting graph traversal}
+\myparagraph{Adapting Graph Traversal}
 \myfiglong\ref{fig:cgraphsearch} shows a cooperative version of the
 graph traversal kernel of \myfig\ref{fig:graphsearch} from
 \mysec\ref{sec:openclexamples}.  On lines~\ref{line:cgraph:resizing1}
@@ -1061,7 +1090,7 @@ until the next resizing barrier at line~\ref{line:cgraph:resizing1}.
 
 \begin{lstlisting}
 kernel graph_app(global graph *g,
-                 global nodes *n0, global nodes *n1) {
+       global nodes *n0, global nodes *n1) {
 (*@\label{line:cgraph:transmit1}@*)  transmit int level = 0;
 (*@\label{line:cgraph:transmit2}@*)  transmit global nodes *in_nodes = n0;
 (*@\label{line:cgraph:transmit3}@*)  transmit global nodes *out_nodes = n1;
@@ -1083,7 +1112,7 @@ kernel graph_app(global graph *g,
 %\vspace{-4mm}
 \end{figure}
 
-\myparagraph{Patterns for irregular algorithms}
+\myparagraph{Patterns for Irregular Algorithms}
 In \mysec\ref{sec:portingalgorithms} we describe the set of irregular GPU algorithms used
 in our experiments, which largely captures the irregular blocking
 algorithms that are available as open source GPU kernels.  These all
@@ -1158,7 +1187,7 @@ task, and responding positively to $\offerfork$ calls if compute units are avail
 
 \section{Prototype Implementation}\label{sec:implementation}
 
-Our vision is that support for cooperative kernels will be integrated
+Our vision is that cooperative kernel support will be integrated
 in the runtimes of future GPU implementations of OpenCL, with driver
 support for our new primitives.  To experiment with our ideas on
 current GPUs, we have developed a prototype that mocks up the required
@@ -1173,25 +1202,30 @@ cannot change.  We describe the megakernel approach
 scheduler component of our implementation
 (\mysec\ref{sec:schedulerimpl}).
 
-\subsection{The megakernel mock up}\label{sec:megakernel}
+\subsection{The Megakernel Mock Up}\label{sec:megakernel}
 
 Instead of multitasking multiple separate kernels, we merge a set of
 kernels into a megakernel---a single, monolithic kernel.  The
 megakernel is launched with as many workgroups as can be occupant
-concurrently.  One workgroup takes the role of the scheduler, and the
-scheduling logic is embedded as part of the megakernel.  The remaining
-workgroups act as a pool of workers.  A worker repeatedly queries the
-scheduler to be assigned a task.  A task corresponds to executing a
-cooperative or non-cooperative kernel.  In the non-cooperative case,
-the workgroup executes the relevant kernel function uninterrupted,
-then awaits further work.  In the cooperative case, the workgroup
-either starts from the kernel entry point or immediately jumps to a
-designated point within the kernel, depending on whether the workgroup
-is an initial workgroup of the kernel, or a forked workgroup.  In the
-latter case, the new workgroup also receives a struct containing the
-values of all relevant $\transmit$-annotated variables.
+concurrently.  One workgroup takes the role of the
+scheduler\footnote{\TSAdded{We note that the scheduler requirements
+    given in \mysec{\ref{sec:cooperativekernels}} are agnostic to
+    whether the scheduling logic takes place on the CPU or GPU. To
+    avoid expensive communication between GPU and host, we choose to
+    implement the scheduler on the GPU.}  }, and the scheduling logic
+is embedded as part of the megakernel.  The remaining workgroups act
+as a pool of workers.  A worker repeatedly queries the scheduler to be
+assigned a task.  A task corresponds to executing a cooperative or
+non-cooperative kernel.  In the non-cooperative case, the workgroup
+executes the relevant kernel function uninterrupted, then awaits
+further work.  In the cooperative case, the workgroup either starts
+from the kernel entry point or immediately jumps to a designated point
+within the kernel, depending on whether the workgroup is an initial
+workgroup of the kernel, or a forked workgroup.  In the latter case,
+the new workgroup also receives a struct containing the values of all
+relevant $\transmit$-annotated variables.
 
-\myparagraph{Simplifying assumptions}
+\myparagraph{Simplifying Assumptions}
 %
 For ease of implementation, our prototype supports multitasking a
 single cooperative kernel with a single non-cooperative kernel (though
@@ -1220,7 +1254,7 @@ lifting these restrictions to be worthwhile.
 %Clang LibTooling framework~\cite{clang}, leveraging recent Clang support
 %for OpenCL 2.0~\cite{ClangOpenCL20}.
 
-\subsection{Scheduler design}\label{sec:resizingbarrier}\label{sec:schedulerimpl}
+\subsection{Scheduler Design}\label{sec:resizingbarrier}\label{sec:schedulerimpl}
 
 To enable multitasking through cooperative kernels, the runtime (in
 our case, the megakernel) must track the state of workgroups,
@@ -1233,13 +1267,7 @@ barrier. We describe how the scheduler would handle arbitrary
 combinations of kernels, though as noted above our current
 implementation is restricted to the case of two kernels.
 
-\TSAdded{We note that the scheduler requirements given in
-  \mysec{\ref{sec:cooperativekernels}} are agnostic to whether the
-  scheduling logic takes place on the CPU or GPU. To
-  avoid expensive communication between GPU and host, we choose to
-  implement the scheduler on the GPU.}
-
-\myparagraph{Scheduler contexts}
+\myparagraph{Scheduler Contexts}
 %
 %When a workgroup executes a kernel (cooperative or otherwise), it must
 %be able to query a consistent context to obtain a workgroup id value
@@ -1262,7 +1290,7 @@ workgroups at $\offerfork$. Thus, the scheduler context needs a
 communication channel for each cooperative kernel. We implement the
 communication channels using atomic variables in global memory.
 
-\myparagraph{Launching kernels and managing workgroups}
+\myparagraph{Launching Kernels and Managing Workgroups}
 %
 To launch a kernel, the host sends a data packet to the GPU scheduler
 consisting of a kernel to execute, kernel inputs, and a flag
@@ -1304,36 +1332,12 @@ involves selecting workgroups whose status is \emph{available}, as
 well as copying the values of $\transmit$-annotated variables to the
 new workgroups.
 
-\myparagraph{Accounting for concurrency}
-%
-Concurrent calls to $\offerfork$ must be protected by a mutex to avoid
-racing on the available workgroups. The same conflict over available
-workgroups can occur when launching a new kernel between the scheduler
-and a workgroup calling $\offerfork$. Thus, $\offerfork$ is protected
-by a mutex, called the \emph{assignment mutex}.
-%provided in the scheduler context.
-
-The assignment mutex additionally protects concurrent calls to
-$\offerfork$ and $\offerkill$.  On calling $\offerkill$, a workgroup
-is only permitted to exit if the scheduler workgroup currently holds
-the assignment mutex; that is, the scheduler is trying to obtain work
-groups to send to a task.  Conversely, on calling $\offerfork$ a
-workgroup can only spawn new workgroups if the scheduler workgroup
-does not hold the assignment mutex.  Thus the assignment mutex, only
-ever acquired by the scheduling workgroup, \emph{indirectly} provides
-mutual exclusion between pairs of workgroups executing $\offerkill$
-and $\offerfork$ concurrently.
-
-Concurrent calls to $\offerkill$ are acceptable because only the
-workgroup with the highest id may exit, automatically ensuring mutual
-exclusion for exit-related state changes.
-
-\myparagraph{An efficient resizing barrier}
+\myparagraph{An Efficient Resizing Barrier}
 %
 In \mysec\ref{sec:semantics}, we defined the semantics of a resizing
 barrier in terms of calls to other primitives.  It is possible,
-however to implement the resizing barrier with only one call to a
-global barrier with $\offerfork$ and $\offerkill$ baked inside.
+however, to implement the resizing barrier with only one call to a
+global barrier with $\offerfork$ and $\offerkill$ inside.
 
 We consider barriers that use the master/slave model~\cite{XF10}: one
 workgroup (master) collects signals from the other workgroups (slaves)
@@ -1410,6 +1414,7 @@ we understand to be what current Nvidia GPUs provide (\mysec\ref{sec:nvidiacompa
 
 \begin{table}[t]
 \normalsize
+\caption{Blocking GPU applications investigated}
 \centering
 \begin{tabular}{ l r r r r r r}
 App. & barriers & kill & fork & transmit & LoC & inputs\\
@@ -1431,9 +1436,9 @@ octree & 0 / 0 & 1 & 1 & 0 & 213 & 1 \\
 \rowcolor{Gray3}
 game & 0 / 0 & 1 & 1 & 0 & 308 & 1 \\
 \end{tabular} \\
-\vspace{.2cm}
+%\vspace{.2cm}
 \crule[Gray1]{.2cm}{.2cm} Pannotia \hspace{.4cm} \crule[Gray2]{.2cm}{.2cm} Lonestar GPU  \hspace{.4cm}  \crule[Gray3]{.2cm}{.2cm} work stealing
-\caption{Blocking GPU applications investigated}
+
 \label{tab:applications}
 %\vspace{-10mm}
 \end{table}
@@ -1457,15 +1462,16 @@ algorithms that we ported to cooperative kernels. Among them, 5 are
 graph algorithms, based on the Pannotia~\cite{Pannotia} and
 Lonestar~\cite{BNP12} GPU application suites, using global barriers.
 We indicate how many of the original number of barriers are changed to
-resizing barriers, and how many variables need to be transmitted.  In
-all cases all barriers were converted. The remaining 2 algorithms are
-work stealing applications: each required the addition of $\offerfork$
-and $\offerkill$ at the start of the main loop, and no variables
-needed to be transmitted.  For all these examples, the porting to
-cooperative kernels was similarly straightforward to the porting
-illustrated in \mysec\ref{sec:programmingguidelines}. Most graph come
-with 2 different data sets as input, leading to 11 application/input
-pairs in total.
+resizing barriers (all of them), and how many variables need to be
+transmitted.  The remaining two algorithms are work stealing
+applications: each required the addition of $\offerfork$ and
+$\offerkill$ at the start of the main loop, and no variables needed to
+be transmitted (similar to example shown in \mysec\ref{sec:programmingguidelines}). 
+% For all these examples, the porting to cooperative
+%kernels was similarly straightforward to the porting illustrated in
+%\mysec\ref{sec:programmingguidelines}. 
+Most graph applications come with 2 different data sets as input,
+leading to 11 application/input pairs in total.
 
 %From the Lonestar suite we omit two applications that use global
 %barriers: dmr has been shown to be unstable across GPU
@@ -1473,23 +1479,29 @@ pairs in total.
 %short-running so that it is not interesting for our multitasking
 %approach.
 
-Our prototype implementation (\mysec\ref{sec:implementation}) requires
+\TSAdded{Our prototype implementation (\mysec\ref{sec:implementation}) requires
 two optional features of OpenCL 2.0: SVM fine-grained buffers and SVM
-atomics. This rules out evaluation on \nvidia and ARM Mali GPUs at
-present, since these vendors do not yet support OpenCL $2.0$,
-equivalent functionality is not provided by \nvidia's CUDA. Intel
-drivers meet our requirements on Windows, but not on Linux.
+atomics. Out of the GPUs available to us (ARM Mali, AMD, \nvidia, and
+Intel), only Intel GPUs provided robust support of these features.}
+
+%We thus evaluate our approach on three Intel GPUs, as GPUs from
+%other vendors (i.e. \nvidia, ARM, and AMD) do not yet provide these
+%features.
+%This rules out evaluation on \nvidia and ARM Mali GPUs at
+%present, since these vendors do not yet support OpenCL $2.0$,
+%equivalent functionality is not provided by \nvidia's CUDA. Intel
+%drivers meet our requirements on Windows, but not on Linux.
 %(we
 %confirmed this by trying the upstream driver that requires a patched
 %Linux kernel).
-AMD supports SVM atomics only in their Kaveri family of
-chips and only on Linux.%, requiring to compile the latest driver.
+%AMD supports SVM atomics only in their Kaveri family of
+%chips and only on Linux.%, requiring to compile the latest driver.
 
-Among the GPUs available to us, four met our requirements: Intel HD
-520, HD 5500 and Iris 6100, and AMD Radeon R7.  However, AMD's Linux
-drivers for OpenCL suffer from a known defect whereby long-running
-kernels lead to unkillable defunct
-processes~\cite{amd-defunct-process}.
+%Among the GPUs available to us, four met our requirements: Intel HD
+%520, HD 5500 and Iris 6100, and AMD Radeon R7.  However, AMD's Linux
+%drivers for OpenCL suffer from a known defect whereby long-running
+%kernels lead to unkillable defunct
+%processes~\cite{amd-defunct-process}.
 %
 %and simultaneously obtained alarming results on this platform when
 %using SVM atomics: modifying a kernel to include a simple host/device
@@ -1499,20 +1511,24 @@ processes~\cite{amd-defunct-process}.
 %cooperative kernels is not yet mature enough within AMD's drivers,
 %which we plan to discuss with engineers at AMD.
 %
-We thus ran our experiments on the Intel GPUs. The results
-were similar across the GPUs, so for conciseness, we report only on
-the Iris 6100 GPU (driver 20.19.15.4463) with a host CPU i3-5157U. The
-Iris has a reported 47 compute units. Results for the other Intel GPUs
-are available in supplementary material.
+\TSAdded{We thus ran our experiments on the three Intel GPUs: HD 520, HD 5500
+and Iris 6100. The results were similar across the GPUs, so for
+conciseness, we report only on the Iris 6100 GPU (driver
+20.19.15.4463) with a host CPU i3-5157U. The Iris has a reported 47
+compute units. Results for the other Intel GPUs are available in
+supplementary material, found on the author's website.} 
 
 
-\subsection{Sizing Non-Cooperative Kernels}\label{sec:sizingnoncoop}
+\subsection{Sizing Non-cooperative Kernels}\label{sec:sizingnoncoop}
 
-Enabling rendering of smooth graphics in parallel with execution of irregular algorithms is an important use case for our approach.  Because our prototype implementation is based on a megakernel that takes over the entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this use case directly.
+Enabling rendering of smooth graphics in parallel with irregular
+algorithms is an important use case for our approach.  Because our
+prototype implementation is based on a megakernel that takes over the
+entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this
+directly.
 
-We devised the following procedure to determine non-cooperative OpenCL
-workloads that simulate the computational intensity of various
-graphics rendering workloads.
+We devised the following to determine OpenCL workloads that simulate
+the computational intensity of various graphics rendering workloads.
 %
 We designed a synthetic kernel that occupies all workgroups of a GPU
 for a parameterised time period $t$, invoked in an infinite loop by a
@@ -1533,8 +1549,8 @@ emphasised under the mouse pointer; \emph{medium}, whereby window
 dragging over the desktop is smoothly animated; and \emph{heavy}, which
 requires smooth animation of a WebGL shader in a browser.  For
 \emph{heavy} we used WebGL demos from the Chrome
-experiments~\cite{chrome-experiments} running
-in a recent version of Firefox.
+experiments~\cite{chrome-experiments}.% running
+%in a recent version of Firefox.
 
 % the Paper Planes\footnote{\url{https://paperplanes.world}} and
 % Kaleidoscope\footnote{\url{http://colordodge.com/Kaleidoscope}}
@@ -1559,9 +1575,11 @@ $P=40ms$, $E=3ms$ for medium; and $P=40ms$, $E=10ms$ for heavy. For
 medium and heavy, the 40ms period coincides with the human persistence
 of vision. The 3ms execution duration of both light and medium
 configurations indicates that GPU computation is cheaper for basic
-display rendering compared with more complex rendering that uses
-shaders. These results guide our evaluation of cooperative scheduling
-(\mysec\ref{sec:responsiveness}).
+display rendering compared with more complex rendering.% that uses
+%shaders. 
+
+%These results guide our evaluation of cooperative scheduling
+%(\mysec\ref{sec:responsiveness}).
 
 % The
 % \emph{Duration} and \emph{Rate} columns report values corresponding to
@@ -1642,7 +1660,7 @@ shaders. These results guide our evaluation of cooperative scheduling
 %\vspace{-2mm}
 %\end{table}
 
-\myparagraph{Experimental setup}
+\myparagraph{Experimental Setup}
 Invoking the cooperative scheduling primitives incurs some overhead
 even if no killing, forking or resizing actually occurs, because the cooperative kernel still needs to interact with the scheduler to determine this.
 We assess this overhead by measuring the
@@ -1650,15 +1668,14 @@ We assess this overhead by measuring the
 active workgroups in the cooperative case.
 
 Recall that our mega kernel-based implementation merges the code of a
-cooperative and a non-cooperative kernel to be co-scheduled.  This
-blow-up in code size can have a negative impact on compilation, e.g.\
-due to higher register pressure, reducing the occupancy for the merged
-kernel---the maximum number of workgroups that the GPU driver will
-schedule.  This is an artifact of our proof-of-concept implementation
-strategy, and would not be a problem if our cooperative scheduling
-approach was implemented inside the GPU driver.  We thus launch both the
-original and cooperative versions of a kernel with the reduced occupancy
-bound in order to meaningfully compare execution times.
+cooperative and a non-cooperative kernel.
+% to be co-scheduled.  
+This can reduce the occupancy for the merged kernel, e.g.\ due to
+higher register pressure, This is an artifact of our prototype
+implementation, and would not be a problem if our approach was
+implemented inside the GPU driver.  We thus launch both the original
+and cooperative versions of a kernel with the reduced occupancy bound
+in order to meaningfully compare execution times.
 
 \begin{figure*}
 \includegraphics[width=.67\columnwidth]{iris_octree_NA.pdf}
@@ -1672,6 +1689,7 @@ bound in order to meaningfully compare execution times.
 
 \begin{table}
 \normalsize
+\caption{Cooperative kernel slowdown w/o multitasking}
 \centering
 \begin{tabular}{ l l | l l | l l }
 \multicolumn{2}{c|}{overall} & \multicolumn{2}{c|}{barrier} & \multicolumn{2}{c}{wk.steal.} \\
@@ -1683,7 +1701,6 @@ $1.07$ & $1.23^{\ddagger}$ & $1.06$ & $1.20^{\diamond}$ & $1.12$ & $1.23^{\ddagg
  $^{\ddagger}$octree, $^{\diamond}$color G3\_circuit
 }
 %\vspace{-2mm}
-\caption{Cooperative kernel slowdown w/o multitasking}
 \label{tab:overhead}
 %\vspace{-8mm}
 \end{table}
@@ -1712,12 +1729,12 @@ cooperative kernel.
 % matrix dimensions are tuned to trigger the relevant execution
 % duration.
 
-\myparagraph{Experimental setup} For a given cooperative kernel and
+\myparagraph{Experimental Setup} For a given cooperative kernel and
 its input, we launch the kernel and then repeatedly schedule a
 non-cooperative kernel that aims to simulate the intensity of one of
 the three classes of graphics rendering workload discussed in
-\mysec\ref{sec:sizingnoncoop}. In practice, we use a matrix
-multiplication kernel as the non-cooperative workload, with matrix
+\mysec\ref{sec:sizingnoncoop}. In practice, we use matrix
+multiplication as the non-cooperative workload, with matrix
 dimensions tailored to reach the appropriate execution duration.  We
 conduct separate runs where we vary the number of workgroups requested
 by the non-cooperative kernel, considering the cases where one, a
@@ -1802,7 +1819,8 @@ figure for instance. The scheduler thus has fewer opportunities to
 collect workgroups and gather time increases. Nonetheless, scheduling
 responsiveness can benefit from the query barrier: when used, this
 barrier lets the scheduler collect all needed workgroups as soon as
-they hit a resizing barrier. As we can see, the gather time of the
+they hit a resizing barrier. 
+As we can see, the gather time of the
 query barrier is almost stable w.r.t.\ the number of workgroups that
 needs to be collected.
 
@@ -1822,22 +1840,21 @@ with running the cooperative kernel in the presence of multitasking,
 vs.\ running the cooperative kernel in isolation (median over all
 applications and inputs).  We also show the period at which
 non-cooperative kernels can be scheduled (median over all applications
-and inputs). We use the median as our data included some outliers;
-these outliers happen with applications/inputs in which the resizing
-barrier are not called very frequently and the graphics task requires
-half or more workgroups. For example, a medium graphics workload for
-bfs on the rmat input has over an 8$\times$ overhead when asking for
-all but one of the workgroups. As \myfiglong\ref{fig:performance}
-shows, most of our applications/inputs are much better behaved than
-this. Future work will examine these problem applications/inputs in
-more detail, possibly inserting more calls to $\offerfork$ and
-$\offerkill$.
+and inputs). Our data included some outliers that occur with
+benchmarks in which the resizing barrier are not called very
+frequently and the graphics task requires half or more workgroups. For
+example, a medium graphics workload for bfs on the rmat input has over
+an 8$\times$ overhead when asking for all but one of the
+workgroups. As \myfiglong\ref{fig:performance} shows, most of our
+benchmarks are much better behaved than this. Future work
+will examine these problem benchmarks in more detail,
+possibly inserting more resizing calls.
 
 We show results for the three workloads listed in
-\mysec~\ref{sec:sizingnoncoop}. The two gray horizontal lines in the
-period graph correspond to the period goals of the workloads: the
-higher (resp. lower) line corresponds to a period of 70ms (resp. 40ms)
-for the light (resp. medium and heavy) workload.
+\mysec~\ref{sec:sizingnoncoop}. The horizontal lines in the period
+graph correspond to the goals of the workloads: the higher
+(resp. lower) line corresponds to a period of 70ms (resp. 40ms) for
+the light (resp. medium and heavy) workload.
 
 Co-scheduling non-cooperative kernels that request a single workgroup
 leads to almost no overhead, but the period is far too high to meet
@@ -1846,31 +1863,34 @@ averages a period of 939 ms. As more workgroups are dedicated to
 non-cooperative kernels, they execute quickly enough to be scheduled
 at the expected period. For the light and medium workloads, a quarter
 of the workgroups executing the non-cooperative kernel are able to
-meet their goal period (70 and 40 ms resp.). However, a quarter of the
-workgroups are not sufficient to meet the goal for the heavy workload
-(giving a median period of 104 ms). If half of the workgroups are
-allocated to the non-cooperative kernel, the heavy workload achieves
-its goal period (median of 40 ms). 
+meet their goal period (70 and 40 ms resp.). However, this is not
+sufficient to meet the goal for the heavy workload (giving a median
+period of 104 ms). If half of the workgroups are allocated to the
+non-cooperative kernel, the heavy workload achieves its goal period
+(median of 40 ms).
 %
 Yet, as expected, allocating more non-cooperative workgroups increases
-the execution time of the cooperative kernel.
+the overhead of the cooperative kernel.
 %
 Still, heavy workloads meet their period by allocating half
-non-cooperative workgroups, incurring a slow down of less than
+of the workgroups, incurring a slow down of less than
 1.5$\times$ (median). Light and medium workloads meet their period
-with only a small overhead of the cooperative kernel; 
-1.04$\times$ and 1.08$\times$ median slowdown respectively.
+with only a small overhead; 1.04$\times$ and 1.08$\times$ median
+slowdown respectively.
 
-We consider these results encouraging, since they provide a lower
-bound on potential performance of our cooperative kernels
-model. Implementing the model natively, with device-specific runtime
-support, could only improve performance and responsiveness compared
-with that of our megakernel-based prototype.
+%We consider these results encouraging, since they provide a lower
+%bound on potential performance of our cooperative kernels
+%model. Implementing the model natively, with device-specific runtime
+%support, could only improve performance and responsiveness compared
+%with that of our megakernel-based prototype.
 
 \subsection{Comparison with Kernel-Level Preemption}\label{sec:nvidiacomparison}
 
 \begin{table}[t]
 \normalsize
+\caption{Overhead of kernel level preemption vs cooperative kernels for three
+graphics workloads}
+
 \centering
 \begin{tabular}{ l r r r}
 g. workload &  kernel-level  & cooperative & resources \\
@@ -1881,20 +1901,16 @@ heavy & 1.33 & 1.47 & $N/2$\\
 \end{tabular} \\
 %\vspace{.2cm}
 
-\caption{Overhead of kernel level preemption vs cooperative kernels for three
-graphics workloads}
 \label{tab:preemption}
 %\vspace{-8mm}
 \end{table}
 
-Some recent GPUs, including Nvidia's Pascal architecture, provide
-hardware support for instruction-level preemption.  Few details of how
-this works are available, but from reading Nvidia documentation and
-online material~\cite{PascalWhitepaper,anandtech}, our understanding
-is that preemption of entire kernels, but not of individual workgroups
-is supported.  Intel GPUs do not provide this feature, and our OpenCL
-2.0 prototype of cooperative kernels cannot run on Nvidia GPUs, making
-a direct comparison impossible.  We present here a theoretical
+Nvidia's recent Pascal architecture provides hardware support for
+instruction-level preemption~\cite{PascalWhitepaper,anandtech},
+however, preemption of entire kernels, but not of individual
+workgroups is supported.  Intel GPUs do not provide this feature, and
+our OpenCL prototype of cooperative kernels cannot run on Nvidia GPUs,
+making a direct comparison impossible.  We present here a theoretical
 analysis of the overheads associated with sharing the GPU between
 graphics and compute tasks via kernel-level preemption.
 
@@ -1915,21 +1931,20 @@ Based on the above assumptions, our approach provides similar overhead
 for low and medium graphics workloads, however, has a higher overhead for
 the high workload.
 
-Our poor performance for the heavy workload is because the graphics
-task requires half of the workgroups, which cripples the cooperative
-kernel enough that $\offerfork$ calls are not issued as frequently.
-Future work may examine how to insert more resizing calls in these
+Our low performance for heavy workloads is because the graphics task
+requires half of the workgroups, crippling the cooperative kernel
+enough that $\offerfork$ calls are not issued as frequently.  Future
+work may examine how to insert more resizing calls in these
 applications to decrease this overhead.
 %
-These results suggest that a hybrid preemption scheme may work well
-for multi-tasking and graphics. That is, the cooperative approach
-works well for light and medium tasks and requires no special hardware
-or preemption state saving; on the other hand, heavy graphics tasks
-benefit from the coarser grained, kernel-level preemption strategy.
+These results suggest that a hybrid preemption scheme may work
+well. That is, the cooperative approach works well for light and
+medium tasks; on the other hand, heavy graphics tasks benefit from the
+coarser grained, kernel-level preemption strategy.
 
 \section{Related Work}\label{sec:relatedwork}
 
-\myparagraph{Irregular algorithms and persistent kernels}
+\myparagraph{Irregular Algorithms and Persistent kernels}
 %
 There has been a lot of work on accelerating blocking irregular
 algorithms using GPUs, and on the \emph{persistent threads}
@@ -1945,7 +1960,7 @@ to be upgraded to run in a manner that facilitates responsive multitasking.
 
 %\vspace{-1mm}
 
-\myparagraph{GPU multitasking and scheduling}
+\myparagraph{GPU Multitasking and Scheduling}
 %
 %\ADComment{Tyler: please update or delete based on your recent readings and refer to Section~\ref{sec:nvidiacomparison}.}
 %
@@ -2009,7 +2024,7 @@ algorithms on GPUs.
 %aid in safe deployment of blocking irregular algorithms.
 
 
-\myparagraph{Cooperative multitasking}
+\myparagraph{Cooperative Multitasking}
 %
 Cooperative multitasking was offered in older operating systems
 (e.g. pre 1995 Windows) and is still used by some operating systems,
@@ -2029,11 +2044,11 @@ such as RISC OS~\cite{risc-os-multitasking}. \TSAdded{Additionally,
 %\emph{fiber}.
 %\footnote{\url{http://ruby-doc.org/core-2.1.1/Fiber.html}}
 
-In the context of GPUs, cooperative multitasking has been used to
-refer to the standard programming model, where the onus is on the GPU kernel
-to complete execution within a reasonable time budget~\cite{adriaens2012case,CPE:CPE1722}.
+%In the context of GPUs, cooperative multitasking has been used to
+%refer to the standard programming model, where the onus is on the GPU kernel
+%to complete execution within a reasonable time budget~\cite{adriaens2012case,CPE:CPE1722}.
 %
-This is in contrast to our cooperative kernels, which specifically aim to support the needs of long-running GPU tasks.
+%This is in contrast to our cooperative kernels, which specifically aim to support the needs of long-running GPU tasks.
 
 %\vspace{-1mm}
 
@@ -2053,6 +2068,15 @@ irregular algorithms to which the model might (be extended to) apply
 drivers, and integrating cooperative kernels into template- and
 compiler-based programming models for graph algorithms on
 GPUs~\cite{DBLP:conf/ppopp/WangDPWRO16,DBLP:conf/oopsla/PaiP16}.
+
+\section*{Acknowledgments}
+We are grateful to Lee Howes, Bernhard Kainz, Paul Kelly, Christopher
+Lidbury, Steven McDonagh, Sreepathi Pai, and Andrew Richards for
+insightful comments throughout the work. We thank the FSE reviewers
+for their thorough evaluations and feedback. This work is supported in
+part by EPSRC Fellowship EP/N026314, and a gift from Intel Corporation.
+
+
 %  As more vendors
 %adopt the advanced features of OpenCL that our approach requires, we
 %will be in a position to assess the programming model across a wider
@@ -2480,3 +2504,27 @@ non-cooperative counterpart would behave.
 %their kernel to a cooperative form and retain backwards-compatibility
 %with today's GPU platforms by pre-processing away our language
 %extensions.
+
+\myparagraph{Accounting for concurrency}
+%
+Concurrent calls to $\offerfork$ must be protected by a mutex to avoid
+racing on the available workgroups. The same conflict over available
+workgroups can occur when launching a new kernel between the scheduler
+and a workgroup calling $\offerfork$. Thus, $\offerfork$ is protected
+by a mutex, called the \emph{assignment mutex}.
+%provided in the scheduler context.
+
+The assignment mutex additionally protects concurrent calls to
+$\offerfork$ and $\offerkill$.  On calling $\offerkill$, a workgroup
+is only permitted to exit if the scheduler workgroup currently holds
+the assignment mutex; that is, the scheduler is trying to obtain work
+groups to send to a task.  Conversely, on calling $\offerfork$ a
+workgroup can only spawn new workgroups if the scheduler workgroup
+does not hold the assignment mutex.  Thus the assignment mutex, only
+ever acquired by the scheduling workgroup, \emph{indirectly} provides
+mutual exclusion between pairs of workgroups executing $\offerkill$
+and $\offerfork$ concurrently.
+
+Concurrent calls to $\offerkill$ are acceptable because only the
+workgroup with the highest id may exit, automatically ensuring mutual
+exclusion for exit-related state changes.
