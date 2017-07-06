@@ -308,11 +308,11 @@ can be implemented in practice.
 %algorithms, for which work to be processed can be evenly split between
 %the workgroups that execute a GPU kernel ahead of time.  However,
 Many interesting data-parallel algorithms are \emph{irregular}: the
-amount of work to be processed is unknown ahead of time and may be
-determined during computation.  There is growing interest in
+amount of work to be processed is unknown ahead of time and may change dynamically in a workload-dependent manner.
+There is growing interest in
 accelerating such algorithms on
 GPUs~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}. 
-
+%
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups.  For example, many graph algorithms employ a level-by-level
 strategy, requiring a global barrier between each level, and work
@@ -352,8 +352,8 @@ GPUs~\cite{owens-persistent,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/oopsla/Pai
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{overview.pdf}
-\caption{Cooperative kernels can flexibly resize to let other tasks
-(e.g. graphics) run concurrently}
+\caption{Cooperative kernels can flexibly resize to let other tasks,
+e.g.\ graphics, run concurrently}
 \label{fig:overview}
 %\vspace{-2mm}
 \end{figure}
@@ -376,9 +376,9 @@ reasons why this model is undesirable.
 % from the point-of-view of
 %GPU vendors and end users.
 First, the execution model does not enable
-multitasking, because a workgroup effectively \emph{owns} a compute
+multitasking, since a workgroup effectively \emph{owns} a compute
 unit until the workgroup has completed execution.  The GPU cannot be used meanwhile for other
-tasks (e.g.\ graphics rendering).
+tasks (e.g.\ rendering).
 %Precisely because
 %of this problem, operating systems employ a GPU \emph{watchdog} to
 %heuristically detect and kill long-running computations on the GPU
@@ -387,8 +387,8 @@ Second, \emph{energy throttling} is an important concern for
 battery-powered
 devices~\cite{DBLP:journals/comsur/Vallina-RodriguezC13}.  In the
 future, it will be desirable for a mobile GPU driver to power down
-some compute units, and hence suspend the execution of the occupant
-workgroup, if the battery level is low.
+some compute units, suspending execution of associated occupant
+workgroups, if the battery level is low.
 %Implementing energy
 %throttling would require being able to suspend the execution of a
 %workgroup, powering down the compute unit to which the workgroup was
@@ -409,13 +409,10 @@ execution model they currently implement, for the above reasons, yet
 essence of the simple occupancy-bound model, supporting preemption
 only in key special cases.
 
-For example, Nvidia's Pascal architecture supports
-preemption~\cite{PascalWhitepaper}. Despite this, the device still
-does not guarantee forward progress. Indeed, on a GTX Titan X (Pascal)
-we still observe starvation: we found that a global barrier can be
-executed successfully with 56 workgroups, but deadlocks with 57
-workgroups.  Thus, although preemption is supported, there is not fair
-scheduling.
+For example, preemption is supported by Nvidia's Pascal architecture~\cite{PascalWhitepaper}, but on a GTX Titan X (Pascal)
+we still observe starvation: a global barrier
+executes successfully with 56 workgroups, but deadlocks with 57
+workgroups, indicating that scheduling is still unfair.
 
 %\vspace{-1mm}
 \myparagraph{Our Proposal: Cooperative Kernels}
@@ -465,7 +462,7 @@ possible.
 
 \TSAdded{Cooperative kernels allow for \emph{cooperative multitasking}
   (see \mysec{\ref{sec:relatedwork}}), a multitasking approach used
-  historically when preemption was not available or, in the case of
+  historically when preemption was not available or, as in the case of
   GPUs, too costly. Our approach avoids the cost of arbitrary
   preemption as the state of a workgroup killed via $\offerkill$ does
   not have to be saved. Previous cooperative multitasking systems have
@@ -486,7 +483,7 @@ are killed at an $\offerkill$ to make room for a graphics
 task. The workgroups are subsequently restored to the cooperative kernel when workgroup 0 calls $\offerfork$. The \emph{gather time} is the time
 between resources being requested and the application surrendering them via $\offerkill$. To satisfy soft-real time
 constraints, this time should be low; our experimental study
-(\mysec{\ref{sec:responsiveness}}) shows that in practice, the
+(\mysec{\ref{sec:responsiveness}}) shows that, in practice, the
 gather-time for our applications is acceptable for a range of graphics
 workloads.
 
