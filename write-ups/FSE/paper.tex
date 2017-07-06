@@ -87,7 +87,7 @@
 
 \newcommand{\ADComment}[1]{\textcolor{green}{AD: #1}}
 %\newcommand{\TSComment}[1]{\textcolor{blue}{TS: #1}}
-\newcommand{\TSAdded}[1]{\textcolor{blue}{#1}}
+\newcommand{\TSAdded}[1]{#1}
 \newcommand{\TSEmph}[1]{\textcolor{red}{#1}}
 \newcommand{\HEComment}[1]{\textcolor{orange}{HE: #1}}
 %\newcommand{\COULDCUT}[1]{\textcolor{blue}{#1}}
@@ -1905,8 +1905,9 @@ graphics and compute tasks via kernel-level preemption.
 Suppose a graphics workload is required to be scheduled with period
 $P$ and duration $D$, and that a compute kernel requires time $C$ to
 execute without interruption.  If we assume the cost of preemption is
-negligible (e.g.\ Nvidia have reported preemption times of 0.1 $\mathit{ms}$ for
-Pascal~\cite{anandtech}), then the overhead associated with switching
+negligible (e.g.\ Nvidia have reported preemption times of 0.1
+$\mathit{ms}$ for Pascal~\cite{anandtech}, because of
+special hardware support), then the overhead associated with switching
 between compute and graphics every $P$ time steps is $P/(P-D)$.
 
 We compare this task-level preemption overhead model with our
@@ -1923,12 +1924,14 @@ Our low performance for heavy workloads is because the graphics task
 requires half of the workgroups, crippling the cooperative kernel
 enough that $\offerfork$ calls are not issued as frequently.  Future
 work may examine how to insert more resizing calls in these
-applications to decrease this overhead.
+applications to address this.
 %
 These results suggest that a hybrid preemption scheme may work
 well. That is, the cooperative approach works well for light and
 medium tasks; on the other hand, heavy graphics tasks benefit from the
-coarser grained, kernel-level preemption strategy.
+coarser grained, kernel-level preemption strategy. However, the
+preemption strategy requires specialised hardware support
+in order to be efficient.
 
 \section{Related Work}\label{sec:relatedwork}
 
