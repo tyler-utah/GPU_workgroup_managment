@@ -1769,14 +1769,14 @@ and the non-cooperative kernel execution time.
 %
 \myfiglong\ref{fig:fine-grained-timing} reports, on three
 configurations, the average gather and execution times for the
-non-cooperative kernel w.r.t. the quantity of workgroups allocated to
+non-cooperative kernel with respect to the quantity of workgroups allocated to
 it.  A logarithmic scale is used for time since gather times tend to
 be much smaller than execution times. The horizontal grey lines
 indicates the desired period for non-cooperative kernels.  These
 graphs show a representative sample of our results; the full set of
 graphs for all configurations is provided in supplementary material.
 
-The left most graph illustrates a work
+The left-most graph illustrates a work
 stealing example.  When the non-cooperative kernel is given only one
 workgroup, its execution is so long that it cannot complete within the
 period required for a screen refresh. The gather time is very good
@@ -1809,7 +1809,7 @@ responsiveness can benefit from the query barrier: when used, this
 barrier lets the scheduler collect all needed workgroups as soon as
 they hit a resizing barrier. 
 As we can see, the gather time of the
-query barrier is almost stable w.r.t.\ the number of workgroups that
+query barrier is almost stable with respect to the number of workgroups that
 needs to be collected.
 
 
@@ -1834,8 +1834,8 @@ frequently and the graphics task requires half or more workgroups. For
 example, a medium graphics workload for bfs on the rmat input has over
 an 8$\times$ overhead when asking for all but one of the
 workgroups. As \myfiglong\ref{fig:performance} shows, most of our
-benchmarks are much better behaved than this. Future work
-will examine these problem benchmarks in more detail,
+benchmarks are much better behaved than this. In future work
+is required to examine the problematic benchmarks in more detail,
 possibly inserting more resizing calls.
 
 We show results for the three workloads listed in
@@ -1847,15 +1847,15 @@ the light (resp. medium and heavy) workload.
 Co-scheduling non-cooperative kernels that request a single workgroup
 leads to almost no overhead, but the period is far too high to meet
 the needs of any of our three workloads; e.g.\ a heavy workload
-averages a period of 939 $\mathit{ms}$. As more workgroups are dedicated to
+averages a period of $939\mathit{ms}$. As more workgroups are dedicated to
 non-cooperative kernels, they execute quickly enough to be scheduled
 at the expected period. For the light and medium workloads, a quarter
 of the workgroups executing the non-cooperative kernel are able to
-meet their goal period (70 and 40 $\mathit{ms}$ resp.). However, this is not
+meet their goal period (70 and $40\mathit{ms}$ resp.). However, this is not
 sufficient to meet the goal for the heavy workload (giving a median
-period of 104 $\mathit{ms}$). If half of the workgroups are allocated to the
+period of $104\mathit{ms}$). If half of the workgroups are allocated to the
 non-cooperative kernel, the heavy workload achieves its goal period
-(median of 40 $\mathit{ms}$).
+(median of $40\mathit{ms}$).
 %
 Yet, as expected, allocating more non-cooperative workgroups increases
 the overhead of the cooperative kernel.
