@@ -1203,11 +1203,11 @@ Instead of multitasking multiple separate kernels, we merge a set of
 kernels into a megakernel---a single, monolithic kernel.  The
 megakernel is launched with as many workgroups as can be occupant
 concurrently.  One workgroup takes the role of the
-scheduler\footnote{\TSAdded{We note that the scheduler requirements
+scheduler,\footnote{\TSAdded{We note that the scheduler requirements
     given in \mysec{\ref{sec:cooperativekernels}} are agnostic to
     whether the scheduling logic takes place on the CPU or GPU. To
     avoid expensive communication between GPU and host, we choose to
-    implement the scheduler on the GPU.}  }, and the scheduling logic
+    implement the scheduler on the GPU.}  } and the scheduling logic
 is embedded as part of the megakernel.  The remaining workgroups act
 as a pool of workers.  A worker repeatedly queries the scheduler to be
 assigned a task.  A task corresponds to executing a cooperative or
@@ -1238,8 +1238,8 @@ $\keyword{return}$ to direct threads into and out of the kernel.  With
 these restrictions we can experiment with interesting irregular
 algorithms (see \mysec\ref{sec:experiments}).  A non-mock
 implementation of cooperative kernels would not use the megakernel
-approach, so we do not deem the engineering effort associated with
-lifting these restrictions to be worthwhile.
+approach, so we did not deem the engineering effort associated with
+lifting these restrictions in our prototype to be worthwhile.
 
 %\myparagraph{Merging kernels}
 %
@@ -1253,9 +1253,9 @@ lifting these restrictions to be worthwhile.
 
 To enable multitasking through cooperative kernels, the runtime (in
 our case, the megakernel) must track the state of workgroups,
-i.e.\ whether a workgroup is waiting or computing a kernel, maintain
+i.e.\ whether a workgroup is waiting or computing a kernel; maintain
 consistent context states for each kernel, e.g.\ tracking the number
-of active workgroups, and provide a safe way for these states to be
+of active workgroups; and provide a safe way for these states to be
 modified in response to $\offerfork$/$\offerkill$. We discuss these
 issues, and describe the implementation of an efficient resizing
 barrier. We describe how the scheduler would handle arbitrary
@@ -1342,7 +1342,7 @@ received a signal from all slaves, it replies with a signal saying that
 they may leave.
 
 Incorporating $\offerfork$ and $\offerkill$ into such a barrier is
-straight forward. Upon entering the barrier, the slaves first execute
+straightforward. Upon entering the barrier, the slaves first execute
 $\offerkill$, possibly exiting. The master then waits for $M$ slaves
 (the number of active workgroups), which may decrease due to
 $\offerkill$ calls by the slaves, but will not increase. Once the
