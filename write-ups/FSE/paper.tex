@@ -764,16 +764,11 @@ the scheduling issue.
 
 \section{Cooperative Kernels}\label{sec:cooperativekernels}
 
-We present our cooperative kernels programming model as an extension
-to OpenCL.
-%However, the cooperative kernels concept is more general,
-%and could be applied to extend other GPU programming models, such as
-%CUDA and HSA.
-We describe the semantics of the model
+We describe the semantics of our cooperative kernels programming model
 (\mysec\ref{sec:semantics}), use our motivating examples to discuss
 programmability (\mysec\ref{sec:programmingguidelines}) and outline
-important nonfunctional properties that the model requires to work
-successfully (\mysec\ref{sec:nonfunctional}).
+nonfunctional properties required by the model (\mysec\ref{sec:nonfunctional}).
+In the extended version of this paper we present a formal semantics, and discuss alternative semantic choices~\cite{ExtendedVersion}.
 %and explain that the
 %model is backwards-compatible
 %(\mysec\ref{sec:backwardscompatibility}).
@@ -1504,7 +1499,7 @@ and Iris 6100. The results were similar across the GPUs, so for
 conciseness, we report only on the Iris 6100 GPU (driver
 20.19.15.4463) with a host CPU i3-5157U. The Iris has a reported 47
 compute units. Results for the other Intel GPUs are available in
-supplementary material, found on the author's website.}
+the extended version of this paper~\cite{ExtendedVersion}.}
 
 
 \subsection{Sizing Non-cooperative Kernels}\label{sec:sizingnoncoop}
@@ -1774,7 +1769,7 @@ it.  A logarithmic scale is used for time since gather times tend to
 be much smaller than execution times. The horizontal grey lines
 indicates the desired period for non-cooperative kernels.  These
 graphs show a representative sample of our results; the full set of
-graphs for all configurations is provided in supplementary material.
+graphs for all configurations is provided in the extended version of this paper~\cite{ExtendedVersion}.
 
 The left-most graph illustrates a work
 stealing example.  When the non-cooperative kernel is given only one
