@@ -14,7 +14,7 @@
 \setcopyright{acmlicensed}
 \acmDOI{10.1145/3106237.3106265}
 \acmISBN{978-1-4503-5105-8/17/09}
-\acmConference[ESEC/FSE'17]{2017 11th Joint Meeting of the European Software Engineering Conference and the ACM SIGSOFT Symposium on the Foundations of Software Engineering}{September 4--8, 2017}{Paderborn, Germany} 
+\acmConference[ESEC/FSE'17]{2017 11th Joint Meeting of the European Software Engineering Conference and the ACM SIGSOFT Symposium on the Foundations of Software Engineering}{September 4--8, 2017}{Paderborn, Germany}
 \acmYear{2017}
 \copyrightyear{2017}
 \acmPrice{15.00}
@@ -306,7 +306,7 @@ Many interesting data-parallel algorithms are \emph{irregular}: the
 amount of work to be processed is unknown ahead of time and may change dynamically in a workload-dependent manner.
 There is growing interest in
 accelerating such algorithms on
-GPUs~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}. 
+GPUs~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.
 %
 Irregular algorithms usually require \emph{blocking synchronization}
 between workgroups, e.g.\ many graph algorithms use a level-by-level
@@ -453,7 +453,7 @@ e.g.\ allowing a smooth frame-rate for graphics.
 In return, the scheduler should allow the cooperative kernel to
 utilise hardware resources where possible, killing workgroups only
 when demanded by other tasks, and forking additional workgroups when
-possible. 
+possible.
 
 \TSAdded{Cooperative kernels allow for \emph{cooperative multitasking}
   (see \mysec{\ref{sec:relatedwork}}), used
@@ -564,11 +564,11 @@ $\getlocalsize$ and $\getnumgroups$.
 %kernel is given by $\getglobalsize = \getlocalsize \times \getnumgroups$.
 %
 Execution of the threads in a workgroup can be synchronised via a
-workgroup barrier. 
+workgroup barrier.
 %This barrier is a \emph{workgroup-level} function:
 %it can only appear in conditional code if all threads in a workgroup
 %that reach the barrier agree on the guards of all enclosing
-%conditional statements.  
+%conditional statements.
 A \emph{global} barrier (synchronising all
 threads of a kernel) is \emph{not} provided as a primitive.
 
@@ -591,7 +591,7 @@ operations on SVM.
 
 \myparagraph{Execution Model}
 OpenCL~\cite[p.\ 31]{opencl2Spec} and CUDA~\cite{cuda-75} specifically make no guarantees about fair scheduling between
-workgroups executing the same kernel. 
+workgroups executing the same kernel.
 %stating~\cite[p.\ 31]{opencl2Spec}: \emph{``A
 %  conforming implementation may choose to serialize the workgroups
 %so
@@ -655,7 +655,7 @@ workgroup's queue or tries to steal a task from other queues. Although
 not depicted here, concurrent accesses to queues inside
 $\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
 mutex per queue, implemented using atomic compare and swap operations
-on global memory. 
+on global memory.
 
 If a task is obtained, then the workgroup processes it
 (line~\ref{line:wksteal:processtask}), which may lead to new tasks
@@ -719,7 +719,7 @@ the nodes to be processed are evenly distributed between
 threads through \emph{stride} based processing.
 %
 In this case, the stride is the total number of threads, obtained via
-$\getglobalsize$.  
+$\getglobalsize$.
 %Each thread processes nodes with indices
 %\code{$\keyword{tid}$+$\keyword{stride}$*0},
 %\code{$\keyword{tid}$+$\keyword{stride}$*1},
@@ -753,7 +753,7 @@ of the occupancy-bound execution model that current GPUs have been
 shown, experimentally, to provide.  But, as discussed in
 \mysec\ref{sec:intro}, this model is not endorsed by language
 standards or vendor implementations, and may not be respected
-in the future. 
+in the future.
 %
 
 In \mysec\ref{sec:programmingguidelines} we show how the work stealing
@@ -765,10 +765,10 @@ the scheduling issue.
 \section{Cooperative Kernels}\label{sec:cooperativekernels}
 
 We present our cooperative kernels programming model as an extension
-to OpenCL.  
+to OpenCL.
 %However, the cooperative kernels concept is more general,
 %and could be applied to extend other GPU programming models, such as
-%CUDA and HSA.  
+%CUDA and HSA.
 We describe the semantics of the model
 (\mysec\ref{sec:semantics}), use our motivating examples to discuss
 programmability (\mysec\ref{sec:programmingguidelines}) and outline
@@ -798,7 +798,7 @@ primitives for inter-workgroup synchronisation.
 %
 A variable declared in the root scope of the cooperative kernel can
 optionally be annotated with a new $\transmit$ qualifier.  Annotating
-a variable $v$ with $\transmit$ means that when a workgroup 
+a variable $v$ with $\transmit$ means that when a workgroup
 uses $\offerfork$ to spawn new
 workgroups, the workgroup should transmit its
 current value for $v$ to the threads of the new workgroups.
@@ -938,7 +938,7 @@ issued before the barrier have completed.  The $\globalbarrier$
 primitive can be implemented by adapting an inter-workgroup barrier
 design, e.g.~\cite{XF10}, to take account of a growing and shrinking number of workgroups, and the atomic operations provided by
 the OpenCL 2.0 memory model enable a memory-safe
-implementation~\cite{DBLP:conf/oopsla/SorensenDBGR16}.  
+implementation~\cite{DBLP:conf/oopsla/SorensenDBGR16}.
 %However, implementing such a barrier is
 %involved, hence why we include this function as a primitive.
 
@@ -1454,10 +1454,10 @@ resizing barriers (all of them), and how many variables need to be
 transmitted.  The remaining two algorithms are work stealing
 applications: each required the addition of $\offerfork$ and
 $\offerkill$ at the start of the main loop, and no variables needed to
-be transmitted (similar to example discussed in \mysec\ref{sec:programmingguidelines}). 
+be transmitted (similar to example discussed in \mysec\ref{sec:programmingguidelines}).
 % For all these examples, the porting to cooperative
 %kernels was similarly straightforward to the porting illustrated in
-%\mysec\ref{sec:programmingguidelines}. 
+%\mysec\ref{sec:programmingguidelines}.
 Most graph applications come with 2 different data sets as input,
 leading to 11 application/input pairs in total.
 
@@ -1504,7 +1504,7 @@ and Iris 6100. The results were similar across the GPUs, so for
 conciseness, we report only on the Iris 6100 GPU (driver
 20.19.15.4463) with a host CPU i3-5157U. The Iris has a reported 47
 compute units. Results for the other Intel GPUs are available in
-supplementary material, found on the author's website.} 
+supplementary material, found on the author's website.}
 
 
 \subsection{Sizing Non-cooperative Kernels}\label{sec:sizingnoncoop}
@@ -1564,7 +1564,7 @@ medium and heavy, the $40\mathit{ms}$ period coincides with the human persistenc
 of vision. The $3\mathit{ms}$ execution duration of both light and medium
 configurations indicates that GPU computation is cheaper for basic
 display rendering compared with more complex rendering.% that uses
-%shaders. 
+%shaders.
 
 %These results guide our evaluation of cooperative scheduling
 %(\mysec\ref{sec:responsiveness}).
@@ -1657,7 +1657,7 @@ active workgroups in the cooperative case.
 
 Recall that our mega kernel-based implementation merges the code of a
 cooperative and a non-cooperative kernel.
-% to be co-scheduled.  
+% to be co-scheduled.
 This can reduce the occupancy for the merged kernel, e.g.\ due to
 higher register pressure, This is an artifact of our prototype
 implementation, and would not be a problem if our approach was
@@ -1807,7 +1807,7 @@ figure for instance. The scheduler thus has fewer opportunities to
 collect workgroups and gather time increases. Nonetheless, scheduling
 responsiveness can benefit from the query barrier: when used, this
 barrier lets the scheduler collect all needed workgroups as soon as
-they hit a resizing barrier. 
+they hit a resizing barrier.
 As we can see, the gather time of the
 query barrier is almost stable with respect to the number of workgroups that
 needs to be collected.
