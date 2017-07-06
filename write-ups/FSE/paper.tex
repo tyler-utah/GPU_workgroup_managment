@@ -597,7 +597,7 @@ particular, fine-grained host/device communication is via atomic
 operations on SVM.
 
 \myparagraph{Execution Model}
-OpenCL~\cite[p.\ 31]{opencl2Spec} and CUDA~\cite{cuda-75} specifically makes no guarantees about fair scheduling between
+OpenCL~\cite[p.\ 31]{opencl2Spec} and CUDA~\cite{cuda-75} specifically make no guarantees about fair scheduling between
 workgroups executing the same kernel. 
 %stating~\cite[p.\ 31]{opencl2Spec}: \emph{``A
 %  conforming implementation may choose to serialize the workgroups
@@ -609,9 +609,9 @@ workgroups executing the same kernel.
 %  they can execute in any order.''}  CUDA similarly provides no guarantees~\cite{cuda-75}.
 %
 HSA provides limited, one-way guarantees,
-stating~\cite[p. 46]{HSAprogramming11}: \emph{Work-group A can wait
+stating~\cite[p. 46]{HSAprogramming11}: \emph{``Work-group A can wait
   for values written by work-group B without deadlock provided ... (if) A
-  comes after B in work-group flattened ID order}. This is not sufficient to support blocking algorithms that use
+  comes after B in work-group flattened ID order''}. This is not sufficient to support blocking algorithms that use
 mutexes and inter-workgroup barriers, both of which require \emph{symmetric} communication between
 threads.
 
@@ -664,7 +664,7 @@ $\mathsf{more\_work}$ and $\mathsf{pop\_or\_steal}$ are guarded by a
 mutex per queue, implemented using atomic compare and swap operations
 on global memory. 
 
-If a task was obtained, then the workgroup processes it
+If a task is obtained, then the workgroup processes it
 (line~\ref{line:wksteal:processtask}), which may lead to new tasks
 being created and pushed to the workgroup's queue. The kernel presents
 two opportunities for spin-waiting: spinning to obtain a mutex, and
@@ -731,7 +731,7 @@ $\getglobalsize$.
 %\code{$\keyword{tid}$+$\keyword{stride}$*0},
 %\code{$\keyword{tid}$+$\keyword{stride}$*1},
 %\code{$\keyword{tid}$+$\keyword{stride}$*2}, etc., where $\keyword{tid}$ is a thread's global id.
-A thread calls $\keyword{process\_node}$ to process a node given the current level, with nodes to be processed next frontier being pushed to $\keyword{out\_nodes}$. After processing the frontier, the threads swap their
+A thread calls $\keyword{process\_node}$ to process a node given the current level, with nodes to be processed during the next frontier being pushed to $\keyword{out\_nodes}$. After processing the frontier, the threads swap their
 node array pointers (line~\ref{line:graph:swap}).
 
 At this point, the GPU threads must wait for all other threads to
@@ -746,8 +746,8 @@ The global barrier used in this application is not provided as a GPU
 primitive, though previous works have shown that such a global barrier
 can be implemented~\cite{XF10,DBLP:conf/oopsla/SorensenDBGR16}, based
 on CPU barrier designs~\cite[ch. 17]{HS08}.  These barriers employ
-spinning to ensure threads wait at the barrier until all threads have
-arrived, which requires fair scheduling between workgroups for the
+spinning to ensure each thread waits at the barrier until all threads have
+arrived, thus fair scheduling between workgroups is required for the
 barrier to operate correctly. \TSAdded{Without fair scheduling, the
   barrier threads may wait indefinitely at the barrier, causing the
   application to hang.}
