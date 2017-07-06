@@ -309,10 +309,10 @@ accelerating such algorithms on
 GPUs~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}. 
 %
 Irregular algorithms usually require \emph{blocking synchronization}
-between workgroups.  For example, many graph algorithms employ a level-by-level
-strategy, requiring a global barrier between each level, and work
-stealing algorithms require each workgroup to maintain a queue, which
-is typically protected by a mutex to enable stealing by other
+between workgroups, e.g.\ many graph algorithms use a level-by-level
+strategy, with a global barrier between levels; work
+stealing algorithms require each workgroup to maintain a queue,
+typically mutex-protected, to enable stealing by other
 workgroups.
 
 To avoid starvation, a blocking concurrent algorithm requires
@@ -407,7 +407,7 @@ only in key special cases.
 For example, preemption is supported by Nvidia's Pascal architecture~\cite{PascalWhitepaper}, but on a GTX Titan X (Pascal)
 we still observe starvation: a global barrier
 executes successfully with 56 workgroups, but deadlocks with 57
-workgroups, indicating that scheduling is still unfair.
+workgroups, indicating unfair scheduling.
 
 %\vspace{-1mm}
 \myparagraph{Our Proposal: Cooperative Kernels}
@@ -456,16 +456,14 @@ when demanded by other tasks, and forking additional workgroups when
 possible. 
 
 \TSAdded{Cooperative kernels allow for \emph{cooperative multitasking}
-  (see \mysec{\ref{sec:relatedwork}}), a multitasking approach used
-  historically when preemption was not available or, as in the case of
-  GPUs, too costly. Our approach avoids the cost of arbitrary
+  (see \mysec{\ref{sec:relatedwork}}), used
+  historically when preemption was not available or too costly. Our approach avoids the cost of arbitrary
   preemption as the state of a workgroup killed via $\offerkill$ does
   not have to be saved. Previous cooperative multitasking systems have
   provided \emph{yield} semantics, where a processing unit would
   temporarily give up its hardware resource. We deviate from this
   design as, in the case of a global barrier, adopting yield would
-  force the cooperative kernel to block \emph{completely} in the case
-  where a single workgroup yields, stalling the kernel until the given
+  force the cooperative kernel to block \emph{completely} when a single workgroup yields, stalling the kernel until the given
   workgroup resumes.  Instead, our $\offerkill$ allows a kernel to
   make progress with a smaller number of workgroups, with workgroups
   potentially joining again later via $\offerfork$.}
@@ -508,8 +506,8 @@ properties:
 \end{enumerate}
 %\vspace{-1mm}
 
-Placing the new primitives requires manual effort, but is straightforward for the representative set of
-GPU-accelerated irregular algorithms that we have ported to use cooperative kernels.  Our experiments show that the model can enable efficient multitasking of cooperative and non-cooperative tasks.
+Placing the primitives manually is straightforward for the representative set of
+GPU-accelerated irregular algorithms we have ported so far.  Our experiments show that the model can enable efficient multitasking of cooperative and non-cooperative tasks.
 
 In summary, our main contributions are:
 \emph{cooperative kernels}, an extended GPU programming model that supports the scheduling requirements of blocking algorithms (\mysec\ref{sec:cooperativekernels}); a \emph{prototype implementation} of cooperative
