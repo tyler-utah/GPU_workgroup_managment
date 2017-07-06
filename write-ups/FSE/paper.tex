@@ -1300,12 +1300,12 @@ are available,
 %workgroups (located in the scheduler context) to their new $\KC$
 %workgroup ids.
 the scheduler then sends $N$ workgroups from the available workgroups
-to execute kernel $K$
+to execute kernel $K$.
 % with
 %kernel context $\KC$.
-(If the new kernel $K$ is itself a cooperative kernel, the scheduler
+If the new kernel $K$ is itself a cooperative kernel, the scheduler
 would be free to provide $K$ with fewer than $N$ active workgroups
-initially).
+initially.
 
 If a cooperative kernel $K_c$ is executing with fewer workgroups than
 it initially requested, the scheduler may decide make extra workgroups
