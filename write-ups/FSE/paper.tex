@@ -1796,11 +1796,11 @@ types of barrier.  We show separately the average gather time
 associated with each type of barrier.  The graphs show a similar trend
 to the left-most graph: as the number of non-cooperative workgroups
 grows, the execution time decreases and the gather time
-increases.%\footnote{The right figure has only 3 points per line:
+increases. %\footnote{The right figure has only 3 points per line:
   %recall that for bfs there are no runs with ``all-but-one''
   %non-cooperative workgroups.}
 %
-the gather time is higher on the right figure: the G3 circuit input
+The gather time is higher on the rightmost figure as the G3 circuit input
 graph is rather wide than deep, so the graph algorithm reaches
 resizing barriers less often than for the USA road input of the middle
 figure for instance. The scheduler thus has fewer opportunities to
