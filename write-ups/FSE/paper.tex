@@ -797,8 +797,7 @@ pointer parameters can refer to mutable data).
 Cooperative kernels are written using the following
 extensions: $\transmit$, a qualifier on the variables of a
 thread; $\offerkill$ and $\offerfork$, the key functions that enable
-cooperative scheduling; and $\globalbarrier$ and $\mathsf{resizing\_global\_barrier}$
-%$\resizingglobalbarrier$
+cooperative scheduling; and $\globalbarrier$ and $\resizingglobalbarrier$
 primitives for inter-workgroup synchronisation.
 
 %\vspace{-1mm}
@@ -818,7 +817,7 @@ describe $\offerfork$ below.
 %
 If the host application launches a cooperative kernel requesting $N$
 workgroups, this indicates that the kernel should be executed with a
-maximum of $N$ workgroups, and that as many workgroups as possible, up
+\emph{maximum} of $N$ workgroups, and that as many workgroups as possible, up
 to this limit, are desired.  However, the scheduler may initially
 schedule fewer than $N$ workgroups, and as explained below the number
 of workgroups that execute the cooperative kernel can change during
@@ -932,8 +931,8 @@ equal to the workgroup limit $N$.
 %\vspace{-1mm}
 \myparagraph{Global Barriers}
 %
-Because workgroups of a cooperative kernel are fairly scheduled, so a
-global barrier primitive can be provided, and we specify two variants: $\globalbarrier$
+Because workgroups of a cooperative kernel are fairly scheduled, a
+global barrier primitive can be provided.  We specify two variants: $\globalbarrier$
 and $\resizingglobalbarrier$.
 
 Our $\globalbarrier$ primitive is a kernel-level function: if it
@@ -964,8 +963,8 @@ as if they were forked from workgroup 0.  In particular, the
 $\transmit$-annotated local state of thread 0 in workgroup 0 is
 transmitted to the threads of the new workgroups.
 
-The semantics of $\resizingglobalbarrier$ can be modelled via calling $\offerfork$ and $\offerkill$
-surrounded, and separated by calls to a $\globalbarrier$.
+The semantics of $\resizingglobalbarrier$ can be modelled via calling $\offerfork$ and $\offerkill$,
+surrounded and separated by calls to a $\globalbarrier$.
 %
 %\lstset{basicstyle=\small\tt,numbers=none}
 %\begin{lstlisting}
@@ -977,8 +976,7 @@ surrounded, and separated by calls to a $\globalbarrier$.
 %
 The enclosing $\globalbarrier$ calls ensure that the change in number
 of active workgroups from $M$ to $M'$ occurs entirely within the
-resizing barrier, so that from a programmer's perspective, $M$ changes
-atomically.  The middle $\globalbarrier$ ensures that forking occurs
+resizing barrier, so that $M$ changes atomically from a programmer's perspective.  The middle $\globalbarrier$ ensures that forking occurs
 before killing, so that workgroups $[0, \textrm{min}(M, M') - 1]$ are
 left intact.
 
@@ -1153,7 +1151,7 @@ soft real-time constraints of other workloads can be met.
 %
 Using our work stealing example: a workgroup offers itself to
 the scheduler after processing each task.  If tasks are sufficiently
-fast to process then the scheduler have ample opportunities to
+fast to process then the scheduler will have ample opportunities to
 de-schedule workgroups.  But if tasks are very time-consuming to
 process then it might be necessary to rewrite the algorithm so that
 tasks are shorter and more numerous, to achieve a higher rate of calls
