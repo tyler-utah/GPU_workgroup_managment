@@ -1461,7 +1461,7 @@ resizing barriers (all of them), and how many variables need to be
 transmitted.  The remaining two algorithms are work stealing
 applications: each required the addition of $\offerfork$ and
 $\offerkill$ at the start of the main loop, and no variables needed to
-be transmitted (similar to example shown in \mysec\ref{sec:programmingguidelines}). 
+be transmitted (similar to example discussed in \mysec\ref{sec:programmingguidelines}). 
 % For all these examples, the porting to cooperative
 %kernels was similarly straightforward to the porting illustrated in
 %\mysec\ref{sec:programmingguidelines}. 
@@ -1476,8 +1476,8 @@ leading to 11 application/input pairs in total.
 
 \TSAdded{Our prototype implementation (\mysec\ref{sec:implementation}) requires
 two optional features of OpenCL 2.0: SVM fine-grained buffers and SVM
-atomics. Out of the GPUs available to us (ARM Mali, AMD, \nvidia, and
-Intel), only Intel GPUs provided robust support of these features.}
+atomics. Out of the GPUs available to us, from ARM, AMD, \nvidia, and
+Intel, only Intel GPUs provided robust support of these features.}
 
 %We thus evaluate our approach on three Intel GPUs, as GPUs from
 %other vendors (i.e. \nvidia, ARM, and AMD) do not yet provide these
@@ -1506,7 +1506,7 @@ Intel), only Intel GPUs provided robust support of these features.}
 %cooperative kernels is not yet mature enough within AMD's drivers,
 %which we plan to discuss with engineers at AMD.
 %
-\TSAdded{We thus ran our experiments on the three Intel GPUs: HD 520, HD 5500
+\TSAdded{We thus ran our experiments on three Intel GPUs: HD 520, HD 5500
 and Iris 6100. The results were similar across the GPUs, so for
 conciseness, we report only on the Iris 6100 GPU (driver
 20.19.15.4463) with a host CPU i3-5157U. The Iris has a reported 47
@@ -1522,7 +1522,7 @@ prototype implementation is based on a megakernel that takes over the
 entire GPU (see \mysec\ref{sec:implementation}), we cannot assess this
 directly.
 
-We devised the following to determine OpenCL workloads that simulate
+We devised the following method to determine OpenCL workloads that simulate
 the computational intensity of various graphics rendering workloads.
 %
 We designed a synthetic kernel that occupies all workgroups of a GPU
@@ -1565,10 +1565,10 @@ experiments~\cite{chrome-experiments}.% running
 % \label{tab:noncooperativeworkload}
 % \end{table}
 
-Our results are the following: $P=70ms$ and $E=3ms$ for light;
-$P=40ms$, $E=3ms$ for medium; and $P=40ms$, $E=10ms$ for heavy. For
-medium and heavy, the 40ms period coincides with the human persistence
-of vision. The 3ms execution duration of both light and medium
+Our results are the following: $P=70\mathit{ms}$ and $E=3\mathit{ms}$ for light;
+$P=40\mathit{ms}$, $E=3\mathit{ms}$ for medium; and $P=40\mathit{ms}$, $E=10\mathit{ms}$ for heavy. For
+medium and heavy, the $40\mathit{ms}$ period coincides with the human persistence
+of vision. The $3\mathit{ms}$ execution duration of both light and medium
 configurations indicates that GPU computation is cheaper for basic
 display rendering compared with more complex rendering.% that uses
 %shaders. 
@@ -1848,21 +1848,21 @@ possibly inserting more resizing calls.
 We show results for the three workloads listed in
 \mysec~\ref{sec:sizingnoncoop}. The horizontal lines in the period
 graph correspond to the goals of the workloads: the higher
-(resp. lower) line corresponds to a period of 70ms (resp. 40ms) for
+(resp. lower) line corresponds to a period of $70\mathit{ms}$ (resp.\ $40\mathit{ms}$) for
 the light (resp. medium and heavy) workload.
 
 Co-scheduling non-cooperative kernels that request a single workgroup
 leads to almost no overhead, but the period is far too high to meet
 the needs of any of our three workloads; e.g.\ a heavy workload
-averages a period of 939 ms. As more workgroups are dedicated to
+averages a period of 939 $\mathit{ms}$. As more workgroups are dedicated to
 non-cooperative kernels, they execute quickly enough to be scheduled
 at the expected period. For the light and medium workloads, a quarter
 of the workgroups executing the non-cooperative kernel are able to
-meet their goal period (70 and 40 ms resp.). However, this is not
+meet their goal period (70 and 40 $\mathit{ms}$ resp.). However, this is not
 sufficient to meet the goal for the heavy workload (giving a median
-period of 104 ms). If half of the workgroups are allocated to the
+period of 104 $\mathit{ms}$). If half of the workgroups are allocated to the
 non-cooperative kernel, the heavy workload achieves its goal period
-(median of 40 ms).
+(median of 40 $\mathit{ms}$).
 %
 Yet, as expected, allocating more non-cooperative workgroups increases
 the overhead of the cooperative kernel.
@@ -1912,7 +1912,7 @@ graphics and compute tasks via kernel-level preemption.
 Suppose a graphics workload is required to be scheduled with period
 $P$ and duration $D$, and that a compute kernel requires time $C$ to
 execute without interruption.  If we assume the cost of preemption is
-negligible (e.g.\ Nvidia have reported preemption times of 0.1 ms for
+negligible (e.g.\ Nvidia have reported preemption times of 0.1 $\mathit{ms}$ for
 Pascal~\cite{anandtech}), then the overhead associated with switching
 between compute and graphics every $P$ time steps is $P/(P-D)$.
 
