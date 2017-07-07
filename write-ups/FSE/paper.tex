@@ -28,7 +28,7 @@
 %
 %\usepackage{SIunits}            % typset units correctly
 \usepackage{courier}            % standard fixed width font
-\usepackage[scaled]{helvet} % see www.ctan.org/get/macros/latex/required/psnfss/psnfss2e.pdf
+%\usepackage[scaled]{helvet} % see www.ctan.org/get/macros/latex/required/psnfss/psnfss2e.pdf
 \usepackage{url}                  % format URLs
 \urlstyle{same}                   % URL use same font as regular text
                                   %   (regular font is less wide than tt)
@@ -39,12 +39,16 @@
 
 \usepackage[shortcuts]{extdash} % hyphenation, see http://stackoverflow.com/questions/2193307/how-do-i-get-latex-to-hyphenate-a-word-that-contains-a-dash#8649145
 
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
 \usepackage[normalem]{ulem}
 \usepackage{amsmath}
 \usepackage{calc}
 \usepackage{algorithm}
 \usepackage[noend]{algpseudocode}
-\usepackage[T1]{fontenc}
+
 \usepackage{listings}
 \usepackage{color}
 \usepackage{xspace}
@@ -308,7 +312,7 @@ There is growing interest in
 accelerating such algorithms on
 GPUs~\cite{owens-persistent,DBLP:conf/ipps/KaleemVPHP16,DBLP:conf/ipps/DavidsonBGO14,DBLP:conf/hipc/HarishN07,DBLP:journals/topc/MerrillGG15,DBLP:conf/egh/VineetHPN09,DBLP:conf/ppopp/NobariCKB12,DBLP:conf/hpcc/SolomonTT10a,DBLP:conf/popl/PrabhuRMH11,DBLP:conf/ppopp/Mendez-LojoBP12,DBLP:conf/oopsla/PaiP16,DBLP:conf/oopsla/SorensenDBGR16,DBLP:conf/egh/CedermanT08,TPO10,BNP12,Pannotia}.
 %
-Irregular algorithms usually require \emph{blocking synchronization}
+Irregular algorithms usually require \emph{blocking synchronisation}
 between workgroups, e.g.\ many graph algorithms use a level-by-level
 strategy, with a global barrier between levels; work
 stealing algorithms require each workgroup to maintain a queue,
@@ -647,7 +651,7 @@ tries to \emph{steal} a task from another queue.
 
 \myfiglong\ref{fig:workstealing} illustrates a work stealing
 kernel. Each thread receives a pointer to the task queues, in global
-memory, initialized by the host to contain initial tasks. A thread
+memory, initialised by the host to contain initial tasks. A thread
 uses its workgroup id (line~\ref{line:wksteal:getgroupid}) as a queue
 id to access the relevant task queue. The $\mathsf{pop\_or\_steal}$
 function (line~\ref{line:wksteal:poporsteal}) pops a task from the
